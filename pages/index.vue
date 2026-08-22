@@ -37,14 +37,38 @@ useAppError()
 // ==================== SEO 元信息（动态，随语言切换）· Dynamic SEO meta ====================
 /** 站点正式地址（与 nuxt.config SITE_URL 保持一致）· Canonical site URL */
 const SITE_URL = 'https://ilive.lyc.la'
-/** 站点描述（中英）· Site description per language */
-const SITE_DESCRIPTION: Record<string, string> = {
-  zh: 'Layicr的个人演唱会足迹记录网站，记录观看五月天、陈奕迅、伍佰、任贤齐、孙燕姿、周传雄、邓紫棋、李荣浩、周杰伦、蔡依林、侧田等歌手演唱会的美好回忆。',
-  en: 'Layicr\'s personal concert journey site, documenting memories of watching concerts by Mayday, Eason Chan, Wu Bai, Richie Jen, Stefanie Sun, Steve Chou, G.E.M., Li Ronghao, Jay Chou, Jolin Tsai, Justin Lo and more.'
-}
-/** 当前语言的站点描述 · Current site description */
-const currentDescription = computed(() =>
-  currentLanguage.value === 'zh' ? SITE_DESCRIPTION.zh : SITE_DESCRIPTION.en
+/**
+ * 去重艺人列表（来自数据库已预取的演唱会数据）· Unique artists from DB concerts
+ * @description 从 localizedConcerts 提取 `artist` 并去重；随语言切换自动取当前语言艺人名。
+ *              Array of unique artist names in the current language.
+ */
+const artistNames = computed(() =>
+  [...new Set(localizedConcerts.value.map(c => c.artist).filter(Boolean))]
+)
+/** 当前语言下的艺人串（顿号/逗号分隔）· artist list joined by delimiter */
+const artistListText = computed(() =>
+  currentLanguage.value === 'zh'
+    ? artistNames.value.join('、')
+    : artistNames.value.join(', ')
+)
+/**
+ * 动态站点描述（随数据库艺人变化）· Dynamic site description
+ * @description 基于数据库艺人自动生成，新增/移除演唱会后 SEO 自动更新。
+ */
+const currentDescription = computed(() => {
+  const artists = artistListText.value
+  if (!artists) {
+    return currentLanguage.value === 'zh'
+      ? 'Layicr的个人演唱会足迹记录网站。'
+      : 'Layicr\'s personal concert journey site.'
+  }
+  return currentLanguage.value === 'zh'
+    ? `Layicr的个人演唱会足迹记录网站，记录观看${artists}等歌手演唱会的美好回忆。`
+    : `Layicr's personal concert journey site, documenting memories of watching concerts by ${artists} and more.`
+})
+/** 动态关键词（含艺人 + 站点）· Dynamic keywords from DB artists */
+const currentKeywords = computed(() =>
+  [currentData.value.siteName, ...artistNames.value, '演唱会足迹', '演唱会记录'].join(',')
 )
 /** 当前语言的站点标题 · Current page title */
 const currentPageTitle = computed(() =>
@@ -55,6 +79,7 @@ useSeoMeta({
   title: currentPageTitle,
   ogTitle: currentPageTitle,
   description: currentDescription,
+  keywords: currentKeywords,
   ogDescription: currentDescription,
   ogUrl: SITE_URL,
   ogImage: SITE_URL + '/img/logo.jpg',

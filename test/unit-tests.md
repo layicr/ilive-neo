@@ -102,6 +102,27 @@
 | UT-09k 城市计数 en 命中 | 英文 location 命中 name_en |
 | UT-09l 无命中 | 返回空对象 |
 
+## UT-10 localize — 双语结构本地化为单语言（已自动化）
+
+> 被测对象：`composables/useData.ts` 的纯函数（`pickText` / `localizeConcert`），
+> 对应 `types/index.ts` 的 `BilingualConcert → Concert` 转换逻辑。
+> 已落地为 `test/unit/localize.test.ts`（11 例，2026-08-22）。
+> 需 vitest 配置 `~`/`@` 别名解析 Nuxt 路径（见 `vitest.config.ts`）。
+
+| 用例 | 断言 |
+|------|------|
+| UT-10a pickText zh | `lang='zh'` 取 zh 字段 |
+| UT-10b pickText en | `lang='en'` 取 en 字段 |
+| UT-10c pickText 缺失回退 | 目标字段为 null/undefined 时回退到另一语言（空串不回退） |
+| UT-10d pickText null | null/undefined 返回空串 |
+| UT-10e localize zh | zh 模式输出中文 field 集（含 location 拼接） |
+| UT-10f localize en | en 模式输出英文字段集 |
+| UT-10g 可空字段 | seat/price/video 为 null 时输出 null |
+| UT-10h images alt | images 的 alt 本地化 |
+| UT-10i songlist 转换 | songlist → `{ name, link }`，zh/en 分别取对应字段 |
+| UT-10j songlist 回退 | 单语言缺失时回退 |
+| UT-10k 非双语字段 | 保留 id/date/time/poster |
+
 ---
 
 ## 运行方式（已接入 vitest）
@@ -111,7 +132,7 @@ npm test          # 单次运行（vitest run）
 npm run test:watch # 监听模式
 ```
 
-> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishTime` / `CONFIG` / `mappers`，共 32 条，全部通过（2026-08-22）。
+> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishTime` / `CONFIG` / `mappers` / `localize`，共 43 条，全部通过（2026-08-22）。
 > 配置见根目录 `vitest.config.ts`（node 环境，包含 `test/unit`）。
 > 依赖 Nuxt `useState/useAsyncData` 的 composables（UT-08 等）需 Nuxt 测试环境，暂未纳入；如需可后续引入 `@nuxt/test-utils`。
 

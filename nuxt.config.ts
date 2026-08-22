@@ -112,8 +112,8 @@ export default defineNuxtConfig({
       htmlAttrs: { lang: 'zh-CN' },
       title: 'layicr - 演唱会足迹',
       meta: [
-        { name: 'keywords', content: 'layicr,lyc,lyc.la,演唱会,五月天,陈奕迅,任贤齐,孙燕姿,邓紫棋,周传雄,李荣浩,伍佰,周杰伦,蔡依林,侧田,Concert,Mayday,EasonChan,RichieJen,StefanieSun,G.E.M.,SteveChou,LiRonghao,WuBai,JayChou,JolinCai,JustinLo,演唱会足迹,演唱会记录' },
-        { name: 'description', content: 'Layicr的个人演唱会足迹记录网站。记录观看五月天、陈奕迅、伍佰、任贤齐、孙燕姿、周传雄、邓紫棋、李荣浩、周杰伦、蔡依林、侧田等歌手演唱会的美好回忆。' },
+        { name: 'keywords', content: 'layicr,lyc,lyc.la,演唱会,五月天,陈奕迅,任贤齐,孙燕姿,邓紫棋,周传雄,李荣浩,伍佰,周杰伦,蔡依林,侧田,动力火车,Concert,Mayday,EasonChan,RichieJen,StefanieSun,G.E.M.,SteveChou,LiRonghao,WuBai,JayChou,JolinCai,JustinLo,PowerStation,演唱会足迹,演唱会记录' },
+        { name: 'description', content: 'Layicr的个人演唱会足迹记录网站。记录观看五月天、陈奕迅、伍佰、任贤齐、孙燕姿、周传雄、邓紫棋、李荣浩、周杰伦、蔡依林、侧田、动力火车等歌手演唱会的美好回忆。' },
         { name: 'author', content: 'layicr' },
         { name: 'robots', content: 'index, follow' },
         { name: 'referrer', content: 'strict-origin-when-cross-origin' },
