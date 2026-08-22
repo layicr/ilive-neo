@@ -34,7 +34,7 @@ const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
  */
 function getDbConfig(): { url: string; token: string } {
   return {
-    url: process.env.TURSO_DATABASE_URL || 'file:./data/data.db',
+    url: process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db',
     token: process.env.TURSO_AUTH_TOKEN || ''
   };
 }

@@ -18,7 +18,7 @@ import { createClient } from '@libsql/client';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 数据库连接 URL（优先环境变量，默认本地文件）· DB url (env override, default local file)
-const DB_URL = process.env.TURSO_DATABASE_URL || 'file:./data/data.db';
+const DB_URL = process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db';
 const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || '';
 
 /**

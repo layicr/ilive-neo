@@ -21,7 +21,7 @@ export default defineNuxtConfig({
    */
   pwa: {
     registerType: 'autoUpdate',
-    injectRegister: 'auto',
+    injectRegister: 'inline',
     devOptions: { enabled: false },
     manifest: {
       name: 'Layicr 演唱会足迹',
@@ -81,7 +81,7 @@ export default defineNuxtConfig({
    */
   runtimeConfig: {
     turso: {
-      databaseUrl: process.env.TURSO_DATABASE_URL || 'file:./data/data.db',
+      databaseUrl: process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db',
       authToken: process.env.TURSO_AUTH_TOKEN || ''
     }
   },

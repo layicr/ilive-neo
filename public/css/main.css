@@ -881,6 +881,46 @@ body {
     transition: transform 0.1s ease;
 }
 
+/* 鼠标悬停提示气泡（音乐/反馈/返回顶部）· tooltip on hover */
+.tooltip-text {
+    position: absolute;
+    right: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%) translateX(4px);
+    background: rgba(31, 41, 55, 0.95);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+}
+
+.tooltip-text::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: rgba(31, 41, 55, 0.95);
+}
+
+/* 三个按钮 hover 时显示对应提示 */
+.music-btn:hover .tooltip-text,
+.feedback-btn:hover .tooltip-text,
+.back-to-top:hover .tooltip-text {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) translateX(0);
+}
+
 @media (max-width: 768px) {
     .footer-brand {
         flex-direction: column;
@@ -914,6 +954,7 @@ body {
 }
 
 .music-btn {
+    position: relative; /* tooltip 定位上下文 */
     width: 52px;
     height: 52px;
     border-radius: 50%;
@@ -1335,7 +1376,8 @@ body {
     animation: fadeIn 0.3s ease;
 }
 
-.city-modal.show {
+.city-modal.show,
+.city-modal.active {
     display: flex;
 }
 

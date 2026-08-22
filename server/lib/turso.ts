@@ -3,7 +3,7 @@
  *
  * @module turso
  * @description 利用 @libsql/client 连接协议实现本地与生产无缝切换：
- *              - TURSO_DATABASE_URL=file:./data/data.db （本地 SQLite，免注册）
+ *              - TURSO_DATABASE_URL=file:./public/data/data.db （本地 SQLite，免注册）
  *              - TURSO_DATABASE_URL=libsql://xxx.turso.io （远程 Turso）
  *              通过运行时配置读取环境变量，远程时需要 TURSO_AUTH_TOKEN。
  *
@@ -37,7 +37,7 @@ export function getTursoClient(): Client {
   if (client) return client;
 
   const config = useRuntimeConfig();
-  const rawUrl = (config.turso?.databaseUrl as string) || 'file:./data/data.db';
+  const rawUrl = (config.turso?.databaseUrl as string) || 'file:./public/data/data.db';
   const url = resolveFileUrl(rawUrl);
   const authToken = (config.turso?.authToken as string) || '';
 
