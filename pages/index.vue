@@ -7,6 +7,7 @@
  *
  *              Mirrored from the original index.html <body> to keep visuals identical.
  */
+import { toRaw } from 'vue'
 import { useI18n } from '~/composables/useI18n'
 import { useData } from '~/composables/useData'
 import { useMusic } from '~/composables/useMusic'
@@ -32,6 +33,131 @@ const { selectedAlbumIndex, albums, selectAlbum, applyCarouselLayout, init3DAlbu
 const { ticketModalOpen, openTicketModal, closeTicketModal } = useTicketModal()
 const { friendLinks } = useFriendLink()
 useAppError()
+
+// ==================== SEO 元信息（动态，随语言切换）· Dynamic SEO meta ====================
+/** 站点正式地址（与 nuxt.config SITE_URL 保持一致）· Canonical site URL */
+const SITE_URL = 'https://ilive.lyc.la'
+/** 站点描述（中英）· Site description per language */
+const SITE_DESCRIPTION: Record<string, string> = {
+  zh: 'Layicr的个人演唱会足迹记录网站，记录观看五月天、陈奕迅、伍佰、任贤齐、孙燕姿、周传雄、邓紫棋、李荣浩、周杰伦、蔡依林、侧田等歌手演唱会的美好回忆。',
+  en: 'Layicr\'s personal concert journey site, documenting memories of watching concerts by Mayday, Eason Chan, Wu Bai, Richie Jen, Stefanie Sun, Steve Chou, G.E.M., Li Ronghao, Jay Chou, Jolin Tsai, Justin Lo and more.'
+}
+/** 当前语言的站点描述 · Current site description */
+const currentDescription = computed(() =>
+  currentLanguage.value === 'zh' ? SITE_DESCRIPTION.zh : SITE_DESCRIPTION.en
+)
+/** 当前语言的站点标题 · Current page title */
+const currentPageTitle = computed(() =>
+  `${currentData.value.pageTitle} - ${currentData.value.siteName}`
+)
+
+useSeoMeta({
+  title: currentPageTitle,
+  ogTitle: currentPageTitle,
+  description: currentDescription,
+  ogDescription: currentDescription,
+  ogUrl: SITE_URL,
+  ogImage: SITE_URL + '/img/logo.jpg',
+  ogSiteName: currentData.value.siteName,
+  twitterCard: 'summary_large_image',
+  twitterTitle: currentPageTitle,
+  twitterDescription: currentDescription,
+  twitterImage: SITE_URL + '/img/logo.jpg',
+  twitterSite: '@layicr',
+  twitterCreator: '@layicr',
+  robots: 'index, follow'
+})
+
+// ==================== JSON-LD 结构化数据 + hreflang（仅 SSR 输出）====================
+// 说明：在 SSR 阶段构建纯 JSON 对象后一次性序列化，避免将 Vue 响应式 Proxy 对象
+//      交给 JSON.stringify / unhead（会触发 Proxy 陷阱导致序列化异常）。
+
+/** 构建每场演唱会的 MusicEvent 纯对象 · Build plain MusicEvent objects */
+function buildMusicEvents(): Record<string, unknown>[] {
+  // 用 JSON.parse(JSON.stringify()) 剥离 localizedConcerts 的响应式 Proxy，得到纯数据
+  const list = JSON.parse(JSON.stringify(toRaw(localizedConcerts.value))) as {
+    id: number; concertName: string; artist: string; date: string; time?: string;
+    location?: string; poster?: string; price?: string
+  }[]
+  return list
+    .map(c => {
+      const ev: Record<string, unknown> = {
+        '@type': 'MusicEvent',
+        '@id': `${SITE_URL}/#concert-${c.id}`,
+        name: c.concertName || c.artist,
+        eventStatus: 'https://schema.org/EventScheduled',
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode'
+      }
+      if (c.date) {
+        ev.startDate = c.date.replace(/\./g, '-') + (c.time ? `T${c.time}` : '')
+      }
+      if (c.location) ev.location = { '@type': 'Place', name: c.location }
+      if (c.poster) ev.image = SITE_URL + '/' + c.poster
+      if (c.artist) ev.performer = { '@type': 'Person', name: c.artist }
+      if (c.price) {
+        const numeric = c.price.replace(/[^\d.]/g, '')
+        if (numeric) ev.offers = { '@type': 'Offer', price: numeric, priceCurrency: 'CNY' }
+      }
+      return ev
+    })
+    .filter(ev => ev.name)
+}
+
+/** 构建完整 JSON-LD 纯对象 · Build the full JSON-LD plain object */
+function buildJsonLd(): Record<string, unknown> {
+  const plain = JSON.parse(JSON.stringify(toRaw(localizedConcerts.value))) as {
+    id: number; concertName: string; artist: string
+  }[]
+  const graph: Record<string, unknown>[] = [
+    {
+      '@type': 'WebSite',
+      '@id': SITE_URL + '/#website',
+      name: currentData.value.siteName,
+      url: SITE_URL,
+      inLanguage: currentLanguage.value === 'zh' ? 'zh-CN' : 'en'
+    },
+    {
+      '@type': 'Person',
+      '@id': SITE_URL + '/#person',
+      name: 'layicr',
+      url: SITE_URL
+    },
+    {
+      '@type': 'ItemList',
+      name: currentData.value.pageTitle,
+      numberOfItems: plain.length,
+      itemListElement: plain.map((c, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        item: { '@type': 'MusicEvent', name: c.concertName || c.artist, url: `${SITE_URL}/#concert-${c.id}` }
+      }))
+    },
+    ...buildMusicEvents()
+  ]
+  return { '@context': 'https://schema.org', '@graph': graph }
+}
+
+// 说明：innerHTML 用 computed 让 unhead 在 useAsyncData 数据就绪后自动重新求值，
+//      从而确保 JSON-LD 包含已加载的演唱会列表（而非 setup 阶段的空数组）。
+/** JSON-LD 纯 JSON 字符串（响应式，数据就绪后更新）· serialized JSON-LD string */
+const jsonLdHTML = computed(() => JSON.stringify(buildJsonLd()))
+
+// 仅 SSR 输出 JSON-LD 与 hreflang；客户端交给 nuxt.config 静态头 + useSeoMeta
+if (import.meta.server) {
+  useHead({
+    script: [
+      {
+        type: 'application/ld+json',
+        innerHTML: jsonLdHTML
+      }
+    ],
+    link: [
+      { rel: 'alternate', hreflang: 'zh-CN', href: SITE_URL + '/' },
+      { rel: 'alternate', hreflang: 'en', href: SITE_URL + '/?lang=en' },
+      { rel: 'alternate', hreflang: 'x-default', href: SITE_URL + '/' }
+    ]
+  })
+}
 
 // 语言切换：更新 document.title + 重置故事文案 + 重新应用专辑布局（模板自动更新文案，零请求）
 watch(currentLanguage, () => {

@@ -82,6 +82,26 @@
 | UT-08b useI18n 文案 | 中英文切换后 `currentData` 文案正确 |
 | UT-08c useAppError | `toastMessage` 置值后在 `TOAST_DURATION` 后清空 |
 
+## UT-09 mappers — 数据库行→双语结构映射（已自动化）
+
+> 被测对象：`server/lib/mappers.ts` 的纯函数（`mapConcert` / `computeCityConcertCounts`）。
+> 已落地为 `test/unit/mappers.test.ts`（12 例，2026-08-22）。
+
+| 用例 | 断言 |
+|------|------|
+| UT-09a location 国家前缀 | `location.zh` 输出 `中国 · 陕西 · 西安 · 陕西省体育场`（含国家） |
+| UT-09b venue 为空省略 | venue 缺省时输出 `中国 · 陕西 · 西安` |
+| UT-09c country 为空省略 | country 缺省时输出 `陕西 · 西安 · 陕西省体育场` |
+| UT-09d locationDetail | 返回 `country/province/city/venue` 双语分段结构 |
+| UT-09e artist/concertName | 双语映射正确 |
+| UT-09f 可空字段 | seat/video 等值为 null 时返回 null |
+| UT-09g seat 有值 | 返回双语对象 |
+| UT-09h tags/images/songlist | 子表正确组装 |
+| UT-09i description | 双语描述正确 |
+| UT-09j 城市计数 | 按 location 包含城市名计数（中英任一命中） |
+| UT-09k 城市计数 en 命中 | 英文 location 命中 name_en |
+| UT-09l 无命中 | 返回空对象 |
+
 ---
 
 ## 运行方式（已接入 vitest）
@@ -91,7 +111,7 @@ npm test          # 单次运行（vitest run）
 npm run test:watch # 监听模式
 ```
 
-> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishTime` / `CONFIG`，共 20 条，全部通过（2026-08-22）。
+> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishTime` / `CONFIG` / `mappers`，共 32 条，全部通过（2026-08-22）。
 > 配置见根目录 `vitest.config.ts`（node 环境，包含 `test/unit`）。
 > 依赖 Nuxt `useState/useAsyncData` 的 composables（UT-08 等）需 Nuxt 测试环境，暂未纳入；如需可后续引入 `@nuxt/test-utils`。
 

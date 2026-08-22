@@ -4,6 +4,10 @@
  * @description 演唱会足迹迁移项目的 Nuxt3 总配置（SSR、runtimeConfig、Head、Tailwind CDN 等）
  *              Nuxt3 config for the concert journey migration (SSR, runtimeConfig, Head, etc.)
  */
+
+/** 站点正式地址（HTTPS）· Canonical site URL (HTTPS) */
+const SITE_URL = 'https://ilive.lyc.la'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-04',
 
@@ -114,19 +118,24 @@ export default defineNuxtConfig({
         { name: 'robots', content: 'index, follow' },
         { name: 'referrer', content: 'strict-origin-when-cross-origin' },
         { property: 'og:type', content: 'website' },
-        { property: 'og:url', content: 'http://ilive.lyc.la' },
+        { property: 'og:url', content: SITE_URL },
+        { property: 'og:site_name', content: 'Layicr 演唱会足迹' },
+        { property: 'og:locale', content: 'zh_CN' },
+        { property: 'og:locale:alternate', content: 'en_US' },
         { property: 'og:title', content: 'Layicr 演唱会足迹' },
         { property: 'og:description', content: '记录每一次演唱会的感动与回忆' },
-        { property: 'og:image', content: 'http://ilive.lyc.la/img/logo.jpg' },
+        { property: 'og:image', content: SITE_URL + '/img/logo.jpg' },
         { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:site', content: '@layicr' },
+        { name: 'twitter:creator', content: '@layicr' },
         { name: 'twitter:title', content: 'Layicr 演唱会足迹' },
         { name: 'twitter:description', content: '记录每一次演唱会的感动与回忆' },
-        { name: 'twitter:image', content: 'http://ilive.lyc.la/img/logo.jpg' }
+        { name: 'twitter:image', content: SITE_URL + '/img/logo.jpg' }
       ],
       link: [
         { rel: 'icon', type: 'image/jpeg', href: 'img/logo.jpg' },
         { rel: 'apple-touch-icon', href: 'img/logo.jpg' },
-        { rel: 'canonical', href: 'http://ilive.lyc.la' },
+        { rel: 'canonical', href: SITE_URL },
         // 原 CSS 原样链路 · Original CSS as-is (kept as separate requests to match original network behavior)
         { rel: 'stylesheet', href: 'css/load.css' },
         { rel: 'stylesheet', href: 'css/main.css' },

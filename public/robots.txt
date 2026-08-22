@@ -1,0 +1,10 @@
+# Layicr 演唱会足迹 · robots.txt
+# 允许所有爬虫抓取全部内容
+User-agent: *
+Allow: /
+
+# 禁止收录 API 接口与图片检索（避免大量重复索引）
+Disallow: /api/
+
+# 站点地图
+Sitemap: https://ilive.lyc.la/sitemap.xml
