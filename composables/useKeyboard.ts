@@ -3,7 +3,8 @@
  *
  * @description 从 keyboardManager.js 迁移而来。
  *              模块级单例，统一管理全局键盘事件，支持优先级排序。
- *              用 onMounted/onUnmounted 自动注册/注销。
+ *              全局监听在首次 register 时惰性绑定一次；调用方负责在组件
+ *              onMounted 时 register、onUnmounted 时用返回的卸载函数注销。
  */
 
 type KeyHandler = (e: KeyboardEvent) => boolean | void

@@ -42,59 +42,6 @@ function switchMusicSrc(musicSrc: string): void {
   }
 }
 
-/** 是否已绑定首次交互自动补播监听 · Whether first-interaction autoplay listener bound */
-let autoplayFallbackBound = false
-
-/**
- * 绑定首次交互后自动补播 · Bind first-interaction autoplay fallback
- * @description 当自动播放被浏览器策略拒绝时，监听用户首次交互，届时恢复播放。
- *              这是对「自动播放策略」的标准兜底，不视为错误。
- */
-function bindAutoplayFallback(): void {
-  if (autoplayFallbackBound) return
-  autoplayFallbackBound = true
-
-  const events: (keyof DocumentEventMap)[] = ['click', 'touchstart', 'keydown', 'scroll']
-  const onFirstInteraction = () => {
-    events.forEach(evt => document.removeEventListener(evt, onFirstInteraction))
-    if (!bgMusic || getIsPlaying().value) return
-
-    bgMusic.play().then(() => {
-      getIsPlaying().value = true
-    }).catch(() => {
-      // 仍被拒绝则保持暂停，不打扰用户
-    })
-  }
-
-  events.forEach(evt => document.addEventListener(evt, onFirstInteraction, { passive: true }))
-}
-
-/** 尝试自动播放 · Try auto play */
-function tryAutoPlay(): void {
-  const isPlaying = getIsPlaying()
-  if (!bgMusic) return
-
-  bgMusic.volume = CONFIG.MUSIC_VOLUME
-  const playPromise = bgMusic.play()
-
-  if (playPromise !== undefined) {
-    playPromise.then(() => {
-      isPlaying.value = true
-    }).catch((error: any) => {
-      // NotAllowedError：浏览器自动播放策略拒绝（用户尚未交互），属正常情况，静默兜底
-      if (error && error.name === 'NotAllowedError') {
-        console.info('[Music] 自动播放被浏览器策略阻止，将在首次交互后恢复播放。')
-        isPlaying.value = false
-        bindAutoplayFallback()
-        return
-      }
-      // 其它真实错误才记录
-      useAppError().handleError(error, 'MusicAutoPlay', false)
-      isPlaying.value = false
-    })
-  }
-}
-
 /** 初始化背景音乐 · Init background music
  *  @description 仅加载音频资源不自动播放，用户点击音乐按钮后才开始播放。
  */

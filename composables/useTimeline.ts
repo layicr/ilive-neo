@@ -4,7 +4,7 @@
  * @description 从原版时间轴渲染逻辑迁移而来。
  *              纯逻辑：提供按 id 降序（最新在前）的演唱会列表，与滚动渐显的 IntersectionObserver。
  *              渲染交给模板（声明式 v-for），不再手写 DOM。
- *              visibleIds 用响应式 Set 保存已显示条目 id，DOM 重建时类名仍能保持。
+ *              visibleIds 用响应式对象 {id: boolean} 记录已显示条目 id，DOM 重建时类名仍能保持。
  */
 import { useData } from './useData'
 

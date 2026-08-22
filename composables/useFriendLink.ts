@@ -19,7 +19,7 @@ export const friendLinksData: FriendLink[] = [
     title: { zh: 'lyc.la', en: 'lyc.la' }
   },
   {
-    href: 'https://github.com/layicr/ilive',
+    href: 'https://github.com/layicr/ilive_neo',
     icon: 'fab fa-github',
     title: { zh: 'Github', en: 'Github' }
   },

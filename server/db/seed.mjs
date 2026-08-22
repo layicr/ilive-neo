@@ -18,8 +18,10 @@ import { createClient } from '@libsql/client';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 数据库连接 URL（优先环境变量，默认本地文件）· DB url (env override, default local file)
-const DB_URL = process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db';
-const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || '';
+// 兼容 NUXT_ 与 TURSO_ 两种前缀（项目统一约定 NUXT_，TURSO_ 保留兼容旧环境）
+// DB url supports both NUXT_TURSO_ and legacy TURSO_ env prefixes
+const DB_URL = process.env.NUXT_TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db';
+const DB_TOKEN = process.env.NUXT_TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
 
 /**
  * 确保本地 file: 数据库的父目录存在· Ensure the parent dir of a local file: db exists

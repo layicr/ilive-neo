@@ -2,8 +2,9 @@
  * 导航 composable · Navigation
  *
  * @description 从 navigation.js 迁移而来。
- *              返回顶部、城市/视频模态框、反馈按钮、触摸手势。
+ *              返回顶部、城市/视频模态框、反馈按钮。
  *              纯状态管理：渲染交给模板（声明式）。
+ *              注意：触摸/滑动手势不在此处，位于 useAlbumShowcase.ts。
  */
 import { CONFIG } from '~/utils/config'
 import { useI18n } from './useI18n'

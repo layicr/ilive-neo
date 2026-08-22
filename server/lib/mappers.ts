@@ -46,11 +46,12 @@ function mapLocationDetail(row: any) {
 
 /**
  * 构建原始演唱会对象· Build raw concert object
- * @param row 演唱会在行 · concerts row
+ * @param row 演唱会行 · concerts row
  * @param tags 标签数组 · tags array [{zh,en}]
  * @param images 图片数组 · images array [{src,alt_zh,alt_en}]
  * @param songlist 歌单数组 · songlist array [{zh,en,link}]
- * @returns {{zh,en}} 双语演唱会对象· bilingual concert object
+ * @returns 双语演唱会对象（location 为拼接字符串，locationDetail 为分段结构）·
+ *          bilingual concert object (location joined string, locationDetail segmented)
  */
 export function mapConcert(row: any, tags: any[], images: any[], songlist: any[]) {
   const pair = (zh: any, en: any) => ({ zh: zh ?? '', en: en ?? '' });
@@ -87,6 +88,9 @@ export function mapConcert(row: any, tags: any[], images: any[], songlist: any[]
 
 /**
  * 拉取单场演唱会并组装· Fetch & assemble one concert
+ * @param client LibSQL 客户端 · client
+ * @param id 演唱会ID · concert id
+ * @returns 双语演唱会对象；不存在时返回 null · bilingual concert, or null if missing
  */
 export async function fetchConcert(client: Client, id: number) {
   const main = await client.execute({ sql: 'SELECT * FROM concerts WHERE id = ?', args: [id] });

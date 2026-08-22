@@ -77,12 +77,16 @@ export default defineNuxtConfig({
 
   /**
    * runtime 配置 · Runtime configuration (server 端可访问环境变量)
-   * @description Turso/LibSQL 双协议连接参数，来自 .env（不提交版本库）
+   * @description Turso/LibSQL 双协议连接参数，来自环境变量（不提交版本库）。
+   *              生产/线上用远程 Turso（NUXT_TURSO_DATABASE_URL=libsql://...），
+   *              本地开发可回退到 file: 本地 SQLite。
+   *              注意：用 NUXT_ 前缀，Nuxt 才会在运行时覆盖 runtimeConfig.turso.*；
+   *              这里兼容 NUXT_ 与 TURSO_ 两种前缀（TURSO_ 仅 config 求值阶段有效）。
    */
   runtimeConfig: {
     turso: {
-      databaseUrl: process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db',
-      authToken: process.env.TURSO_AUTH_TOKEN || ''
+      databaseUrl: process.env.NUXT_TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db',
+      authToken: process.env.NUXT_TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || ''
     }
   },
 
@@ -151,16 +155,13 @@ export default defineNuxtConfig({
   },
 
   /**
-   * 兼容 Node 原生内置模块 · Compat settings (optional)
+   * Nitro 配置 · Nitro settings
+   * @description 数据来自远程 Turso（NUXT_TURSO_DATABASE_URL），本地 file: 仅作开发兜底。
+   *              保留 public/data 静态资源挂载（若本地存在 data.db 会被复制到 .output/public/data），
+   *              但线上依赖 Turso，不再需要把 data.db 打包进 server bundle。
    */
   nitro: {
     compressPublicAssets: true,
-    /**
-     * 方案 C：只读部署到 Vercel。
-     * data.db 放在 public/data/ 下，Nitro 构建时会原样复制到 .output/public/data/data.db。
-     * Vercel 上 serverless 函数可读取 public 目录（cwd=/var/task），路径稳定。
-     * 无需 serverAssets/useStorage，纯文件系统读取，最可靠。
-     */
     publicAssets: [
       {
         dir: './public/data',

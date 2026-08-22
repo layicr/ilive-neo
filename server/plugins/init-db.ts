@@ -22,18 +22,17 @@ import { useRuntimeConfig } from '#imports';
 /**
  * 表结构 SQL 路径 · path to schema.sql
  * @description 用 process.cwd() 定位源码中的 schema.sql（dev 下 cwd=项目根）。
- *              仅在本地/远程建空表时读取；生产只读部署跳过建库，不依赖此文件。
+ *              仅在本地 file: 开发时建空表读取；远程 Turso 跳过，不依赖此文件。
  */
 const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
 
 /**
- * 读取数据库连接参数（Nitro 端环境变量）· Read DB connection params (Nitro env)
+ * 读取数据库连接参数（Nitro 端）· Read DB connection params (Nitro)
  * @returns {{url:string, token:string}} 连接 URL 与 token
- * @description 与 seed.mjs 保持一致：TURSO_DATABASE_URL 接受 file:/libsql:，token 仅远程需要。
+ * @description 与 turso.ts 一致，通过 runtimeConfig 读取（NUXT_TURSO_* 运行时覆盖）。
+ *              url 接受 file:/libsql: 双协议，token 仅远程需要。
  */
 function getDbConfig(): { url: string; token: string } {
-  // 与 turso.ts 保持一致：通过 runtimeConfig 读取（NUXT_TURSO_* 运行时覆盖），
-  // 避免直接读 TURSO_ 前缀导致取不到远程配置而误建本地空库。
   const cfg = useRuntimeConfig();
   return {
     url: (cfg.turso?.databaseUrl as string) || 'file:./public/data/data.db',
@@ -65,8 +64,8 @@ function ensureFileDir(url: string): void {
 
 /**
  * 是否应跳过自动建库· Whether to skip auto schema creation
- * @description 只读部署（Vercel 生产 + file:）：数据库文件随 public/data 打包、表已存在，
- *              且运行时文件系统只读，mkdirSync/建表会失败。故跳过，仅依赖已打包的库文件。
+ * @description 生产环境 + file: 时：运行时文件系统只读，mkdirSync/建表会失败，
+ *              且表结构应已存在于随包/已初始化的库中。故跳过，仅依赖已有库文件。
  */
 function shouldSkipInit(): boolean {
   const { url: rawUrl } = getDbConfig();
