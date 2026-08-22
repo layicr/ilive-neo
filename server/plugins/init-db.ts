@@ -17,6 +17,7 @@
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, isAbsolute, resolve } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
+import { useRuntimeConfig } from '#imports';
 
 /**
  * 表结构 SQL 路径 · path to schema.sql
@@ -31,9 +32,12 @@ const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
  * @description 与 seed.mjs 保持一致：TURSO_DATABASE_URL 接受 file:/libsql:，token 仅远程需要。
  */
 function getDbConfig(): { url: string; token: string } {
+  // 与 turso.ts 保持一致：通过 runtimeConfig 读取（NUXT_TURSO_* 运行时覆盖），
+  // 避免直接读 TURSO_ 前缀导致取不到远程配置而误建本地空库。
+  const cfg = useRuntimeConfig();
   return {
-    url: process.env.TURSO_DATABASE_URL || 'file:./public/data/data.db',
-    token: process.env.TURSO_AUTH_TOKEN || ''
+    url: (cfg.turso?.databaseUrl as string) || 'file:./public/data/data.db',
+    token: (cfg.turso?.authToken as string) || ''
   };
 }
 
@@ -111,11 +115,14 @@ async function createEmptySchema(client: Client): Promise<void> {
  *              Creates empty tables when missing; on failure warns without blocking boot.
  */
 async function ensureEmptyDb(): Promise<void> {
-  if (shouldSkipInit()) {
-    console.log('[init-db] 只读部署（file: + 生产），跳过自动建库 · read-only deploy, skip init');
+  const { url: rawUrl } = getDbConfig();
+  // 远程 Turso 无需自动建库（数据由用户上传）；仅本地 file: 时才自动建空表。
+  // 避免每次启动误建 public/data/data.db 本地空库。
+  if (!rawUrl.startsWith('file:') || shouldSkipInit()) {
+    console.log('[init-db] 跳过自动建库（远程 libsql 或只读部署）· skip init (remote or read-only)');
     return;
   }
-  const { url: rawUrl, token } = getDbConfig();
+  const token = getDbConfig().token;
   const url = resolveFileUrl(rawUrl);
   ensureFileDir(url);
 
