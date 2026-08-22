@@ -72,7 +72,7 @@ export interface Concert {
   images: { src: string; alt: string }[];
   video: string | null;
   videoUrl: string | null;
-  songlist: { name: string; link: string | null }[];
+  songlist: SongItem[];
 }
 
 /** 城市（单语言本地化结果）· City (localized) */
@@ -90,6 +90,12 @@ export interface Wish {
   time: string;
   likes: number;
   liked: boolean;
+}
+
+/** 歌单条目（单语言本地化结果）· Songlist item (localized) */
+export interface SongItem {
+  name: string;
+  link: string | null;
 }
 
 /** 统计信息 · Stats */

@@ -154,6 +154,19 @@ export default defineNuxtConfig({
    * 兼容 Node 原生内置模块 · Compat settings (optional)
    */
   nitro: {
-    compressPublicAssets: true
+    compressPublicAssets: true,
+    /**
+     * 方案 C：只读部署到 Vercel。
+     * data.db 放在 public/data/ 下，Nitro 构建时会原样复制到 .output/public/data/data.db。
+     * Vercel 上 serverless 函数可读取 public 目录（cwd=/var/task），路径稳定。
+     * 无需 serverAssets/useStorage，纯文件系统读取，最可靠。
+     */
+    publicAssets: [
+      {
+        dir: './public/data',
+        maxAge: 60 * 60 * 24 * 365,
+        baseURL: '/data'
+      }
+    ]
   }
 })

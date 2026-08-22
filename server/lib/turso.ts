@@ -19,7 +19,10 @@ let client: Client | null = null;
  * 将本地相对 file: 路径解析为绝对路径· Resolve a local file: path to absolute
  * @param url 原始 URL · original url
  * @returns 解析后的 URL · resolved url
- * @description 相对路径基于进程工作目录（nuxt dev/build 的根目录）解析，避免建错库文件。
+ * @description 相对路径基于 process.cwd() 解析：
+ *              - 本地 dev：cwd = 项目根，public/data/data.db 命中源码文件
+ *              - Vercel：cwd = /var/task，public/data/data.db 命中 .output/public/data/data.db
+ *              （Nitro publicAssets 会把 public/data 原样复制进 .output/public）
  */
 function resolveFileUrl(url: string): string {
   if (!url.startsWith('file:')) return url;
@@ -39,11 +42,19 @@ export function getTursoClient(): Client {
   const config = useRuntimeConfig();
   const rawUrl = (config.turso?.databaseUrl as string) || 'file:./public/data/data.db';
   const url = resolveFileUrl(rawUrl);
+  // 只读部署（Vercel 运行时文件系统只读）：用 createClient 的 readOnly 配置项，
+  // 而非 ?mode=ro URL 参数——本版本 @libsql/client 不支持 URL query 参数，会抛
+  // URL_PARAM_NOT_SUPPORTED 导致整个接口崩溃。
+  // Read-only deploy: use readOnly option (not ?mode=ro URL param, which this libsql
+  // version rejects) to avoid WAL write errors on Vercel's read-only filesystem.
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  const readOnly = rawUrl.startsWith('file:') && isProd;
   const authToken = (config.turso?.authToken as string) || '';
 
   client = createClient({
     url,
-    authToken: authToken || undefined
+    authToken: authToken || undefined,
+    readOnly
   });
 
   return client;

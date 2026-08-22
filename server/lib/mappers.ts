@@ -13,12 +13,14 @@ import type { Client } from '@libsql/client';
  * @param row 演唱会行 · concerts row
  * @param lang 语言 key · language key (zh | en)
  * @returns {string} 拼接后的地点字符串（空段自动省略）· joined location string (empty parts skipped)
- * @description 将 country/province/city/venue 四个字段按 `段1 · 段2 · 段3` 格式重组，
- *              与迁移源 `"省 · 市 · 场馆"` 字符串保持一致，保证前端渲染与城市统计不受影响。
- *              Re-joins the split fields to match the original `"province · city · venue"` string.
+ * @description 将 country/province/city/venue 四个字段按 `国家 · 省 · 市 · 场馆` 格式重组，
+ *              空段自动省略，保证城市统计（按 city 名匹配）不受影响。
+ *              Re-joins to "country · province · city · venue"; empty parts skipped,
+ *              keeping city-based stats unchanged.
  */
 function joinLocation(row: any, lang: 'zh' | 'en'): string {
   const parts = [
+    row[`country_${lang}`],
     row[`province_${lang}`],
     row[`city_${lang}`],
     row[`venue_${lang}`]

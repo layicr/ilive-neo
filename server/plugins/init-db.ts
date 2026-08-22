@@ -20,10 +20,8 @@ import { createClient, type Client } from '@libsql/client';
 
 /**
  * 表结构 SQL 路径 · path to schema.sql
- * @description 用项目根目录（process.cwd()）定位源码中的 schema.sql。
- *              Nitro 会编译 server/plugins，__dirname 指向编译产物，故不能依赖 __dirname。
- *              Resolve schema.sql from the project root (cwd); Nitro compiles plugins so
- *              __dirname points to build output, not the source tree.
+ * @description 用 process.cwd() 定位源码中的 schema.sql（dev 下 cwd=项目根）。
+ *              仅在本地/远程建空表时读取；生产只读部署跳过建库，不依赖此文件。
  */
 const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
 
@@ -59,6 +57,18 @@ function ensureFileDir(url: string): void {
   const rawPath = url.replace(/^file:/, '').replace(/^\.\//, '');
   const abs = isAbsolute(rawPath) ? rawPath : resolve(process.cwd(), rawPath);
   mkdirSync(dirname(abs), { recursive: true });
+}
+
+/**
+ * 是否应跳过自动建库· Whether to skip auto schema creation
+ * @description 只读部署（Vercel 生产 + file:）：数据库文件随 public/data 打包、表已存在，
+ *              且运行时文件系统只读，mkdirSync/建表会失败。故跳过，仅依赖已打包的库文件。
+ */
+function shouldSkipInit(): boolean {
+  const { url: rawUrl } = getDbConfig();
+  const isFile = rawUrl.startsWith('file:');
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  return isFile && isProd;
 }
 
 /**
@@ -101,6 +111,10 @@ async function createEmptySchema(client: Client): Promise<void> {
  *              Creates empty tables when missing; on failure warns without blocking boot.
  */
 async function ensureEmptyDb(): Promise<void> {
+  if (shouldSkipInit()) {
+    console.log('[init-db] 只读部署（file: + 生产），跳过自动建库 · read-only deploy, skip init');
+    return;
+  }
   const { url: rawUrl, token } = getDbConfig();
   const url = resolveFileUrl(rawUrl);
   ensureFileDir(url);
