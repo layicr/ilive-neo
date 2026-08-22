@@ -15,10 +15,10 @@ dist/
 #*.db-shm
 
 # 环境变量 · Env (secrets) —— 切勿提交真实 token
-.env
-.env.local
-.env.production
-.env.*.local
+#.env
+#.env.local
+#.env.production
+#.env.*.local
 # 模板文件保留在仓库（无密钥），供协作者/CI 参考
 !.env.example
 
