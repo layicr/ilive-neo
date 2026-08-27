@@ -1,5 +1,5 @@
 -- 由 concert*.js 自动生成的 INSERT SQL
--- 生成时间 · generated: 2026-08-22T07:43:00.682Z
+-- 生成时间 · generated: 2026-08-27T16:36:26.267Z
 -- 建议先保证表结构已存在（schema.sql / 已有库）
 -- 若需清空旧数据再插入，请先执行：
 --   DELETE FROM concert_songlist; DELETE FROM concert_images; DELETE FROM concert_tags; DELETE FROM concerts;

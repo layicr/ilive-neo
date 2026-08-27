@@ -23,21 +23,36 @@ const __dirname = join(fileURLToPath(new URL('.', import.meta.url)));
 
 /* ---------- 工具函数 ---------- */
 
-// SQL 字符串转义 · escape single quotes
+/* ---------- 工具函数 ---------- */
+
+/**
+ * SQL 字符串转义 · escape single quotes
+ * @param {*} s 原始值 · raw value
+ * @returns {string} SQL 字面量（null 返回 NULL，单引号转义为两个单引号）
+ */
 function sq(s) {
   if (s == null) return 'NULL';
   return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-// 移除外部 JS 包装，取对象字面量 · strip `var concert1 = {...};` → `{...}`
+/**
+ * 移除外部 JS 包装，取对象字面量 · strip `var concert1 = {...};` → `{...}`
+ * @param {string} source 源文件内容 · source file content
+ * @returns {string} 对象字面量字符串
+ */
 function extractObject(source) {
   const match = source.match(/\{\s*[\s\S]*\}/);
   if (!match) throw new Error('未找到对象字面量 · cannot find object literal');
   return match[0];
 }
 
-// 解析 location 字符串 "陕西 · 西安 · 陕西省体育场" → {country, province, city, venue}
-// 若含国家 "中国 · 陕西 · 西安 · 场馆" 则识别国家
+/**
+ * 解析 location 字符串 → 分段字段 · Parse location string into segments
+ * @param {string} locStr 位置字符串（如 "中国 · 陕西 · 西安 · 陕西省体育场"）
+ * @param {'zh'|'en'} lang 语言 key（当前仅用于区分国家名）
+ * @returns {{country:string, province:string, city:string, venue:string}} 分段字段
+ * @description 首位命中"中国/China"则识别为国家；剩余按 省·市·场馆 分配，场馆可缺省。
+ */
 function parseLocation(locStr, lang) {
   if (!locStr) return { country: '', province: '', city: '', venue: '' };
   const parts = locStr.split('·').map(p => p.trim()).filter(Boolean);
@@ -60,6 +75,11 @@ function parseLocation(locStr, lang) {
 
 /* ---------- 生成 SQL ---------- */
 
+/**
+ * 生成单场演唱会的 INSERT SQL 语句 · Generate INSERT SQL for one concert
+ * @param {object} concert 演唱会对象（id/artist/concertName/.../songlist）
+ * @returns {string} 多行 INSERT 语句（concerts + tags + images + songlist）
+ */
 function generateSql(concert) {
   const id = concert.id;
   const artistZh = concert.artist?.zh || '';
@@ -123,6 +143,11 @@ VALUES (${id}, ${sq(artistZh)}, ${sq(artistEn)}, ${sq(nameZh)}, ${sq(nameEn)}, $
 
 /* ---------- 主流程 ---------- */
 
+/**
+ * 主流程：解析命令行参数 → 逐个文件生成 SQL → 写入输出文件
+ * @description 用法：`node js-to-sql.mjs concert.js [concert2.js ...] [-o out.sql]`
+ *              默认输出到本目录 `concerts.sql`。
+ */
 function main() {
   const args = process.argv.slice(2);
   const outIdx = args.indexOf('-o');
@@ -167,4 +192,11 @@ function main() {
   console.log(`\n✅ SQL 已写入 · written to: ${outPath}`);
 }
 
-main();
+// 支持作为模块被单元测试导入（仅在 CLI 直接运行时执行 main）
+export { generateSql, parseLocation, sq, extractObject };
+
+// 仅当以 `node js-to-sql.mjs ...` 直接运行时才执行主流程
+import { argv } from 'node:process';
+if (argv[1] && argv[1].endsWith('js-to-sql.mjs')) {
+  main();
+}
