@@ -19,11 +19,11 @@ import { useAlbumShowcase } from '~/composables/useAlbumShowcase'
 import { useTicketModal } from '~/composables/useTicketModal'
 import { useFriendLink } from '~/composables/useFriendLink'
 import { useAppError } from '~/composables/useAppError'
-import { safeHtml, formatWishTime } from '~/utils'
+import { safeHtml, formatWishTime, formatWishDate } from '~/utils'
 import { CONFIG } from '~/utils/config'
 
-const { currentLanguage, currentData, currentStoriesText, currentRoleTexts, initLanguage, switchLanguage } = useI18n()
-const { stats, dataReady, localizedConcerts, localizedCities, localizedWishes } = useData()
+const { currentLanguage, currentData, currentStoriesText, initLanguage, switchLanguage } = useI18n()
+const { stats, dataReady, dataError, localizedConcerts, localizedCities, localizedWishes } = useData()
 const { isPlaying, initBgMusic, toggleMusic } = useMusic()
 const { galleryOpen, currentImage, openGallery, closeGallery, prevImage, nextImage } = useGallery()
 const { songlistOpen, activeConcert, filteredSonglist, songlistSearch, openSonglistModal, closeSonglistModal } = useSonglist()
@@ -32,7 +32,7 @@ const { sortedConcerts, visibleIds, initTimelineReveal } = useTimeline()
 const { selectedAlbumIndex, albums, selectAlbum, applyCarouselLayout, init3DAlbumShowcase } = useAlbumShowcase()
 const { ticketModalOpen, openTicketModal, closeTicketModal } = useTicketModal()
 const { friendLinks } = useFriendLink()
-useAppError()
+const { handleError } = useAppError()
 
 // ==================== SEO 元信息（动态，随语言切换）· Dynamic SEO meta ====================
 /** 站点正式地址（与 nuxt.config SITE_URL 保持一致）· Canonical site URL */
@@ -82,12 +82,12 @@ useSeoMeta({
   keywords: currentKeywords,
   ogDescription: currentDescription,
   ogUrl: SITE_URL,
-  ogImage: SITE_URL + '/img/logo.jpg',
+  ogImage: SITE_URL + '/img/og-image.svg',
   ogSiteName: currentData.value.siteName,
   twitterCard: 'summary_large_image',
   twitterTitle: currentPageTitle,
   twitterDescription: currentDescription,
-  twitterImage: SITE_URL + '/img/logo.jpg',
+  twitterImage: SITE_URL + '/img/og-image.svg',
   twitterSite: '@layicr',
   twitterCreator: '@layicr',
   robots: 'index, follow'
@@ -97,14 +97,23 @@ useSeoMeta({
 // 说明：在 SSR 阶段构建纯 JSON 对象后一次性序列化，避免将 Vue 响应式 Proxy 对象
 //      交给 JSON.stringify / unhead（会触发 Proxy 陷阱导致序列化异常）。
 
+/** 演唱会纯数据（剥离响应式 Proxy 后用于序列化）· plain concert shape for serialization */
+type PlainConcert = {
+  id: number; concertName: string; artist: string; date: string; time?: string;
+  location?: string; poster?: string; price?: string
+}
+
+/**
+ * 用 JSON.parse(JSON.stringify(toRaw(...))) 一次性剥离 localizedConcerts 的响应式 Proxy。
+ * buildMusicEvents 与 buildJsonLd 复用同一份纯数据，避免重复深拷贝（原实现拷贝了两次）。
+ */
+function getPlainConcerts(): PlainConcert[] {
+  return JSON.parse(JSON.stringify(toRaw(localizedConcerts.value))) as PlainConcert[]
+}
+
 /** 构建每场演唱会的 MusicEvent 纯对象 · Build plain MusicEvent objects */
-function buildMusicEvents(): Record<string, unknown>[] {
-  // 用 JSON.parse(JSON.stringify()) 剥离 localizedConcerts 的响应式 Proxy，得到纯数据
-  const list = JSON.parse(JSON.stringify(toRaw(localizedConcerts.value))) as {
-    id: number; concertName: string; artist: string; date: string; time?: string;
-    location?: string; poster?: string; price?: string
-  }[]
-  return list
+function buildMusicEvents(plain: PlainConcert[]): Record<string, unknown>[] {
+  return plain
     .map(c => {
       const ev: Record<string, unknown> = {
         '@type': 'MusicEvent',
@@ -130,9 +139,7 @@ function buildMusicEvents(): Record<string, unknown>[] {
 
 /** 构建完整 JSON-LD 纯对象 · Build the full JSON-LD plain object */
 function buildJsonLd(): Record<string, unknown> {
-  const plain = JSON.parse(JSON.stringify(toRaw(localizedConcerts.value))) as {
-    id: number; concertName: string; artist: string
-  }[]
+  const plain = getPlainConcerts()
   const graph: Record<string, unknown>[] = [
     {
       '@type': 'WebSite',
@@ -157,7 +164,7 @@ function buildJsonLd(): Record<string, unknown> {
         item: { '@type': 'MusicEvent', name: c.concertName || c.artist, url: `${SITE_URL}/#concert-${c.id}` }
       }))
     },
-    ...buildMusicEvents()
+    ...buildMusicEvents(plain)
   ]
   return { '@context': 'https://schema.org', '@graph': graph }
 }
@@ -177,9 +184,7 @@ if (import.meta.server) {
       }
     ],
     link: [
-      { rel: 'alternate', hreflang: 'zh-CN', href: SITE_URL + '/' },
-      { rel: 'alternate', hreflang: 'en', href: SITE_URL + '/?lang=en' },
-      { rel: 'alternate', hreflang: 'x-default', href: SITE_URL + '/' }
+      { rel: 'alternate', hreflang: 'zh-CN', href: SITE_URL + '/' }
     ]
   })
 }
@@ -215,6 +220,7 @@ function initDataLayout(): void {
 onMounted(() => {
   if (clientInited) return
   clientInited = true
+  relativeTimeReady.value = true
   initLanguage()
   initBgMusic()
   startDynamicTextTimers()
@@ -229,11 +235,17 @@ watch(dataReady, (ready) => {
   if (ready) initDataLayout()
 })
 
-// 每次 DOM 更新后重新观察时间轴条目，确保 SSR/水合/语言切换后新渲染的节点
-// 都能被 IntersectionObserver 捕获，按滚动渐显（与原版一致，避免显示不全）
-onUpdated(() => {
+// 数据拉取失败时给出用户可见提示（loader 已隐藏，避免页面静默空白）
+watch(dataError, (err) => {
+  if (err) handleError(err, 'DataFetch', true, 'loadFailed')
+})
+
+// 数据真正变化时（SSR 水合、语言切换、异步数据就绪）重新观察时间轴条目，
+// 确保新渲染节点被 IntersectionObserver 捕获并按滚动渐显。
+// 注意：不能用 onUpdated —— 否则故事文案每 4 秒轮换都会触发全量 getBoundingClientRect 强制重排。
+watch(sortedConcerts, () => {
   if (typeof document === 'undefined') return
-  initTimelineReveal()
+  nextTick(() => initTimelineReveal())
 })
 
 // 模态框打开时锁定 body 滚动 · lock body scroll when any modal open
@@ -357,6 +369,19 @@ function onBackToTop(): void {
 function onGalleryItemClick(concertId: number, index: number): void {
   openGallery(concertId, index)
 }
+
+/** 打开外链视频 · open external video link */
+function openVideoLink(url: string): void {
+  if (url) window.open(url, '_blank', 'noopener')
+}
+
+// 许愿时间水合安全：首屏/SSR 输出固定绝对日期（YYYY.MM.DD），挂载后再切相对时间，
+// 避免服务端 now / ICU 与客户端输出不一致导致 hydration mismatch。
+const relativeTimeReady = ref(false)
+function wishTimeText(time: string): string {
+  if (!relativeTimeReady.value) return formatWishDate(time)
+  return formatWishTime(time, currentLanguage.value)
+}
 </script>
 
 <template>
@@ -390,7 +415,7 @@ function onGalleryItemClick(concertId: number, index: number): void {
         <div class="orbit-container">
           <div class="avatar-section">
             <div class="avatar-container">
-              <img src="/img/logo.jpg" alt="layicr" class="avatar-image" onerror="this.src='/img/logo.jpg'">
+              <img src="/img/logo.jpg" alt="layicr" class="avatar-image" decoding="async" onerror="this.src='/img/logo.jpg'">
               <div class="status-dot"></div>
             </div>
             <div class="avatar-border"></div>
@@ -460,7 +485,7 @@ function onGalleryItemClick(concertId: number, index: number): void {
             @click="selectAlbum(index)"
           >
             <div class="album-cover">
-              <img class="album-cover-img" :src="album.image" :alt="album.title">
+              <img class="album-cover-img" :src="album.image" :alt="album.title" decoding="async">
             </div>
           </div>
         </div>
@@ -538,7 +563,7 @@ function onGalleryItemClick(concertId: number, index: number): void {
             <button v-if="concert.video" class="video-btn" :data-video-id="concert.video" :data-video-title="concert.artist + ' - ' + concert.concertName" @click="openVideoModal(concert.video, concert.artist + ' - ' + concert.concertName)">
               <i class="fas fa-video" aria-hidden="true"></i> {{ currentData.buttons.watchVideo }}
             </button>
-            <button v-if="concert.videoUrl" class="video-link-btn" :data-video-url="concert.videoUrl" @click="window.open(concert.videoUrl, '_blank', 'noopener')">
+            <button v-if="concert.videoUrl" class="video-link-btn" :data-video-url="concert.videoUrl" @click="openVideoLink(concert.videoUrl)">
               <i class="fas fa-external-link-alt" aria-hidden="true"></i> {{ currentData.buttons.openVideo }}
             </button>
           </div>
@@ -578,7 +603,7 @@ function onGalleryItemClick(concertId: number, index: number): void {
       <button class="modal-nav modal-next" id="nextImage" aria-label="下一张图片" @click="nextImage">
         <i class="fas fa-chevron-right" aria-hidden="true"></i>
       </button>
-      <img v-if="currentImage" class="modal-content" id="modalImage" :src="currentImage.src" :alt="currentImage.alt">
+      <img v-if="currentImage" class="modal-content" id="modalImage" :src="currentImage.src" :alt="currentImage.alt" decoding="async">
       <div class="modal-caption" id="modalCaption" role="status" aria-live="polite">{{ currentImage ? currentImage.index + 1 + ' / ' + currentImage.total : '' }}</div>
     </div>
 
@@ -679,7 +704,7 @@ function onGalleryItemClick(concertId: number, index: number): void {
               <span>{{ wish.liked ? '❤️' : '🤍' }}</span>
               <span>{{ wish.likes || 0 }}</span>
             </div>
-            <div class="wish-card-time">{{ formatWishTime(wish.time, currentLanguage) }}</div>
+            <div class="wish-card-time">{{ wishTimeText(wish.time) }}</div>
           </div>
         </div>
       </div>
@@ -751,5 +776,51 @@ function onGalleryItemClick(concertId: number, index: number): void {
   margin-top: 1.25rem;
   display: inline-block;
   vertical-align: top;
+}
+
+/* 画廊关闭按钮 · gallery close button */
+#closeModal {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: #000;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+#closeModal:hover {
+  background: #222;
+  transform: scale(1.08);
+}
+
+/* 城市弹窗关闭按钮 · city modal close button */
+#closeCityModal {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 10;
+  padding: 4px 8px;
+  transition: opacity 0.2s, transform 0.15s;
+}
+#closeCityModal:hover {
+  opacity: 0.7;
+  transform: scale(1.1);
 }
 </style>

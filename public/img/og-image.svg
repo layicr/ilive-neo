@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Layicr 演唱会足迹">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1a2e"/>
+      <stop offset="1" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4851AD"/>
+      <stop offset="1" stop-color="#637ec5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.8" cy="0.2" r="0.7">
+      <stop offset="0" stop-color="#637ec5" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#637ec5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- 装饰圆环 -->
+  <circle cx="980" cy="140" r="160" fill="none" stroke="#4851AD" stroke-opacity="0.25" stroke-width="2"/>
+  <circle cx="1050" cy="470" r="90" fill="none" stroke="#637ec5" stroke-opacity="0.2" stroke-width="2"/>
+
+  <!-- Logo 字母 L -->
+  <g transform="translate(120,150)">
+    <rect x="0" y="0" width="120" height="120" rx="24" fill="url(#brand)"/>
+    <text x="60" y="86" font-family="Arial, Helvetica, sans-serif" font-size="84" font-weight="700" fill="#ffffff" text-anchor="middle">L</text>
+  </g>
+
+  <text x="120" y="360" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" fill="#ffffff">Layicr 演唱会足迹</text>
+  <text x="122" y="430" font-family="Arial, Helvetica, sans-serif" font-size="34" fill="#9ca3af">记录每一次演唱会的感动与回忆</text>
+
+  <rect x="122" y="470" width="220" height="6" rx="3" fill="url(#brand)"/>
+  <text x="122" y="540" font-family="Arial, Helvetica, sans-serif" font-size="26" fill="#637ec5">ilive.lyc.la</text>
+</svg>

@@ -1,6 +1,6 @@
 # 单元测试用例（纯函数逻辑）
 
-> 被测对象：`utils/index.ts` 中与 DOM 无关的纯函数（SSR 两端一致）。每类给出去除前端项目后仍可 `node` 运行的验证脚本。
+> 被测对象：`app/utils/index.ts` 中与 DOM 无关的纯函数（SSR 两端一致）。每类给出去除前端项目后仍可 `node` 运行的验证脚本。
 
 ## UT-01 escapeHtml — HTML 转义
 
@@ -58,6 +58,18 @@
 | UT-05d | `now - 2d` | `2天前` / `2 days ago` |
 | UT-05e | `now - 30d` | `toLocaleDateString('zh-CN')` |
 
+## UT-05b formatWishDate — 固定绝对日期（水合安全）
+
+> 被测对象：`app/utils/index.ts` 的 `formatWishDate`（许愿卡片的稳定绝对日期，避免 SSR/客户端时区差异导致水合 mismatch）。
+> 已落地为 `test/unit/formatWishDate.test.ts`（4 例，2026-09-02）。
+
+| 用例 | 断言 |
+|------|------|
+| UT-05b-a 格式 | 输出 `YYYY.MM.DD` |
+| UT-05b-b 补零 | 个位数月/日补零（如 `2026.03.05`） |
+| UT-05b-c 解析失败 | 无法解析的时间字符串返回空串 |
+| UT-05b-d 水合安全 | 不含空格/UTC 偏移，SSR 与客户端输出一致 |
+
 ## UT-06 debounce / throttle — 防抖节流
 
 | 用例 | 说明 | 预期行为 |
@@ -104,8 +116,8 @@
 
 ## UT-10 localize — 双语结构本地化为单语言（已自动化）
 
-> 被测对象：`composables/useData.ts` 的纯函数（`pickText` / `localizeConcert`），
-> 对应 `types/index.ts` 的 `BilingualConcert → Concert` 转换逻辑。
+> 被测对象：`app/composables/useData.ts` 的纯函数（`pickText` / `localizeConcert`），
+> 对应 `app/types/index.ts` 的 `BilingualConcert → Concert` 转换逻辑。
 > 已落地为 `test/unit/localize.test.ts`（11 例，2026-08-22）。
 > 需 vitest 配置 `~`/`@` 别名解析 Nuxt 路径（见 `vitest.config.ts`）。
 
@@ -132,15 +144,16 @@ npm test          # 单次运行（vitest run）
 npm run test:watch # 监听模式
 ```
 
-> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishTime` / `CONFIG` / `mappers` / `localize`，共 43 条，全部通过（2026-08-22）。
+> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishDate` / `formatWishTime` / `CONFIG` / `mappers` / `localize`，共 47 条，全部通过（2026-09-02）。
 > 配置见根目录 `vitest.config.ts`（node 环境，包含 `test/unit`）。
 > 依赖 Nuxt `useState/useAsyncData` 的 composables（UT-08 等）需 Nuxt 测试环境，暂未纳入；如需可后续引入 `@nuxt/test-utils`。
 
 ## 既有用例索引（部分仍为手动/待落实）
 
-- **UT-01 escapeHtml / sanitizeInput / isValidUrl / safeSetUrl / safeCreateElement / handleImageError**：这些导出已在「死代码清理」时从 `utils/index.ts` 移除（项目无引用），相应用例随之作废。
+- **UT-01 escapeHtml / sanitizeInput / isValidUrl / safeSetUrl / safeCreateElement / handleImageError**：这些导出已在「死代码清理」时从 `app/utils/index.ts` 移除（项目无引用），相应用例随之作废。
 - **UT-02 safeHtml**：已自动化 → `test/unit/safeHtml.test.ts`（11 例）。
 - **UT-05 formatWishTime**：已自动化 → `test/unit/formatWishTime.test.ts`（5 例）。
+- **UT-05b formatWishDate**：已自动化 → `test/unit/formatWishDate.test.ts`（4 例）。
 - **UT-07 config**：已自动化 → `test/unit/config.test.ts`（4 例）。
 - **UT-06 debounce / throttle**：导出已移除（无引用），故作废。
 - **UT-08 composables**：需 Nuxt 环境，待 `@nuxt/test-utils` 支持。

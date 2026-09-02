@@ -31,14 +31,18 @@ function backToTop(): void {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-/** 滚动监听：控制返回顶部按钮显隐 · Scroll listener */
-function initScrollListener(): void {
+/**
+ * 滚动监听：控制返回顶部按钮显隐 · Scroll listener
+ * @returns 注销函数 · unregister function
+ */
+function initScrollListener(): () => void {
   const backToTopVisible = getBackToTopVisible()
   const onScroll = () => {
     backToTopVisible.value = window.scrollY > CONFIG.SCROLL_THRESHOLD
   }
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
+  return () => window.removeEventListener('scroll', onScroll)
 }
 
 /** 打开城市模态框 · Open city modal */
@@ -92,8 +96,15 @@ export function useNavigation() {
   const videoModalUrl = getVideoModalUrl()
   const videoModalTitle = getVideoModalTitle()
 
+  let stopScrollListener: (() => void) | null = null
+
   onMounted(() => {
-    initScrollListener()
+    stopScrollListener = initScrollListener()
+  })
+
+  onUnmounted(() => {
+    stopScrollListener?.()
+    stopScrollListener = null
   })
 
   return {

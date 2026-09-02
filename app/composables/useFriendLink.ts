@@ -14,7 +14,7 @@ interface FriendLink {
 /** 友情链接数据（9 个）· Friend links data */
 export const friendLinksData: FriendLink[] = [
   {
-    href: 'http://www.lyc.la',
+    href: 'https://www.lyc.la',
     icon: 'fas fa-globe',
     title: { zh: 'lyc.la', en: 'lyc.la' }
   },
@@ -24,7 +24,7 @@ export const friendLinksData: FriendLink[] = [
     title: { zh: 'Github', en: 'Github' }
   },
   {
-    href: 'http://weibo.com/layicr',
+    href: 'https://weibo.com/layicr',
     icon: 'fab fa-weibo',
     title: { zh: '微博', en: 'Weibo' }
   },
@@ -44,17 +44,17 @@ export const friendLinksData: FriendLink[] = [
     title: { zh: 'B站', en: 'Bilibili' }
   },
   {
-    href: 'http://twitter.com/layicr',
+    href: 'https://twitter.com/layicr',
     icon: 'fab fa-twitter',
     title: { zh: '推特', en: 'Twitter' }
   },
   {
-    href: 'http://www.instagram.com/ilayicr',
+    href: 'https://www.instagram.com/ilayicr',
     icon: 'fab fa-instagram',
     title: { zh: 'Instagram', en: 'Instagram' }
   },
   {
-    href: 'http://www.facebook.com/layicr',
+    href: 'https://www.facebook.com/layicr',
     icon: 'fab fa-facebook',
     title: { zh: 'Facebook', en: 'Facebook' }
   }

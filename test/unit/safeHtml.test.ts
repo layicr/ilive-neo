@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { safeHtml } from '../../utils/index'
+import { safeHtml } from '../../app/utils/index'
 
 describe('safeHtml — 安全 HTML 净化（纯正则，SSR 安全）', () => {
   it('保留白名单标签', () => {

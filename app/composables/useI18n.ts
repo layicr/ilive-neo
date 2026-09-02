@@ -5,8 +5,8 @@
  *              管理当前语言状态（zh/en），提供文案访问与语言切换。
  *              数据（concerts/cities/wishes）不在此承载，由 useData 独立管理。
  */
-import { zh, storiesTextDataZH, roleTextsZH } from '~/locales/zh'
-import { en, storiesTextDataEN, roleTextsEN } from '~/locales/en'
+import { zh, storiesTextDataZH } from '~/locales/zh'
+import { en, storiesTextDataEN } from '~/locales/en'
 import type { Lang } from '~/types'
 import { useSharedState } from './useSharedState'
 
@@ -29,13 +29,6 @@ function getCurrentData() {
 function getCurrentStoriesText() {
   return computed(() =>
     getCurrentLanguage().value === 'zh' ? storiesTextDataZH : storiesTextDataEN
-  )
-}
-
-/** 当前角色文本 · Current role texts */
-function getCurrentRoleTexts() {
-  return computed(() =>
-    getCurrentLanguage().value === 'zh' ? roleTextsZH : roleTextsEN
   )
 }
 
@@ -68,29 +61,14 @@ function switchLanguage(lang: Lang): void {
 }
 
 /**
- * 翻译函数 · Translate
- * @description 根据当前语言返回 zh/en 文本。
- */
-function t(zhText: string, enText: string): string {
-  return getCurrentLanguage().value === 'zh' ? zhText : enText
-}
-
-/**
  * useI18n 组合式入口 · Composable entry
  */
 export function useI18n() {
-  const currentLanguage = getCurrentLanguage()
-  const currentData = getCurrentData()
-  const currentStoriesText = getCurrentStoriesText()
-  const currentRoleTexts = getCurrentRoleTexts()
-
   return {
-    currentLanguage,
-    currentData,
-    currentStoriesText,
-    currentRoleTexts,
+    currentLanguage: getCurrentLanguage(),
+    currentData: getCurrentData(),
+    currentStoriesText: getCurrentStoriesText(),
     initLanguage,
-    switchLanguage,
-    t
+    switchLanguage
   }
 }

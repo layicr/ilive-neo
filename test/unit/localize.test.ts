@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { pickText, localizeConcert } from '../../composables/useData'
-import type { BilingualConcert } from '../../types'
+import { pickText, localizeConcert } from '../../app/composables/useData'
+import type { BilingualConcert } from '../../app/types'
 
 /** 构造双语演唱会 · Build a bilingual concert fixture */
 function buildBilingualConcert(overrides: Partial<BilingualConcert> = {}): BilingualConcert {

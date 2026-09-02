@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CONFIG } from '../../utils/config'
+import { CONFIG } from '../../app/utils/config'
 
 describe('CONFIG — 配置项', () => {
   it('PERFORMANCE_MONITOR 仅在非生产环境开启', () => {

@@ -12,27 +12,9 @@
  *              Seamless switch between local (file:) and remote (libsql:) via runtimeConfig.
  */
 import { createClient, type Client } from '@libsql/client';
-import { useRuntimeConfig } from '#imports';
-import { isAbsolute, resolve } from 'node:path';
+import { getDbConfig, resolveFileUrl } from './db-config';
 
 let client: Client | null = null;
-
-/**
- * 将本地相对 file: 路径解析为绝对路径· Resolve a local file: path to absolute
- * @param url 原始 URL · original url
- * @returns 解析后的 URL · resolved url
- * @description 仅对 file: 协议生效（libsql: 直接透传，不解析）。
- *              相对路径基于 process.cwd() 解析：
- *              - 本地 dev：cwd = 项目根，命中源码 public/data/data.db
- *              - 生产：cwd 为运行目录，命中部署环境中存在的 data.db
- *              Windows 下将路径中的反斜杠统一为斜杠，保证 libsql 可识别。
- */
-function resolveFileUrl(url: string): string {
-  if (!url.startsWith('file:')) return url;
-  const rawPath = url.replace(/^file:/, '').replace(/^\.\//, '');
-  const abs = isAbsolute(rawPath) ? rawPath : resolve(process.cwd(), rawPath);
-  return 'file:' + (process.platform === 'win32' ? abs.replace(/\\/g, '/') : abs);
-}
 
 /**
  * 获取全局唯一数据库客户端· Get the global singleton database client
@@ -45,15 +27,14 @@ function resolveFileUrl(url: string): string {
 export function getTursoClient(): Client {
   if (client) return client;
 
-  const config = useRuntimeConfig();
-  const rawUrl = (config.turso?.databaseUrl as string) || 'file:./public/data/data.db';
+  const { url: rawUrl, token } = getDbConfig();
   const url = resolveFileUrl(rawUrl);
   // 只读访问说明：本项目的 API 全部为 SELECT（纯只读），init-db 在生产也已跳过建库，
   // 因此不会触发写操作/WAL，无需 readOnly 配置。
   // 注意：本版本 @libsql/client 的 createClient Config 类型不支持 readOnly 属性，
   // 也不支持 ?mode=ro URL 参数（会抛 URL_PARAM_NOT_SUPPORTED）。若要强制只读，
   // 建议后续升级 libsql 版本或使用 sqlite3 只读 VFS。
-  const authToken = (config.turso?.authToken as string) || '';
+  const authToken = token || '';
 
   client = createClient({
     url,

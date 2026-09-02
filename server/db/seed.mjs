@@ -13,6 +13,7 @@
 import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, isAbsolute } from 'node:path';
+import { createInterface } from 'node:readline';
 import { createClient } from '@libsql/client';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -73,9 +74,39 @@ async function createSchema(client) {
 }
 
 /**
+ * 破坏性操作二次确认· Confirm a destructive operation
+ * @description db:seed 会 DROP 全部业务表再重建空库（清空数据），易误操作。
+ *              - 交互终端：要求输入 YES 确认
+ *              - 非交互（CI/脚本）：必须显式传 `--force`，否则拒绝执行
+ */
+async function confirmDestructive(): Promise<void> {
+  if (process.argv.includes('--force')) return;
+
+  if (!process.stdin.isTTY) {
+    console.error('[seed] 该操作会清空全部业务表（DROP 后重建空库）。');
+    console.error('[seed] 非交互环境请显式确认：npm run db:seed -- --force');
+    process.exit(1);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>((resolve) => {
+    rl.question('[seed] 将清空全部业务表（concerts/cities/wishes 及其子表）并重建空库。确认请输入 YES：', resolve);
+  });
+  rl.close();
+
+  if (answer.trim().toUpperCase() !== 'YES') {
+    console.log('[seed] 已取消 · aborted');
+    process.exit(0);
+  }
+}
+
+/**
  * 主流程：仅创建空库· Main: create empty database only
  */
 async function main() {
+  // 破坏性操作二次确认（避免误清空数据）· destructive op confirmation
+  await confirmDestructive();
+
   // 确保本地数据库父目录存在（远程跳过）· ensure parent dir for local db
   ensureDataDir(DB_URL);
 

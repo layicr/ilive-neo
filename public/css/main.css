@@ -564,10 +564,6 @@ body {
     .stat-number {
         font-size: 42px;
     }
-
-    .section-title {
-        font-size: 28px;
-    }
 }
 
 
@@ -683,11 +679,6 @@ body {
     padding: 60px 20px;
     color: #999;
     grid-column: 1 / -1;
-}
-
-.wish-empty-icon {
-    font-size: 64px;
-    margin-bottom: 20px;
 }
 
 @media (max-width: 768px) {
@@ -1490,10 +1481,6 @@ body {
     transform: scale(1.1);
 }
 
-.city-info {
-    flex: 1;
-}
-
 .city-name {
     font-size: 1.15rem;
     font-weight: 700;
@@ -1720,17 +1707,6 @@ body {
         font-size: 1.4rem;
     }
 
-    /* 章节标题 - 移动端调整 */
-    .section-title {
-        font-size: 28px;
-        margin-bottom: 40px;
-    }
-
-    .section-title::after {
-        width: 60px;
-        height: 3px;
-    }
-
     /* 时间轴 - 保持现有样式 */
     .timeline::after {
         left: 31px;
@@ -1841,149 +1817,12 @@ body {
 }
 
 
-/* 懒加载图片样式 */
-.lazy-load {
-    opacity: 0;
-}
-
-.lazy-loaded {
-    opacity: 1;
-    animation: fadeIn 0.5s ease;
-}
-
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
 
-@keyframes scrollDown {
-    0% {
-        transform: translateY(0);
-    }
-    100% {
-        transform: translateY(-33.33%);
-    }
-}
 
-@keyframes scrollUp {
-    0% {
-        transform: translateY(-33.33%);
-    }
-    100% {
-        transform: translateY(0);
-    }
-}
-
-/* 右侧图表 */
-.chart-wrapper {
-    flex: 1;
-    background: white;
-    border-radius: 18px;
-    padding: 25px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-    display: flex;
-    flex-direction: column;
-}
-
-.chart-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 15px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #f0f4f8;
-}
-
-.chart-title {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #2c3e50;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.chart-title i {
-    color: #3498db;
-}
-
-.countdown-display {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #3498db;
-    font-size: 1rem;
-    font-weight: bold;
-}
-
-.countdown-display i {
-    color: #e74c3c;
-}
-
-.chart-container {
-    flex: 1;
-    min-height: 350px;
-    width: 100%;
-}
-
-.chart-indicators {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 15px;
-}
-
-.chart-indicator {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #e0e0e0;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.chart-indicator.active {
-    background: #3498db;
-    transform: scale(1.3);
-}
-
-/* 响应式 */
-@media (max-width: 1200px) {
-    .showcase-container {
-        flex-direction: column;
-    }
-
-    .scrolling-container {
-        height: 400px;
-    }
-
-    .chart-container {
-        min-height: 300px;
-    }
-}
-
-@media (max-width: 768px) {
-    .showcase-container {
-        padding: 0;
-    }
-
-    .image-wall,
-    .chart-wrapper {
-        padding: 15px;
-    }
-
-    .scrolling-container {
-        height: 300px;
-    }
-
-    .chart-container {
-        min-height: 250px;
-    }
-
-    .chart-title {
-        font-size: 1.1rem;
-    }
-}
 
 /* ==================== 3D专辑展示区域样式 ==================== */
 .album-showcase-container {
@@ -2706,22 +2545,7 @@ body {
     background: rgba(72, 81, 173, 0.8);
 }
 
-.songlist-section {
-    margin-bottom: 25px;
-}
 
-.songlist-section:last-child {
-    margin-bottom: 0;
-}
-
-.songlist-section-title {
-    color: #637ec5;
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(72, 81, 173, 0.3);
-}
 
 .songlist-list {
     list-style: none;
@@ -3376,4 +3200,20 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* ==================== 从 Tailwind CDN 迁移的工具类（仅保留实际使用的类）====================
+ * 原页面仅少量用到以下 Tailwind 工具类；为避免运行时 CDN 编译拖慢 LCP，
+ * 将其以静态 CSS 写入，保持模板 class 不变、视觉一致。
+ */
+.max-w-4xl { max-width: 56rem; }
+.max-w-3xl { max-width: 48rem; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+.mb-16 { margin-bottom: 4rem; }
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.text-gray-400 { color: #9ca3af; }
+.leading-relaxed { line-height: 1.625; }
+@media (min-width: 768px) {
+  .md\:text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
 }

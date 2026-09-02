@@ -1,6 +1,6 @@
 # 演唱会足迹（ilive_neo）开发文档
 
-> Nuxt3 + Turso(LibSQL) 迁移版本 · 记录每一次演唱会的感动与回忆
+> Nuxt4 + Turso(LibSQL) 迁移版本 · 记录每一次演唱会的感动与回忆
 >
 > [English Version](./README_DEV_EN.md) | 中文文档
 
@@ -10,9 +10,13 @@
 
 「演唱会足迹」是一个个人演唱会记录站点，从原纯静态站点（`index.html` + 原生 JS + 手写 Service Worker）迁移而来。本仓库（`ilive_neo`）在**保留原视觉效果 100% 一致**的前提下，将架构升级为：
 
-- **Nuxt3**（SSR + Vue3 + TypeScript）
+- **Nuxt4**（SSR + Vue3 + TypeScript）
 - **Turso / LibSQL** 数据库（远程 `libsql:` 为主，本地 `file:` 仅开发兜底）
 - **@vite-pwa/nuxt** 生成 Service Worker（替代手写 `sw.js`）
+
+> **Nuxt 4 目录约定**：`srcDir` 默认为 `app/`，`app.vue`、`pages/`、`composables/`、
+> `plugins/`、`utils/`、`locales/`、`types/` 均位于 `app/` 下；`server/`、`public/`、
+> `test/`、`nuxt.config.ts` 仍位于项目根。因此 vitest 的 `~`/`@` 别名指向 `app/`。
 
 关键原则：
 
@@ -26,8 +30,8 @@
 
 | 类别 | 技术 |
 |------|------|
-| 框架 | Nuxt 3 (`^3.15`)、Vue 3 (`^3.5`)、Vue Router 4 |
-| 数据库 | Turso / LibSQL (`@libsql/client ^0.14`) |
+| 框架 | Nuxt 4 (`^4.5`)、Vue 3 (`^3.5`)、Vue Router 5 |
+| 数据库 | Turso / LibSQL (`@libsql/client ^0.17`) |
 | PWA | `@vite-pwa/nuxt`（配置化 Service Worker，`/api/*` NetworkFirst）|
 | 语言 | TypeScript（`strict` 开启，构建期 `typeCheck: false`）|
 | 动画 | GSAP 3.12.2（CDN）|
@@ -48,28 +52,37 @@
 
 ```
 ilive_neo/
-├── app.vue                    # 根组件（渲染 <NuxtPage/> + 全局错误处理）
 ├── nuxt.config.ts             # Nuxt 总配置（SSR/runtimeConfig/head/PWA/SEO）
-├── pages/
-│   └── index.vue              # 首页（Vue 组件，composables 驱动 + SEO 动态 meta）
-├── composables/               # [核心] 全部交互逻辑（Vue composables）
-│   ├── useData.ts             # SSR 预取 /api/data + 单语言派生（pickText/localizeConcert）
-│   ├── useI18n.ts             # 中英文切换（useState 懒初始化）
-│   ├── useGallery.ts          # 图片画廊（懒初始化缓存 localizedConcerts）
-│   ├── useSonglist.ts         # 歌单弹层
-│   ├── useTimeline.ts         # 时间线渲染
-│   ├── useNavigation.ts       # 角色导航滚动
-│   ├── useTicketModal.ts      # 票务模态框
-│   ├── useAlbumShowcase.ts    # 专辑展示轮播（GSAP）
-│   ├── useMusic.ts            # 背景音乐播放/暂停
-│   ├── useKeyboard.ts         # 键盘手势
-│   ├── useSharedState.ts      # 跨组件共享状态（useState 封装）
-│   ├── useFriendLink.ts       # 友情链接
-│   └── useAppError.ts         # 全局错误处理 + Toast
-├── plugins/
-│   └── statis.client.ts       # 第三方统计注入（百度/GA/51.la，客户端插件）
+├── app/                       # [Nuxt 4 srcDir] 应用层
+│   ├── app.vue                # 根组件（渲染 <NuxtPage/> + 全局错误处理）
+│   ├── pages/
+│   │   └── index.vue          # 首页（Vue 组件，composables 驱动 + SEO 动态 meta）
+│   ├── composables/           # [核心] 全部交互逻辑（Vue composables）
+│   │   ├── useData.ts         # SSR 预取 /api/data + 单语言派生（pickText/localizeConcert）
+│   │   ├── useI18n.ts         # 中英文切换（useState 懒初始化）
+│   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
+│   │   ├── useSonglist.ts     # 歌单弹层
+│   │   ├── useTimeline.ts     # 时间线渲染
+│   │   ├── useNavigation.ts   # 角色导航滚动
+│   │   ├── useTicketModal.ts  # 票务模态框
+│   │   ├── useAlbumShowcase.ts  # 专辑展示轮播（GSAP）
+│   │   ├── useMusic.ts        # 背景音乐播放/暂停
+│   │   ├── useKeyboard.ts     # 键盘手势
+│   │   ├── useSharedState.ts  # 跨组件共享状态（useState 封装）
+│   │   ├── useFriendLink.ts   # 友情链接
+│   │   └── useAppError.ts     # 全局错误处理 + Toast
+│   ├── plugins/
+│   │   └── statis.client.ts   # 第三方统计注入（百度/GA/51.la，客户端插件）
+│   ├── locales/               # 静态 UI 文案（中英文字面量，非数据库数据）
+│   │   ├── zh.ts
+│   │   └── en.ts
+│   ├── types/
+│   │   └── index.ts           # 前端数据类型（Bilingual* / Concert / AppData 等）
+│   └── utils/
+│       ├── config.ts          # 全局配置常量 CONFIG
+│       └── index.ts           # 工具函数（safeHtml / formatWishTime）
 ├── public/                    # 静态资源
-│   ├── css/  load.css · main.css
+│   ├── css/  main.css
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  海报与现场照片
@@ -87,14 +100,6 @@ ilive_neo/
 │   └── db/
 │       ├── schema.sql         # 表结构（6 张表）
 │       └── seed.mjs           # 建空库脚本（DROP + CREATE，不含业务数据）
-├── locales/                   # 静态 UI 文案（中英文字面量，非数据库数据）
-│   ├── zh.ts
-│   └── en.ts
-├── types/
-│   └── index.ts               # 前端数据类型（Bilingual* / Concert / AppData 等）
-├── utils/
-│   ├── config.ts              # 全局配置常量 CONFIG
-│   └── index.ts              # 工具函数（safeHtml / formatWishTime）
 ├── test/                      # 测试
 │   ├── unit/                 # Vitest 单元测试（safeHtml/formatWishTime/config/mappers/localize）
 │   ├── ui-tests.md           # UI 验收清单（手动 + 自动化）
@@ -110,10 +115,10 @@ ilive_neo/
 
 ### 4.1 前端启动链路（Vue 化）
 
-不再有经典脚本注入器。页面由 `pages/index.vue` 的 `<script setup>` 直接驱动：
+不再有经典脚本注入器。页面由 `app/pages/index.vue` 的 `<script setup>` 直接驱动：
 
 ```
-pages/index.vue (setup)
+app/pages/index.vue (setup)
   ├─ useData()           → useAsyncData('app-data') 在 SSR 阶段预取 GET /api/data
   │                       → useState 缓存 concerts/cities/wishes/stats
   │                       → localizedConcerts 等 computed 按 currentLanguage 派生单语言结构
@@ -130,7 +135,7 @@ pages/index.vue (setup)
 
 - **所有 composable 内的 `useState`/`useAsyncData` 必须懒初始化**（在 composable 函数体内调用，不可在模块顶层），否则 SSR 阶段报 `instance unavailable`。
 - 语言切换**不重新请求 API**：`localizedConcerts` 等 computed 依赖 `currentLanguage`，切换只重算前端派生值，零网络请求。
-- `pages/index.vue` 的 `<script setup>` 承载全部交互逻辑 + SEO 动态 meta。
+- `app/pages/index.vue` 的 `<script setup>` 承载全部交互逻辑 + SEO 动态 meta。
 
 ### 4.2 服务端数据层（单端点）
 
@@ -156,7 +161,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 
 ### 4.3 SEO 动态元信息
 
-`pages/index.vue` 中：
+`app/pages/index.vue` 中：
 
 - `useSeoMeta` 随 `currentLanguage` 动态输出 title/description/og/twitter。
 - **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
@@ -212,7 +217,7 @@ NUXT_TURSO_AUTH_TOKEN=your-token
 # NUXT_TURSO_DATABASE_URL=file:./public/data/data.db
 ```
 
-> ⚠️ Nuxt 3.15 **只加载 `.env`，不加载 `.env.local`**。配置必须放在 `.env`。
+> ⚠️ Nuxt 4（自 3.15 起）**只加载 `.env`，不加载 `.env.local`**。配置必须放在 `.env`。
 > ⚠️ `.env` 含密钥，**必须加入 `.gitignore` 且不可提交**。若被 `git ls-files` 跟踪，立即 `git rm --cached .env` 并**更换 token**（历史提交仍保留旧 token）。
 
 ### 6.3 Vercel 部署（环境变量）
@@ -266,7 +271,7 @@ npm run test:watch # 监听模式运行测试
 - `public/robots.txt`：允许所有爬虫，`Disallow: /api/`，引用 sitemap。
 - `public/sitemap.xml`：含首页 + 中英 hreflang 版本。
 
-### 9.3 动态元信息（`pages/index.vue`）
+### 9.3 动态元信息（`app/pages/index.vue`）
 
 - `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库艺人动态生成。
 - JSON-LD：WebSite + Person + ItemList + MusicEvent（每场演唱会）。
@@ -332,5 +337,5 @@ npm run test
 - 所有 `useState`/`useAsyncData` 必须在 composable 函数体内（懒初始化），**禁止模块顶层调用**，否则 SSR 报 `instance unavailable`。
 - **环境变量必须用 `NUXT_` 前缀**；`TURSO_` 前缀在 config 求值阶段可能读不到。
 - **远程 Turso 时 `init-db.ts` 跳过建库**，避免误建本地空库文件。
-- 修改 `public/css/*` 或 `pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
+- 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
 - **token 安全**：`.env` 已加入 `.gitignore`。若 token 曾提交进 git 历史，应立即到 Turso 控制台**更换新 token**。

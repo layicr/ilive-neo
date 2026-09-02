@@ -57,6 +57,7 @@ function initBgMusic(): void {
   const { currentData } = useI18n()
   bgMusicSource.src = currentData.value.bgMusic || 'music/bgm_cn.mp3'
   bgMusic.load()
+  bgMusic.volume = CONFIG.MUSIC_VOLUME
 
   // 不再自动播放，也不再监听首次交互自动补播
   // 用户点击音乐按钮时（toggleMusic）才开始播放
@@ -65,27 +66,8 @@ function initBgMusic(): void {
 /** 音乐按钮点击处理 · Toggle music on click */
 function toggleMusic(): void {
   const { handleError } = useAppError()
-  const { currentData } = useI18n()
   const isPlaying = getIsPlaying()
   if (!bgMusic || !bgMusicSource) return
-
-  if (!bgMusicSource.src || bgMusicSource.src === '') {
-    bgMusicSource.src = currentData.value.bgMusic || 'music/bgm_cn.mp3'
-    bgMusic.load()
-
-    const onCanPlay = () => {
-      bgMusic!.removeEventListener('canplay', onCanPlay)
-      bgMusic!.volume = CONFIG.MUSIC_VOLUME
-      bgMusic!.play().then(() => {
-        isPlaying.value = true
-      }).catch((error) => {
-        handleError(error, 'MusicInitPlay', false)
-        isPlaying.value = false
-      })
-    }
-    bgMusic.addEventListener('canplay', onCanPlay)
-    return
-  }
 
   if (isPlaying.value) {
     bgMusic.pause()

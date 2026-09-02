@@ -1,6 +1,6 @@
 # Concert Footprints (ilive_neo) Development Documentation
 
-> Nuxt3 + Turso(LibSQL) Migration Version · Recording the emotion and memories of every concert
+> Nuxt4 + Turso(LibSQL) Migration Version · Recording the emotion and memories of every concert
 >
 > [中文文档](./README_DEV.md) | English Version
 
@@ -10,9 +10,14 @@
 
 "Concert Footprints" is a personal concert recording site, migrated from a purely static site (`index.html` + vanilla JS + hand-written Service Worker). This repository (`ilive_neo`) upgrades the architecture while **preserving 100% of the original visual effects**:
 
-- **Nuxt3** (SSR + Vue3 + TypeScript)
+- **Nuxt4** (SSR + Vue3 + TypeScript)
 - **Turso / LibSQL** database (remote `libsql:` as primary, local `file:` for development fallback only)
 - **@vite-pwa/nuxt** for Service Worker generation (replacing hand-written `sw.js`)
+
+> **Nuxt 4 directory convention**: `srcDir` defaults to `app/`, so `app.vue`, `pages/`,
+> `composables/`, `plugins/`, `utils/`, `locales/` and `types/` all live under `app/`;
+> `server/`, `public/`, `test/` and `nuxt.config.ts` stay at the project root.
+> For that reason the vitest `~`/`@` aliases point to `app/`.
 
 Key principles:
 
@@ -26,8 +31,8 @@ Key principles:
 
 | Category | Technology |
 |------|------|
-| Framework | Nuxt 3 (`^3.15`), Vue 3 (`^3.5`), Vue Router 4 |
-| Database | Turso / LibSQL (`@libsql/client ^0.14`) |
+| Framework | Nuxt 4 (`^4.5`), Vue 3 (`^3.5`), Vue Router 5 |
+| Database | Turso / LibSQL (`@libsql/client ^0.17`) |
 | PWA | `@vite-pwa/nuxt` (config-driven Service Worker, `/api/*` NetworkFirst) |
 | Language | TypeScript (`strict` enabled, `typeCheck: false` at build time) |
 | Animation | GSAP 3.12.2 (CDN) |
@@ -48,28 +53,37 @@ Key principles:
 
 ```
 ilive_neo/
-├── app.vue                    # Root component (renders <NuxtPage/> + global error handling)
 ├── nuxt.config.ts             # Nuxt master config (SSR/runtimeConfig/head/PWA/SEO)
-├── pages/
-│   └── index.vue              # Homepage (Vue component, composables-driven + dynamic SEO meta)
-├── composables/               # [Core] All interaction logic (Vue composables)
-│   ├── useData.ts             # SSR prefetch /api/data + single-language derivation (pickText/localizeConcert)
-│   ├── useI18n.ts             # Chinese/English switching (useState lazy initialization)
-│   ├── useGallery.ts          # Image gallery (lazy-cached localizedConcerts)
-│   ├── useSonglist.ts         # Song list modal
-│   ├── useTimeline.ts         # Timeline rendering
-│   ├── useNavigation.ts       # Section navigation scrolling
-│   ├── useTicketModal.ts      # Ticket modal
-│   ├── useAlbumShowcase.ts    # Album showcase carousel (GSAP)
-│   ├── useMusic.ts            # Background music play/pause
-│   ├── useKeyboard.ts         # Keyboard gestures
-│   ├── useSharedState.ts      # Cross-component shared state (useState wrapper)
-│   ├── useFriendLink.ts       # Friend links
-│   └── useAppError.ts         # Global error handling + Toast
-├── plugins/
-│   └── statis.client.ts       # Third-party analytics injection (Baidu/GA/51.la, client-side plugin)
+├── app/                       # [Nuxt 4 srcDir] Application layer
+│   ├── app.vue                # Root component (renders <NuxtPage/> + global error handling)
+│   ├── pages/
+│   │   └── index.vue          # Homepage (Vue component, composables-driven + dynamic SEO meta)
+│   ├── composables/           # [Core] All interaction logic (Vue composables)
+│   │   ├── useData.ts         # SSR prefetch /api/data + single-language derivation (pickText/localizeConcert)
+│   │   ├── useI18n.ts         # Chinese/English switching (useState lazy initialization)
+│   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
+│   │   ├── useSonglist.ts     # Song list modal
+│   │   ├── useTimeline.ts     # Timeline rendering
+│   │   ├── useNavigation.ts   # Section navigation scrolling
+│   │   ├── useTicketModal.ts  # Ticket modal
+│   │   ├── useAlbumShowcase.ts  # Album showcase carousel (GSAP)
+│   │   ├── useMusic.ts        # Background music play/pause
+│   │   ├── useKeyboard.ts     # Keyboard gestures
+│   │   ├── useSharedState.ts  # Cross-component shared state (useState wrapper)
+│   │   ├── useFriendLink.ts   # Friend links
+│   │   └── useAppError.ts     # Global error handling + Toast
+│   ├── plugins/
+│   │   └── statis.client.ts   # Third-party analytics injection (Baidu/GA/51.la, client-side plugin)
+│   ├── locales/               # Static UI copy (Chinese/English literals, not database content)
+│   │   ├── zh.ts
+│   │   └── en.ts
+│   ├── types/
+│   │   └── index.ts           # Frontend data types (Bilingual* / Concert / AppData, etc.)
+│   └── utils/
+│       ├── config.ts          # Global configuration constants CONFIG
+│       └── index.ts           # Utility functions (safeHtml / formatWishTime)
 ├── public/                    # Static assets
-│   ├── css/  load.css · main.css
+│   ├── css/  main.css
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  Posters and live photos
@@ -87,14 +101,6 @@ ilive_neo/
 │   └── db/
 │       ├── schema.sql         # Table structure (6 tables)
 │       └── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
-├── locales/                   # Static UI copy (Chinese/English literals, not database content)
-│   ├── zh.ts
-│   └── en.ts
-├── types/
-│   └── index.ts               # Frontend data types (Bilingual* / Concert / AppData, etc.)
-├── utils/
-│   ├── config.ts              # Global configuration constants CONFIG
-│   └── index.ts              # Utility functions (safeHtml / formatWishTime)
 ├── test/                      # Tests
 │   ├── unit/                 # Vitest unit tests (safeHtml/formatWishTime/config/mappers/localize)
 │   ├── ui-tests.md           # UI acceptance checklist (manual + automated)
@@ -110,10 +116,10 @@ ilive_neo/
 
 ### 4.1 Frontend Bootstrap Chain (Vue-based)
 
-No more classic script injectors. The page is driven directly by `pages/index.vue`'s `<script setup>`:
+No more classic script injectors. The page is driven directly by `app/pages/index.vue`'s `<script setup>`:
 
 ```
-pages/index.vue (setup)
+app/pages/index.vue (setup)
   ├─ useData()           → useAsyncData('app-data') prefetches GET /api/data during SSR
   │                       → useState caches concerts/cities/wishes/stats
   │                       → localizedConcerts and other computed values derive single-language structures by currentLanguage
@@ -130,7 +136,7 @@ Key points:
 
 - **All `useState`/`useAsyncData` inside composables must be lazy-initialized** (called within the composable function body, never at module level), otherwise SSR throws `instance unavailable`.
 - **Language switching does NOT re-request the API**: `localizedConcerts` and other computed values depend on `currentLanguage`; switching only recalculates frontend-derived values with zero network requests.
-- `pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta.
+- `app/pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta.
 
 ### 4.2 Server-Side Data Layer (Single Endpoint)
 
@@ -156,7 +162,7 @@ localizedConcerts (computed, selects single language by currentLanguage)
 
 ### 4.3 Dynamic SEO Meta Information
 
-In `pages/index.vue`:
+In `app/pages/index.vue`:
 
 - `useSeoMeta` dynamically outputs title/description/og/twitter following `currentLanguage`.
 - **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts deduplicated `artist`, auto-updates as concerts are added or removed.
@@ -212,7 +218,7 @@ NUXT_TURSO_AUTH_TOKEN=your-token
 # NUXT_TURSO_DATABASE_URL=file:./public/data/data.db
 ```
 
-> ⚠️ Nuxt 3.15 **only loads `.env`, not `.env.local`**. Configuration must be placed in `.env`.
+> ⚠️ Nuxt 4 (since 3.15) **only loads `.env`, not `.env.local`**. Configuration must be placed in `.env`.
 > ⚠️ `.env` contains secrets, **must be added to `.gitignore` and never committed**. If tracked by `git ls-files`, immediately `git rm --cached .env` and **rotate the token** (historical commits still retain old tokens).
 
 ### 6.3 Vercel Deployment (Environment Variables)
@@ -266,7 +272,7 @@ npm run test:watch # Run tests in watch mode
 - `public/robots.txt`: Allows all crawlers, `Disallow: /api/`, references sitemap.
 - `public/sitemap.xml`: Includes homepage + zh/en hreflang versions.
 
-### 9.3 Dynamic Meta Information (`pages/index.vue`)
+### 9.3 Dynamic Meta Information (`app/pages/index.vue`)
 
 - `useSeoMeta`: Outputs title/description/og/twitter following language, keywords/description dynamically generated from database artists.
 - JSON-LD: WebSite + Person + ItemList + MusicEvent (per concert).
@@ -332,5 +338,5 @@ Composables relying on `useState/useAsyncData` (e.g., useData localization, useI
 - All `useState`/`useAsyncData` must be inside composable function bodies (lazy initialization), **module-level calls are prohibited**, otherwise SSR throws `instance unavailable`.
 - **Environment variables must use the `NUXT_` prefix**; the `TURSO_` prefix may not be readable during config evaluation.
 - **Remote Turso skips database creation in `init-db.ts`**, avoiding accidentally creating local empty database files.
-- After modifying `public/css/*` or `pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
+- After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
 - **Token security**: `.env` is added to `.gitignore`. If a token was ever committed to git history, immediately **rotate to a new token** in the Turso dashboard.

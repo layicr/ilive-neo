@@ -121,5 +121,5 @@
   - [x] UI-033 单场详情：`GET /api/concerts/1` 返回 18 字段双语详情（tags/images/songlist/videoUrl 等）
   - [x] UI-034 404：`GET /api/concerts/99999` → 404 + 错误信息
   - [x] UI-035 400：`GET /api/concerts/abc` → 400 + 参数校验错误
-  - 单元测试（vitest run）：3 文件 / 20 用例全部通过（safeHtml 11 / config 4 / formatWishTime 5）
+  - 单元测试（vitest run）：6 文件 / 47 用例全部通过（safeHtml 11 / formatWishDate 4 / formatWishTime 5 / config 4 / mappers 12 / localize 11）
   - 注：交互类用例（UI-004~031 模态框/轮播/画廊/音乐等）仍需浏览器手动逐项勾选。

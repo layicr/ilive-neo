@@ -80,16 +80,6 @@ class KeyboardManager {
       handlers.splice(index, 1)
     }
   }
-
-  /** 清空指定按键 · Clear key */
-  clear(key: string): void {
-    this.handlers.delete(key)
-  }
-
-  /** 清空所有 · Clear all */
-  clearAll(): void {
-    this.handlers.clear()
-  }
 }
 
 /** 全局单例 · Global singleton */

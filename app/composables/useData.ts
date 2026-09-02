@@ -8,7 +8,7 @@
  */
 import type {
   Concert, City, Wish, Stats, Lang,
-  BilingualConcert, BilingualCity, BilingualWish, AppData
+  BilingualConcert, AppData
 } from '~/types'
 import { useI18n } from './useI18n'
 
@@ -49,7 +49,9 @@ const EMPTY_STATS: Stats = { totalConcerts: 0, totalArtists: 0, totalCities: 0 }
 export function useData() {
   const { currentLanguage } = useI18n()
 
-  const { data, pending } = useAsyncData<AppData>('app-data', () =>
+  // error 一并暴露：/api/data 失败时 pending 也会变 false，
+  // 若不透出 error，页面会在「加载完成」的状态下显示空白，用户无从察觉。
+  const { data, pending, error } = useAsyncData<AppData>('app-data', () =>
     $fetch<AppData>('/api/data')
   )
 
@@ -84,6 +86,7 @@ export function useData() {
   return {
     stats,
     dataReady,
+    dataError: error,
     localizedConcerts,
     localizedCities,
     localizedWishes

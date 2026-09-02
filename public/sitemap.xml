@@ -6,7 +6,5 @@
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="zh-CN" href="https://ilive.lyc.la/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://ilive.lyc.la/?lang=en"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://ilive.lyc.la/"/>
   </url>
 </urlset>

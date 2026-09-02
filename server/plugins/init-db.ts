@@ -17,7 +17,8 @@
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, isAbsolute, resolve } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
-import { useRuntimeConfig } from '#imports';
+import { defineNitroPlugin } from '#imports';
+import { getDbConfig, resolveFileUrl } from '../lib/db-config';
 
 /**
  * 表结构 SQL 路径 · path to schema.sql
@@ -25,31 +26,6 @@ import { useRuntimeConfig } from '#imports';
  *              仅在本地 file: 开发时建空表读取；远程 Turso 跳过，不依赖此文件。
  */
 const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
-
-/**
- * 读取数据库连接参数（Nitro 端）· Read DB connection params (Nitro)
- * @returns {{url:string, token:string}} 连接 URL 与 token
- * @description 与 turso.ts 一致，通过 runtimeConfig 读取（NUXT_TURSO_* 运行时覆盖）。
- *              url 接受 file:/libsql: 双协议，token 仅远程需要。
- */
-function getDbConfig(): { url: string; token: string } {
-  const cfg = useRuntimeConfig();
-  return {
-    url: (cfg.turso?.databaseUrl as string) || 'file:./public/data/data.db',
-    token: (cfg.turso?.authToken as string) || ''
-  };
-}
-
-/**
- * 将本地相对 file: 路径解析为绝对路径· Resolve a local file: path to absolute
- * @param url 原始 URL · original url
- */
-function resolveFileUrl(url: string): string {
-  if (!url.startsWith('file:')) return url;
-  const rawPath = url.replace(/^file:/, '').replace(/^\.\//, '');
-  const abs = isAbsolute(rawPath) ? rawPath : resolve(process.cwd(), rawPath);
-  return 'file:' + (process.platform === 'win32' ? abs.replace(/\\/g, '/') : abs);
-}
 
 /**
  * 确保本地 file: 库文件父目录存在· Ensure the parent dir of a local file: db exists

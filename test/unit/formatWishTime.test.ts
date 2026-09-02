@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { formatWishTime } from '../../utils/index'
+import { formatWishTime } from '../../app/utils/index'
 
 describe('formatWishTime — 许愿时间格式化', () => {
   const NOW = new Date('2026-08-22T12:00:00Z').getTime()

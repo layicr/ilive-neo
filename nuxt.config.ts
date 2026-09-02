@@ -1,15 +1,17 @@
 /**
  * Nuxt 配置 · Nuxt configuration
  *
- * @description 演唱会足迹迁移项目的 Nuxt3 总配置（SSR、runtimeConfig、Head、Tailwind CDN 等）
- *              Nuxt3 config for the concert journey migration (SSR, runtimeConfig, Head, etc.)
+ * @description 演唱会足迹迁移项目的 Nuxt4 总配置（SSR、runtimeConfig、Head、Tailwind CDN 等）
+ *              Nuxt4 config for the concert journey migration (SSR, runtimeConfig, Head, etc.)
+ *              Nuxt 4 起 srcDir 默认为 app/：app.vue、pages/、composables/、plugins/、utils/、
+ *              locales/、types/ 均位于 app/ 下；server/ 与 public/ 仍位于项目根。
  */
 
 /** 站点正式地址（HTTPS）· Canonical site URL (HTTPS) */
 const SITE_URL = 'https://ilive.lyc.la'
 
 export default defineNuxtConfig({
-  compatibilityDate: '2025-07-04',
+  compatibilityDate: '2026-08-31',
 
   /**
    * Nuxt 模块 · Modules
@@ -39,7 +41,10 @@ export default defineNuxtConfig({
       icons: [{ src: 'img/logo.jpg', sizes: 'any', type: 'image/jpeg' }]
     },
     workbox: {
-      globPatterns: ['**/*.{js,css,html,ico,jpg,jpeg,png,svg,woff2,mp3}'],
+      // 预缓存仅含应用壳（js/css/html/ico/字体），不预缓存图片/音频——
+      // 图片/音频由下方 runtimeCaching 的 StaleWhileRevalidate 按需缓存。
+      // 否则会一次性预缓存 300+ 张图（约 70MB），首次访问即被后台拉满，移动端灾难。
+      globPatterns: ['**/*.{js,css,html,ico,woff2}'],
       navigateFallback: '/',
       runtimeCaching: [
         // 图片：Stale-While-Revalidate（缓存优先，后台更新）
@@ -102,7 +107,7 @@ export default defineNuxtConfig({
 
   /**
    * 页面头部 · App head
-   * @description 迁移原 index.html 的 SEO/OG/Twitter 元信息、Favicon、CDN 依赖（GSAP/Tailwind/FontAwesome）
+   * @description 迁移原 index.html 的 SEO/OG/Twitter 元信息、Favicon、CDN 依赖（GSAP/FontAwesome）
    *              Keep original SEO meta, favicon and CDN deps to keep visuals identical
    */
   app: {
@@ -121,44 +126,36 @@ export default defineNuxtConfig({
         { property: 'og:url', content: SITE_URL },
         { property: 'og:site_name', content: 'Layicr 演唱会足迹' },
         { property: 'og:locale', content: 'zh_CN' },
-        { property: 'og:locale:alternate', content: 'en_US' },
         { property: 'og:title', content: 'Layicr 演唱会足迹' },
         { property: 'og:description', content: '记录每一次演唱会的感动与回忆' },
-        { property: 'og:image', content: SITE_URL + '/img/logo.jpg' },
+        { property: 'og:image', content: SITE_URL + '/img/og-image.svg' },
         { name: 'twitter:card', content: 'summary_large_image' },
         { name: 'twitter:site', content: '@layicr' },
         { name: 'twitter:creator', content: '@layicr' },
         { name: 'twitter:title', content: 'Layicr 演唱会足迹' },
         { name: 'twitter:description', content: '记录每一次演唱会的感动与回忆' },
-        { name: 'twitter:image', content: SITE_URL + '/img/logo.jpg' }
+        { name: 'twitter:image', content: SITE_URL + '/img/og-image.svg' }
       ],
       link: [
         { rel: 'icon', type: 'image/jpeg', href: 'img/logo.jpg' },
         { rel: 'apple-touch-icon', href: 'img/logo.jpg' },
         { rel: 'canonical', href: SITE_URL },
         // 原 CSS 原样链路 · Original CSS as-is (kept as separate requests to match original network behavior)
-        { rel: 'stylesheet', href: 'css/load.css' },
         { rel: 'stylesheet', href: 'css/main.css' },
         { rel: 'preconnect', href: 'https://cdnjs.cloudflare.com' },
         { rel: 'dns-prefetch', href: 'https://cdn.busuanzi.cc' },
-        { rel: 'dns-prefetch', href: 'https://cdn.tailwindcss.com' },
         /**
          * FontAwesome（CDN）· Font Awesome via CDN
          * @description 沿用现有 `fa` 图标类名所需的字体样式库
          */
-        { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', media: 'print', onload: "this.media='all'" }
+        { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css' }
       ],
       script: [
         /**
          * GSAP 动画库 · GSAP (3.12.2) via CDN
          * @description 3D 专辑堆叠与面板动画所需，保持与源站一致版本
          */
-        { src: 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js', integrity: 'sha512-16esztaSRplJROstbIIdwX3N97V1+pZvV33ABoG1H2OyTttBxEGkTsoIVsiP1iaTtM8b3+hu2kB6pQ4Clr5yug==', crossorigin: 'anonymous', referrerpolicy: 'no-referrer', tagPosition: 'head' },
-        /**
-         * TailwindCSS（CDN）· Tailwind via CDN
-         * @description 原页面大量使用 Tailwind 工具类，CDN 模式保持视觉一致
-         */
-        { src: 'https://cdn.tailwindcss.com', tagPosition: 'head' }
+        { src: 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js', integrity: 'sha512-16esztaSRplJROstbIIdwX3N97V1+pZvV33ABoG1H2OyTttBxEGkTsoIVsiP1iaTtM8b3+hu2kB6pQ4Clr5yug==', crossorigin: 'anonymous', referrerpolicy: 'no-referrer', defer: true, tagPosition: 'head' }
       ]
     }
   },
@@ -170,13 +167,9 @@ export default defineNuxtConfig({
    *              但线上依赖 Turso，不再需要把 data.db 打包进 server bundle。
    */
   nitro: {
-    compressPublicAssets: true,
-    publicAssets: [
-      {
-        dir: './public/data',
-        maxAge: 60 * 60 * 24 * 365,
-        baseURL: '/data'
-      }
-    ]
+    compressPublicAssets: true
+    // 注：不再把 public/data 作为静态资源暴露。
+    // 线上走远程 Turso，本地 file: 模式下服务端插件直接连接 data.db 文件，
+    // 无需（也不应）把数据库文件当静态资源公开下载。
   }
 })

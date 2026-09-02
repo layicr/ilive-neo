@@ -35,18 +35,13 @@ export const zh = {
   buttons: {
     songlist: '查看歌单',
     watchVideo: '观看视频',
-    openVideo: '打开视频',
-    backToTop: '返回顶部',
-    feedback: '反馈问题'
+    openVideo: '打开视频'
   },
 
   tooltips: {
     musicToggle: '播放/暂停背景音乐',
-    musicToggleAria: '播放/暂停背景音乐',
     feedback: '反馈问题',
-    feedbackAria: '反馈问题到GitHub',
-    backToTop: '返回顶部',
-    backToTopAria: '返回页面顶部'
+    backToTop: '返回顶部'
   },
 
   status: {
@@ -75,36 +70,22 @@ export const zh = {
     emptyMessage: '还没有人许愿，来做第一个许愿的人吧！'
   },
 
-  timeFormat: {
-    justNow: '刚刚',
-    minutesAgo: '分钟前',
-    hoursAgo: '小时前',
-    daysAgo: '天前'
-  },
-
   errorMessages: {
     generic: '操作失败，请稍后重试',
-    network: '网络连接失败，请检查网络',
-    loadFailed: '加载失败，请刷新页面',
-    musicPlay: '音乐播放失败',
-    imageLoad: '图片加载失败'
+    loadFailed: '加载失败，请刷新页面'
   }
 } as const;
 
-/** 故事动态文本 · Stories dynamic texts */
+/**
+ * 故事动态文本 · Stories dynamic texts
+ * @description text1 = 第一行，text3 = 第二行（高亮填充）。
+ *              原 text2 恒为空数组且从未被读取，已移除。
+ */
 export const storiesTextDataZH = {
   text1: ['说真的，', '一抹蓝，', '争朝夕，'],
-  text2: ['', '', ''],
   text3: [
     '似有若无的坦荡，强迫我们成长。',
     '路上的脚印，永远不会停歇。',
     '抬头仰望的世界，是不是难以到达？'
   ]
-} as const;
-
-/** 角色文本 · Role texts */
-export const roleTextsZH = {
-  declaration: '宣言？   xuān yán？',
-  concertsLabel: '演唱会',
-  citiesLabel: '城市'
 } as const;

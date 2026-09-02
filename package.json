@@ -1,8 +1,8 @@
 {
-  "name": "ilive-v2",
+  "name": "ilive-neo",
   "version": "2.0.0",
   "private": true,
-  "description": "Layicr 演唱会足迹 - Nuxt3 + Turso (LibSQL) 迁移 · Layicr's concert journey - Nuxt3 + Turso (LibSQL)",
+  "description": "Layicr 演唱会足迹",
   "type": "module",
   "scripts": {
     "build": "nuxt build",
@@ -16,15 +16,15 @@
     "db:seed": "node server/db/seed.mjs"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
+    "@libsql/client": "^0.17.4",
     "@vite-pwa/nuxt": "^1.1.1",
-    "nuxt": "^3.15.0",
-    "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "nuxt": "^4.5.2",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.0",
+    "@types/node": "^24.13.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }
 }

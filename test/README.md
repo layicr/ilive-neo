@@ -1,6 +1,6 @@
-# 测试用例（ilive_v2）
+# 测试用例（ilive_neo）
 
-> Nuxt3 + Turso 演唱会足迹站点的测试用例存档 · 分「UI 测试」与「单元测试」两类。
+> Nuxt4 + Turso 演唱会足迹站点的测试用例存档 · 分「UI 测试」与「单元测试」两类。
 
 ## 目录
 
@@ -18,7 +18,7 @@
 ## 运行方式
 
 - **UI 测试**：启动 dev server，按 [`ui-tests.md`](./ui-tests.md) 逐步手动验证；建议同时打开浏览器控制台观察报错。
-- **单元测试**：用例集中在 `utils/index.ts` 的纯函数。若项目后续引入 vitest，可直接将 `unit-tests.md` 中的用例改写为 `*.test.ts`；当前可复制用例脚本用 `node` 运行验证。
+- **单元测试**：用例集中在 `app/utils/index.ts` 的纯函数。若项目后续引入 vitest，可直接将 `unit-tests.md` 中的用例改写为 `*.test.ts`；当前可复制用例脚本用 `node` 运行验证。
 
 ## 用例状态约定
 

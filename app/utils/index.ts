@@ -13,7 +13,11 @@
 /**
  * @description 纯正则实现，服务端/客户端输出完全一致（SSR 无 DOMParser，且避免 hydration 不一致）。
  *              仅允许白名单标签；属性一律丢弃，唯一例外是 <span> 的 style（过滤 javascript:）。
+ *              非字符串输入原样返回（防御性：v-html 绑定值可能来自不可控的 DB 字段）。
+ *              Non-string input is returned as-is (defensive: the DB field may be null/unexpected).
  */
+export function safeHtml(html: string): string;
+export function safeHtml(html: unknown): unknown;
 export function safeHtml(html: unknown): unknown {
   if (typeof html !== 'string') return html;
 
@@ -59,6 +63,23 @@ export function safeHtml(html: unknown): unknown {
 }
 
 // ==================== 时间格式化 ====================
+
+/**
+ * 格式化许愿时间为固定绝对日期 · Format wish time as a stable absolute date
+ * @description 用于 SSR 首屏与水合阶段：输出 `YYYY.MM.DD`，不依赖 `Date.now()`，
+ *              也不使用 `toLocaleDateString`（Node 与浏览器的 ICU 输出可能不同），
+ *              从而保证服务端与客户端渲染结果完全一致，避免 hydration mismatch。
+ *              水合完成后再由 `formatWishTime` 切换为相对时间（如「3 天前」）。
+ *
+ *              Stable absolute date for SSR + hydration; switches to relative time after mount.
+ * @returns `YYYY.MM.DD`；无法解析时返回空串 · empty string when unparsable
+ */
+export function formatWishDate(timeString: string): string {
+  const date = new Date(timeString)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
+}
 
 /** 格式化许愿时间 · Format wish time */
 export function formatWishTime(timeString: string, lang: 'zh' | 'en' = 'zh'): string {

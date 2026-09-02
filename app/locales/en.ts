@@ -35,18 +35,13 @@ export const en = {
   buttons: {
     songlist: 'View Songlist',
     watchVideo: 'Watch Video',
-    openVideo: 'Open Video',
-    backToTop: 'Back to Top',
-    feedback: 'Report Issue'
+    openVideo: 'Open Video'
   },
 
   tooltips: {
     musicToggle: 'Play/Pause Background Music',
-    musicToggleAria: 'Play/Pause Background Music',
     feedback: 'Report Issue',
-    feedbackAria: 'Report Issue to GitHub',
-    backToTop: 'Back to Top',
-    backToTopAria: 'Back to Page Top'
+    backToTop: 'Back to Top'
   },
 
   status: {
@@ -75,36 +70,22 @@ export const en = {
     emptyMessage: 'No wishes yet, be the first to make one!'
   },
 
-  timeFormat: {
-    justNow: 'Just now',
-    minutesAgo: ' min ago',
-    hoursAgo: ' hours ago',
-    daysAgo: ' days ago'
-  },
-
   errorMessages: {
     generic: 'Operation failed, please try again later',
-    network: 'Network connection failed, please check your network',
-    loadFailed: 'Loading failed, please refresh the page',
-    musicPlay: 'Music playback failed',
-    imageLoad: 'Image loading failed'
+    loadFailed: 'Loading failed, please refresh the page'
   }
 } as const;
 
-/** 故事动态文本 · Stories dynamic texts */
+/**
+ * 故事动态文本 · Stories dynamic texts
+ * @description text1 = first line, text3 = second line (highlight fill).
+ *              The legacy text2 was always empty and never read; removed.
+ */
 export const storiesTextDataEN = {
   text1: ['To be honest,', 'A touch of blue,', 'Seize the day,'],
-  text2: ['', '', ''],
   text3: [
     'An elusive kind of candor pushes us to grow.',
     'Footprints on the road will never cease.',
     'Is the world we look up to so hard to reach?'
   ]
-} as const;
-
-/** 角色文本 · Role texts */
-export const roleTextsEN = {
-  declaration: 'Declaration?',
-  concertsLabel: 'Concerts',
-  citiesLabel: 'Cities'
 } as const;
