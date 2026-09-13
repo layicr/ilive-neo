@@ -1,0 +1,8 @@
+{
+  "href": "https://example.com/new",
+  "icon": "fas fa-star",
+  "title_i18n": { "zh-CN": "示例站点", "en": "Example" },
+  "description_i18n": { "zh-CN": "示例链接", "en": "Example link" },
+  "seq": 99,
+  "enabled": 1
+}

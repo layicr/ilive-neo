@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>点赞 · iLive 数据管理</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>iLive 数据管理</h1>
+      <p class="dbpath" id="dbpath">—</p>
+    </div>
+    <nav id="tabs"></nav>
+  </aside>
+
+  <main class="main">
+    <header class="toolbar">
+      <div>
+        <h2 id="title">加载中…</h2>
+        <p class="sub" id="sub">—</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-refresh">刷新</button>
+        <button class="btn btn-primary" id="btn-add">+ 新增</button>
+      </div>
+    </header>
+
+    <div class="table-wrap">
+      <table id="grid">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>暂无数据</div>
+    </div>
+  </main>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-box">
+    <header>
+      <h3 id="modal-title">新增</h3>
+      <button class="x" id="btn-close" title="关闭">×</button>
+    </header>
+    <form id="form"></form>
+    <footer>
+      <button class="btn" id="btn-cancel">取消</button>
+      <button class="btn btn-primary" id="btn-save">保存</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>window.ADMIN_TABLE = 'concert_likes';</script>
+<script src="admin.js"></script>
+</body>
+</html>

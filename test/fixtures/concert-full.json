@@ -1,0 +1,25 @@
+{
+  "artist_i18n": { "zh-CN": "五月天", "en": "Mayday" },
+  "concert_name_i18n": { "zh-CN": "Just Rock It 2016", "en": "Just Rock It 2016" },
+  "theme_i18n": {
+    "zh-CN": "生老病死就是一场人生派对",
+    "en": "Birth, aging, sickness and death are a life party"
+  },
+  "country_i18n": { "zh-CN": "中国", "en": "China" },
+  "province_i18n": { "zh-CN": "陕西", "en": "Shaanxi" },
+  "city_i18n": { "zh-CN": "西安", "en": "Xi'an" },
+  "venue_i18n": { "zh-CN": "陕西省体育场", "en": "Shaanxi Provincial Stadium" },
+  "seat_i18n": { "zh-CN": "25-26 22排", "en": "Row 22, Stands 25-26" },
+  "price_i18n": { "zh-CN": "¥455", "en": "¥455" },
+  "date": "2016-09-03",
+  "time": "19:30",
+  "poster": "concert/poster/20160903.jpg",
+  "description_i18n": {
+    "zh-CN": "十万人合唱的恋爱ing。",
+    "en": "A hundred thousand people singing along."
+  },
+  "video_i18n": { "zh-CN": "现场视频", "en": "Live video" },
+  "video_url_i18n": { "zh-CN": "https://example.com/v1", "en": "https://example.com/v1" },
+  "seq": 1,
+  "likes": 0
+}
