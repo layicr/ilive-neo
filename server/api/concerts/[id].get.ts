@@ -14,7 +14,7 @@
  *              served to others.
  */
 import { getTursoClient } from '../../lib/turso'
-import { fetchConcert, fetchLikeCount, isConcertLiked, getClientIp, LOCALES } from '../../lib/mappers'
+import { fetchConcert, isConcertLiked, getClientIp, LOCALES } from '../../lib/mappers'
 import { localizeConcert } from '../../../app/utils'
 import type { Locale } from '../../../app/types'
 
@@ -36,9 +36,9 @@ const buildShared = defineEventHandler(async (event) => {
     return { error: `not found: 演唱会 #${id} 不存在 · concert #${id} does not exist` }
   }
 
-  // 共享内容：装配点赞计数；liked 固定 false，由外层按 IP 合并
-  const likes = await fetchLikeCount(client, id)
-  const withLikes = { ...concert, likes, liked: false }
+  // 共享内容：点赞总数直接取 concerts.likes；liked 固定 false，由外层按 IP 合并
+  // Like total comes straight from concerts.likes; liked stays false, merged per IP by the outer layer
+  const withLikes = { ...concert, liked: false }
 
   // 可选：?lang= 直接本地化 · optional ?lang localization
   const langParam = (getQuery(event).lang as string | undefined) ?? ''

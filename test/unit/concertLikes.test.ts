@@ -24,14 +24,27 @@ import {
 } from '../../server/lib/concertLikes'
 
 /** 内存点赞表桩 · in-memory like table stub */
-function stubClient(initial: { concert_id: number; ip: string }[] = []): Client {
+function stubClient(initial: { concert_id: number; ip: string }[] = [], initialLikes: Record<number, number> = {}): Client {
   const table = new Set(initial.map((r) => `${r.concert_id}::${r.ip}`))
+  const likeCount = new Map<number, number>(Object.entries(initialLikes).map(([k, v]) => [Number(k), v]))
   const key = (concertId: number, ip: string) => `${concertId}::${ip}`
 
   return {
     execute: async (q: unknown) => {
       const sql = typeof q === 'string' ? q : String((q as { sql: string }).sql)
       const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as (number | string)[]
+
+      if (sql.startsWith('UPDATE concerts')) {
+        const [sign, cid] = args
+        const cur = likeCount.get(Number(cid)) ?? 0
+        likeCount.set(Number(cid), Math.max(cur + Number(sign), 0))
+        return { rows: [], rowsAffected: 1 }
+      }
+
+      if (sql.startsWith('SELECT likes FROM concerts') && sql.includes('WHERE id = ?')) {
+        const [cid] = args
+        return { rows: [{ likes: likeCount.get(Number(cid)) ?? 0 }], rowsAffected: 0 }
+      }
 
       if (sql.startsWith('DELETE FROM concert_likes')) {
         const [concertId, ip] = args

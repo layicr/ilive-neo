@@ -22,7 +22,6 @@ import {
   fetchAllConcerts,
   fetchSiteSeo,
   fetchFriendLinks,
-  fetchLikeCounts,
   fetchLikedConcertIds,
   getClientIp,
   parseI18n,
@@ -35,20 +34,21 @@ import type { Locale, LocalizedCity, LocalizedWish, AppData, ApiResponse } from 
 const buildShared = defineEventHandler(async (event) => {
   const client = getTursoClient()
 
-  // SEO 设置、友情链接、点赞计数与业务数据并行取回，并入同一响应体（不新增 API 端点、不增加请求数）
-  // Fetch SEO settings, friend links, like counts and business data in parallel and merge them into one response body (no extra endpoints, no extra requests)
-  const [concertRowsRaw, cityRows, wishRows, seo, friendLinks, likeCounts] = await Promise.all([
+  // SEO 设置、友情链接与业务数据并行取回，并入同一响应体（不新增 API 端点、不增加请求数）
+  // Fetch SEO settings, friend links and business data in parallel and merge them into one response body (no extra endpoints, no extra requests)
+  const [concertRowsRaw, cityRows, wishRows, seo, friendLinks] = await Promise.all([
     fetchAllConcerts(client),
     client.execute('SELECT id, country_i18n, name_i18n, seq, icon FROM cities ORDER BY seq'),
     client.execute('SELECT id, content_i18n, likes, liked FROM wishes ORDER BY id DESC'),
     fetchSiteSeo(client),
-    fetchFriendLinks(client),
-    fetchLikeCounts(client)
+    fetchFriendLinks(client)
   ])
 
-  // 装配点赞计数；liked 为「按请求 IP」字段，此处固定 false，由外层非缓存 handler 合并（缓存不得携带个人状态）
-  // Attach like counts; `liked` is a per-request-IP field, kept false here and merged by the outer uncached handler (the cache must not carry personal state)
-  const concertRows = concertRowsRaw.map((c) => ({ ...c, likes: likeCounts.get(c.id) ?? 0, liked: false }))
+  // 点赞总数直接取 concerts.likes 冗余列（由 toggleConcertLike 维护，未迁移库回退 0）；
+  // liked 为「按请求 IP」字段，此处固定 false，由外层非缓存 handler 合并（缓存不得携带个人状态）。
+  // Like total comes straight from the concerts.likes denormalized column (maintained by toggleConcertLike;
+  // pre-migration falls back to 0); `liked` is per-request-IP, kept false here and merged by the outer handler.
+  const concertRows = concertRowsRaw.map((c) => ({ ...c, liked: false }))
 
   const cities: LocalizedCity[] = (cityRows.rows as unknown as CityRow[]).map((c) => ({
     id: c.id,

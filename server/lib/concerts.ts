@@ -34,6 +34,8 @@ export interface ConcertRow {
   description_i18n: string | null;
   video_i18n: string | null;
   video_url_i18n: string | null;
+  /** 点赞总数冗余列（由 toggleConcertLike 维护；未迁移库 SELECT 时缺失）· denormalized like count (maintained by toggleConcertLike) */
+  likes?: number;
 }
 
 export interface TagRow { concert_id: number; i18n: string }
@@ -98,21 +100,46 @@ export function mapConcert(
     video: has(row.video_i18n) ? parseI18n(row.video_i18n) : null,
     videoUrl: has(row.video_url_i18n) ? parseI18n(row.video_url_i18n) : null,
     songlist: songlist.map((s) => ({ name: parseI18n(s.i18n), link: s.link ?? null })),
-    // 点赞默认值：真实计数 / 当前 IP 状态由接口层用 concert_likes 覆盖（见 server/lib/concertLikes.ts）
-    // Like defaults: the real count / current-IP state is overridden by the API layer via concert_likes
-    likes: 0,
+    // 点赞总数直接取 concerts.likes 冗余列；未迁移库缺列时回退 0（由迁移脚本 calibrate，接口层 fill）
+    // Like total comes from the concerts.likes denormalized column; pre-migration (missing column) falls back to 0
+    likes: Number(row.likes ?? 0),
     liked: false
   };
 }
 
 /* ---------- 查询 · Queries ---------- */
 
+/**
+ * 探测 concerts 表是否存在 likes 冗余列 · Detect whether the concerts table has the denormalized `likes` column
+ * @description 仅探测一次（模块级缓存）。未迁移的旧库没有该列，探测失败则后续 SELECT 不带该列、
+ *              读取回退 0，待执行 `server/db/migrate-likes.mjs` 迁移后自动生效。
+ *              Probed once (module-level cache). Pre-migration DBs lack the column; on failure the SELECTs
+ *              omit it and reads fall back to 0 until migrate-likes.mjs runs.
+ */
+let likesColumnProbed = false
+let likesColumnSupported = false
+async function supportsLikesColumn(client: Client): Promise<boolean> {
+  if (likesColumnProbed) return likesColumnSupported
+  try {
+    await client.execute('SELECT likes FROM concerts LIMIT 1')
+    likesColumnSupported = true
+  } catch {
+    likesColumnSupported = false
+  }
+  likesColumnProbed = true
+  return likesColumnSupported
+}
+
+/** 演唱会 SELECT 列（已迁移则含 likes 冗余列）· concert SELECT columns (includes `likes` when migrated) */
+async function concertColumns(client: Client): Promise<string> {
+  const base = 'id, artist_i18n, concert_name_i18n, theme_i18n, country_i18n, province_i18n, city_i18n, venue_i18n, seat_i18n, price_i18n, date, time, poster, description_i18n, video_i18n, video_url_i18n'
+  return (await supportsLikesColumn(client)) ? `${base}, likes` : base
+}
+
 /** 单场演唱会（含 tags/images/songlist）· Single concert with relations */
 export async function fetchConcert(client: Client, id: number): Promise<LocalizedConcert | null> {
   const row = await client.execute({
-    sql: `SELECT id, artist_i18n, concert_name_i18n, theme_i18n, country_i18n, province_i18n,
-                 city_i18n, venue_i18n, seat_i18n, price_i18n, date, time, poster,
-                 description_i18n, video_i18n, video_url_i18n
+    sql: `SELECT ${await concertColumns(client)}
           FROM concerts WHERE id = ?`,
     args: [id]
   });
@@ -131,9 +158,7 @@ export async function fetchConcert(client: Client, id: number): Promise<Localize
 export async function fetchAllConcerts(client: Client): Promise<LocalizedConcert[]> {
   const rows = (
     await client.execute(
-      `SELECT id, artist_i18n, concert_name_i18n, theme_i18n, country_i18n, province_i18n,
-              city_i18n, venue_i18n, seat_i18n, price_i18n, date, time, poster,
-              description_i18n, video_i18n, video_url_i18n
+      `SELECT ${await concertColumns(client)}
        FROM concerts ORDER BY date DESC, seq ASC`
     )
   ).rows.map((x) => x as unknown as ConcertRow);

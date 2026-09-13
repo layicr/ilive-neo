@@ -170,6 +170,23 @@ export async function toggleConcertLike(
     });
   }
 
-  const likes = await fetchLikeCount(client, concertId);
+  // 维护 concerts.likes 冗余计数：仅在确认发生的分支 ±1（liked=点赞 +1，取消 -1），避免同一次操作重复增减；
+  // 未迁移库（无 likes 列）或客户端桩不支持该语句时回退实时 COUNT(*)。
+  // Maintain the concerts.likes denormalized count: ±1 only on the confirmed branch (like=+1, unlike=-1),
+  // never double-counting one toggle; fall back to live COUNT(*) on a pre-migration DB (no likes column) or unsupported stub.
+  let likes: number
+  try {
+    await client.execute({
+      sql: 'UPDATE concerts SET likes = MAX(likes + ?, 0) WHERE id = ?',
+      args: [liked ? 1 : -1, concertId]
+    })
+    const r = await client.execute({
+      sql: 'SELECT likes FROM concerts WHERE id = ?',
+      args: [concertId]
+    })
+    likes = Number((r.rows[0] as unknown as { likes: number } | undefined)?.likes ?? 0) || 0
+  } catch {
+    likes = await fetchLikeCount(client, concertId)
+  }
   return { likes, liked };
 }

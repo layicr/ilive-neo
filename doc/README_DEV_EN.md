@@ -15,14 +15,16 @@
 - **@vite-pwa/nuxt** for Service Worker generation (replacing hand-written `sw.js`)
 
 > **Nuxt 4 directory convention**: `srcDir` defaults to `app/`, so `app.vue`, `pages/`,
-> `composables/`, `plugins/`, `utils/`, `locales/` and `types/` all live under `app/`;
-> `server/`, `public/`, `test/` and `nuxt.config.ts` stay at the project root.
+> `composables/`, `plugins/`, `utils/`, `types/` all live under `app/`; `server/`, `public/`,
+> `test/`, `i18n/`, `nuxt.config.ts` stay at the project root (locale messages live in
+> `i18n/locales/`, and `@nuxtjs/i18n`'s `langDir` resolves relative to the `i18n/` directory).
 > For that reason the vitest `~`/`@` aliases point to `app/`.
 
 Key principles:
 
 - **Data comes entirely from the database API**, with no static data fallback on the frontend. Concerts, cities, and wishes are all fetched from `/api/*`.
-- **Zero-request language switching**: Frontend `useI18n` + `pickText` derives from already-fetched bilingual data, no additional requests.
+- **Zero-request language switching**: Frontend `useI18n` + `pickLocale` derives from already-fetched **multilingual data** (zh / en / zh-Hant), no additional requests.
+- **Multilingual SEO**: `app/app.vue` uniformly outputs `<html lang>`, 3-language `hreflang` (with `x-default`) and `og:locale` / `og:locale:alternate`; per-page `title` / `description` are emitted by `app/pages/index.vue` per locale.
 - **Remote Turso as the authoritative database**: Online (Vercel) connects to the remote database via `NUXT_TURSO_DATABASE_URL=libsql://...`; local development can fall back to `file:` SQLite.
 
 ---
@@ -34,16 +36,18 @@ Key principles:
 | Framework | Nuxt 4 (`^4.5`), Vue 3 (`^3.5`), Vue Router 5 |
 | Database | Turso / LibSQL (`@libsql/client ^0.17`) |
 | PWA | `@vite-pwa/nuxt` (config-driven Service Worker, `/api/*` NetworkFirst) |
+| Multilingual | `@nuxtjs/i18n` v10 (3 languages: zh / en / zh-Hant, `strategy: prefix_except_default`, default zh has no prefix) |
 | Language | TypeScript (`strict` enabled, `typeCheck: false` at build time) |
 | Animation | GSAP 3.12.2 (CDN) |
 | Styling | Tailwind CSS (CDN), Font Awesome 6.4.0 (CDN), `public/css/*.css` |
-| SEO | Nuxt built-in `useSeoMeta` / `useHead` + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, node environment, 43 test cases) |
+| SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
+| Testing | Vitest (unit tests, node environment, 10 files / 143 cases) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
 - `@libsql/client`: Turso / SQLite client
 - `@vite-pwa/nuxt`: PWA / Service Worker
+- `@nuxtjs/i18n` (v10): multilingual routing / SEO / vue-i18n integration
 - `nuxt`, `vue`, `vue-router`: Framework
 - Dev dependencies: `vitest`, `typescript`, `@types/node`
 
@@ -55,12 +59,12 @@ Key principles:
 ilive_neo/
 ├── nuxt.config.ts             # Nuxt master config (SSR/runtimeConfig/head/PWA/SEO)
 ├── app/                       # [Nuxt 4 srcDir] Application layer
-│   ├── app.vue                # Root component (renders <NuxtPage/> + global error handling)
+│   ├── app.vue                # Root component (NuxtPage + global error handling + site-wide language SEO: html lang/hreflang/og:locale)
 │   ├── pages/
-│   │   └── index.vue          # Homepage (Vue component, composables-driven + dynamic SEO meta)
+│   │   └── index.vue          # Homepage (Vue component, composables-driven + dynamic meta per locale)
 │   ├── composables/           # [Core] All interaction logic (Vue composables)
 │   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override
-│   │   ├── useI18n.ts         # Chinese/English switching (useState lazy initialization)
+│   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
 │   │   ├── useSonglist.ts     # Song list modal
 │   │   ├── useTimeline.ts     # Timeline rendering
@@ -74,21 +78,21 @@ ilive_neo/
 │   │   └── useAppError.ts     # Global error handling + Toast
 │   ├── plugins/
 │   │   └── statis.client.ts   # Third-party analytics injection (Baidu/GA/51.la, client-side plugin)
-│   ├── locales/               # Static UI copy (Chinese/English literals, not database content)
-│   │   ├── zh.ts
-│   │   └── en.ts
 │   ├── types/
-│   │   └── index.ts           # Frontend data types (Bilingual* / Concert / AppData, etc.)
+│   │   └── index.ts           # Frontend data types (Locale / Localized* / Concert / City / Wish / AppData, etc.)
 │   └── utils/
 │       ├── config.ts          # Global configuration constants CONFIG
-│       └── index.ts           # Utility functions (safeHtml / formatWishTime)
+│       ├── index.ts           # Utility functions (safeHtml / time formatting / pickLocale / localize* / computeCityConcertCounts)
+│       └── seo.ts             # SEO pure functions (hreflang links / og:locale / multilingual description templates and artist separators)
+├── i18n/                      # [Root] Locale messages (@nuxtjs/i18n v10 layout, langDir resolves relative to this dir)
+│   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts (per-language messages)
 ├── public/                    # Static assets
 │   ├── css/  main.css
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  Posters and live photos
 │   ├── robots.txt             # Crawler rules + sitemap reference
-│   └── sitemap.xml            # Sitemap (with zh/en hreflang)
+│   └── sitemap.xml            # Sitemap (currently only the default-language homepage; multilingual hreflang is emitted by page useHead)
 ├── server/                    # Nitro server-side
 │   ├── api/
 │   │   ├── data.get.ts        # GET /api/data: aggregation (concerts/cities/wishes/stats/seo/friendLinks + likes)
@@ -97,18 +101,20 @@ ilive_neo/
 │   ├── lib/
 │   │   ├── turso.ts           # LibSQL client singleton (file:/libsql: switching; writes only for likes)
 │   │   ├── concertLikes.ts    # Like read/write (count aggregation / per-IP query / toggle)
-│   │   └── mappers.ts         # DB row → localized structure mapping + city concert count calculation
+│   │   └── mappers.ts         # DB row (*_i18n JSON columns) → multilingual structure mapping (parseI18n / mapConcert / fetchAllConcerts)
 │   ├── plugins/
 │   │   └── init-db.ts         # Idempotent initialization on Nitro startup (skipped for remote Turso)
 │   └── db/
-│       ├── schema.sql         # Table structure (7 tables)
-│       └── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
+│       ├── schema.sql         # Table structure (7 tables, translatable fields are *_i18n JSON columns)
+│       ├── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
+│       └── migrate-likes.mjs  # Idempotent migration for the denormalized concerts.likes column
+├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                 # Vitest unit tests (safeHtml/formatWishTime/config/mappers/localize)
-│   ├── ui-tests.md           # UI acceptance checklist (manual + automated)
+│   ├── unit/                  # Vitest unit tests (safeHtml / time formatting / config / mappers / localize / i18n+SEO / friend-links / concertLikes)
+│   ├── ui-tests.md            # UI acceptance checklist (manual + automated)
 │   └── unit-tests.md / README.md
 └── doc/
-    └── README_DEV.md          # This document (Chinese)
+    ├── README_DEV.md          # This document (Chinese)
     └── README_DEV_EN.md       # This document (English)
 ```
 
@@ -130,27 +136,31 @@ app/pages/index.vue (setup)
   ├─ useGallery()         → Gallery (lazy-fetches localizedConcerts once, avoids duplicating useData)
   ├─ useAlbumShowcase()   → Album carousel (GSAP)
   ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()
-  ├─ useSeoMeta()         → Dynamic title/description/og/twitter (switches with language + database artists)
+  ├─ useSeoMeta()         → Dynamic title/description/og/twitter (switches with locale + database artists)
   └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
+
+app/app.vue (setup)
+  └─ useHead + useI18n    → Site-wide language SEO: <html lang>, 3-language hreflang (incl. x-default),
+                            og:locale / og:locale:alternate; language-independent static meta stays in nuxt.config.ts
 ```
 
 Key points:
 
 - **All `useState`/`useAsyncData` inside composables must be lazy-initialized** (called within the composable function body, never at module level), otherwise SSR throws `instance unavailable`.
 - **Language switching does NOT re-request the API**: `localizedConcerts` and other computed values depend on `currentLanguage`; switching only recalculates frontend-derived values with zero network requests.
-- `app/pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta.
+- `app/pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta; site-wide language SEO (`<html lang>` / hreflang / `og:locale`) is emitted by `app/app.vue`, and both sides merge by the same `key` to avoid duplicate meta in the head.
 
 ### 4.2 Server-Side Data Layer (Single Endpoint)
 
 - `GET /api/data` (`server/api/data.get.ts`): **Single-endpoint aggregation**, returns `{ concerts, cities, wishes, stats }` in one response. City concert counts reuse the same concerts data via `computeCityConcertCounts`, eliminating the original multi-endpoint redundant full-table queries.
-- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows into **bilingual structures** (`artist: { zh, en }`, `location: { zh, en }`, etc.); `computeCityConcertCounts` calculates concert counts per city.
-- Frontend `useData.ts`'s `pickText` / `localizeConcert` **selects single-language fields** from bilingual structures based on `currentLanguage` (e.g., `artist: "Mayday"`).
+- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist: { zh, en, 'zh-Hant' }`, `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`); `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
+- Frontend `useData.ts`'s `pickLocale` / `localizeConcert` **selects single-language fields** from multilingual structures based on `currentLanguage` (e.g., `artist: "Mayday"`); when the target language is missing it falls back via `requested language → zh → en` (`app/utils/index.ts`, pure functions, directly unit-testable).
 
 ```
 useAsyncData('app-data') → GET /api/data
-  ├─ concerts[]   (bilingual: artist.zh/en, location.zh/en, ...)
-  ├─ cities[]     (name.zh/en + icon + concerts count)
-  ├─ wishes[]     (content.zh/en + likes + liked)
+  ├─ concerts[]   (multilingual: artist.{zh,en,zh-Hant}, location isomorphic, ...)
+  ├─ cities[]     (name multilingual + icon + concerts count)
+  ├─ wishes[]     (content multilingual + likes + liked)
   └─ stats        { totalConcerts, totalArtists, totalCities }
         ↓
 localizedConcerts (computed, selects single language by currentLanguage)
@@ -159,7 +169,7 @@ localizedConcerts (computed, selects single language by currentLanguage)
 - `server/lib/turso.ts`: `getTursoClient()` lazily creates a global singleton client. Auto-switches based on `runtimeConfig.turso.databaseUrl`:
   - `libsql://xxx.turso.io` → Remote Turso (production/online, requires `NUXT_TURSO_AUTH_TOKEN`)
   - `file:./public/data/data.db` → Local SQLite (development fallback)
-  - All project APIs are SELECT (read-only); `createClient` does not apply `readOnly` configuration.
+  - All project APIs are SELECT (read-only) except the like endpoints; `createClient` does not apply `readOnly`.
 - `server/plugins/init-db.ts`: Idempotent initialization on Nitro startup — **only creates empty tables when using local `file:` and the `concerts` table does not exist**; **remote Turso skips directly** (avoids accidentally creating a local empty database).
 
 ### 4.3 Dynamic SEO Meta Information
@@ -168,7 +178,7 @@ In `app/pages/index.vue`:
 
 - `useSeoMeta` dynamically outputs title/description/og/twitter following `currentLanguage`.
 - **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts deduplicated `artist`, auto-updates as concerts are added or removed.
-- `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent) + **hreflang** for Chinese and English versions.
+- `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent) + **hreflang** (3 languages + `x-default`, merged by the same key as `app.vue` to dedupe).
 - JSON-LD uses `JSON.parse(JSON.stringify(toRaw(...)))` to strip Vue reactive Proxy, and uses `computed` to ensure the complete concert list is output after data is ready.
 
 ---
@@ -179,15 +189,15 @@ In `app/pages/index.vue`:
 
 | Table | Description |
 |----|------|
-| `concerts` | Concert main table (bilingual fields `*_zh` / `*_en`) |
-| `concert_tags` | Concert tags (`concert_id` foreign key) |
-| `concert_images` | Concert images (`src` + `alt_zh/en`) |
-| `concert_songlist` | Concert song list (`seq` ordering + `link`) |
-| `cities` | Cities table (`name_zh/en` + `icon`) |
-| `wishes` | Wishes wall (`content_zh/en` + `likes` + `liked`) |
+| `concerts` | Concert main table (translatable fields are `*_i18n` JSON columns; also holds the denormalized `likes` count) |
+| `concert_tags` | Concert tags (`concert_id` FK, `tag_i18n`) |
+| `concert_images` | Concert images (`src` + `alt_i18n`) |
+| `concert_songlist` | Concert song list (`seq` ordering + `name_i18n` + `link`) |
+| `cities` | Cities table (`name_i18n` + `icon`) |
+| `wishes` | Wishes wall (`content_i18n` + `likes` + `liked`) |
 | `concert_likes` | Concert likes (`concert_id` + `ip` + `created_at`, `UNIQUE(concert_id, ip)` — one per IP, togglable) |
 
-All bilingual fields follow the original `{zh,en}` structure. `location` is split into four segments: `country/province/city/venue`, and reassembled as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation`, empty segments auto-omitted).
+All translatable fields are unified as **`*_i18n` JSON columns**, shaped like `{"zh":"…","en":"…","zh-Hant":"…"}` (parsed by `parseI18n`; `zh` is the base language, missing languages fall back at the UI layer; legacy `ja`/`ko` keys from old databases are not shown). `location` is split into four segments `country/province/city/venue` and reassembled per language as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation` / `mapLocationDetail`, empty segments auto-omitted, no cross-language fallback).
 
 ### 5.2 Initialization
 
@@ -196,6 +206,8 @@ npm run db:seed   # or npm run db:init (equivalent) — DROP then CREATE, result
 ```
 
 `seed.mjs` **DROP then CREATEs** (in foreign key dependency order), resulting in an empty database. Business data is imported externally (SQL / tools); the script itself does not populate data.
+
+Schema changes treat `schema.sql` as the **single source of truth**: historical one-off migrations (bilingual columns → `*_i18n`, etc.) have been removed, and existing databases (local `data.db` / production Turso, requiring `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` with **write access**) should be aligned to `schema.sql` and business needs. The only retained migration is the idempotent `server/db/migrate-likes.mjs` — it adds the denormalized `likes` column to `concerts` and backfills the baseline (because `ALTER TABLE` has no `IF NOT EXISTS`).
 
 ---
 
@@ -245,8 +257,8 @@ npm run dev        # Start development server (default http://localhost:3000/)
 npm run build      # Production build (Nitro, deployable to Vercel)
 npm run preview    # Preview production build
 npm run generate   # Generate static site (SSG)
-npm run db:seed    # Initialize local empty database
-npm run test       # Run unit tests (vitest run, 43 test cases)
+npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
+npm run test       # Run unit tests (vitest run, 10 files / 143 cases)
 npm run test:watch # Run tests in watch mode
 ```
 
@@ -269,19 +281,22 @@ npm run test:watch # Run tests in watch mode
 
 ### 9.1 Static Configuration (`nuxt.config.ts`)
 
-- Imports `SITE_URL = 'https://ilive.lyc.la'`, og:url / canonical / og:image / twitter:image unified as **https**.
-- Adds `og:site_name`, `og:locale` / `og:locale:alternate`, `twitter:site` / `twitter:creator`.
+- `SITE_URL = 'https://ilive.lyc.la'`, og:url / canonical / og:image / twitter:image unified as **https**.
+- `app.head` keeps only **language-independent** static info: `author` / `robots` / `referrer` / `og:type` / `og:url` / `og:image` / `twitter:card` / `twitter:site` / `twitter:creator` / `twitter:image`, plus favicon / stylesheet / GSAP resource references.
+- The originally hard-coded Chinese `title` / `keywords` / `description` / `og:title` / `og:description` / `twitter:title` / `twitter:description` have all been **removed** (to avoid duplicating or conflicting with page-level `useSeoMeta`).
+- Language-related meta: `og:locale` / `og:locale:alternate` are emitted by `app/app.vue`; `og:site_name` is emitted by page-level `useSeoMeta`.
 
 ### 9.2 Static Files
 
 - `public/robots.txt`: Allows all crawlers, `Disallow: /api/`, references sitemap.
-- `public/sitemap.xml`: Includes homepage + zh/en hreflang versions.
+- `public/sitemap.xml`: Currently only the default-language homepage (`https://ilive.lyc.la/`, with one `zh-CN` `xhtml:link` alternate). 3-language hreflang is emitted by `app/app.vue` and `app/pages/index.vue` in the page head, and does not depend on the sitemap.
 
 ### 9.3 Dynamic Meta Information (`app/pages/index.vue`)
 
-- `useSeoMeta`: Outputs title/description/og/twitter following language, keywords/description dynamically generated from database artists.
+- `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from database artists (5-language description templates in `app/utils/seo.ts`).
 - JSON-LD: WebSite + Person + ItemList + MusicEvent (per concert).
-- hreflang: zh-CN / en / x-default.
+- hreflang: `zh-CN` / `en` / `zh-Hant` + `x-default` (default language `zh` href is `https://ilive.lyc.la/`, no `/zh` prefix).
+- `<html lang>` and `og:locale` / `og:locale:alternate`: emitted uniformly by `app/app.vue` (`app/utils/seo.ts`'s `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` pure functions).
 
 ---
 
@@ -306,33 +321,7 @@ The site ships 300+ static jpgs (posters + gallery). Already in place:
 
 > Optional follow-ups (asset-level rework, not yet implemented): transcode jpgs to **WebP/AVIF** and use `<picture>` + `srcset` for resolution adaptation; or adopt `@nuxt/image` to unify responsive images and transcoding. Benefits depend on the build/deploy pipeline; larger change, evaluate on demand.
 
----
 
-## 11. Testing
-
-### 11.1 Unit Tests (Vitest)
-
-```bash
-npm run test
-```
-
-Covers pure functions (`node` environment, no DOM), **43 test cases** total:
-
-- `safeHtml.test.ts` (11 cases): HTML sanitization
-- `formatWishTime.test.ts` (5 cases): Wish time formatting
-- `config.test.ts` (4 cases): CONFIG field correctness
-- `mappers.test.ts` (12 cases): DB row → bilingual structure mapping (including country-prefixed location)
-- `localize.test.ts` (11 cases): Bilingual → Concert localization
-
-Configuration in root `vitest.config.ts` (node environment, `~`/`@` aliases configured to resolve Nuxt paths).
-
-### 11.2 UI Acceptance (`test/ui-tests.md`)
-
-Manual + automated acceptance checklist, covering homepage SSR, stats cards, bilingual switching, API endpoints (including 404/400 error codes), etc.
-
-### 11.3 Nuxt Environment-Dependent Tests
-
-Composables relying on `useState/useAsyncData` (e.g., useData localization, useI18n switching) require a Nuxt test environment and are not yet included; `@nuxt/test-utils` can be introduced if needed.
 
 ---
 
@@ -379,3 +368,5 @@ Likes are deduplicated per IP (`UNIQUE(concert_id, ip)`) — one vote per user �
 - Pure in-memory, zero-dependency, effective within a single process; empty buckets are pruned automatically (no memory leak).
 - **Serverless caveat**: on Vercel / cloud functions each instance has its own memory and resets on cold start, so the limit applies only within a single instance and is not shared across instances. For global accuracy, use a shared store (e.g. Redis) and add another layer at the proxy / CDN (e.g. Cloudflare Rate Limiting).
 - Thresholds are overridable at the call site: `rateLimit(ip, { windowMs, max })`.
+
+

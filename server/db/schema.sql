@@ -22,14 +22,15 @@ CREATE TABLE IF NOT EXISTS concerts (
   description_i18n  TEXT,                          -- 描述（多语言 JSON）· description (multi-locale JSON)
   video_i18n        TEXT,                          -- 视频标题（多语言 JSON）· video title (multi-locale JSON)
   video_url_i18n    TEXT,                          -- 视频地址（多语言 JSON）· video URL (multi-locale JSON)
-  seq               INTEGER DEFAULT 0              -- 排序 · sort order
+  seq               INTEGER DEFAULT 0,             -- 排序 · sort order
+  likes             INTEGER NOT NULL DEFAULT 0     -- 点赞总数（冗余列，由 toggleConcertLike 维护）· denormalized like total (maintained by toggleConcertLike)
 );
 
 -- 演唱会点赞 · Concert likes（按 IP 去重，可取消）
--- 说明：点赞数一律以此表 COUNT 统计（concerts 不再冗余存储 likes 列）。
--- Note: like counts are always aggregated via COUNT on this table (concerts no longer stores a redundant likes column).
---       同一 IP 对同一场演唱会仅一条记录；取消点赞即删除该行。
---       One row per IP per concert; unliking deletes that row.
+-- 说明：点赞去重与「是否点过」仍以本表为准；同时 concerts 表冗余一个 likes 总数（见 concerts.likes），
+--      由 toggleConcertLike 在确认分支 ±1 维护，避免每次 /api/data 做 GROUP BY 统计。
+-- Note: dedup & "liked" still live here; concerts also stores a denormalized total `likes` (maintained ±1 by
+--       toggleConcertLike) so /api/data avoids a per-request GROUP BY. One row per IP per concert; unlike deletes it.
 CREATE TABLE IF NOT EXISTS concert_likes (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,   -- 自增主键 · auto-increment primary key
   concert_id  INTEGER NOT NULL REFERENCES concerts(id) ON DELETE CASCADE,  -- 演唱会编号 · concert id

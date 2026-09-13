@@ -40,7 +40,7 @@
 | 动画 | GSAP 3.12.2（CDN）|
 | 样式 | Tailwind CSS（CDN）、Font Awesome 6.4.0（CDN）、`public/css/*.css` |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，node 环境，7 文件 / 89 用例）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，node 环境，10 文件 / 143 用例）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -205,7 +205,7 @@ npm run db:seed   # 或 npm run db:init（等价）—— 先 DROP 后 CREATE，
 
 `seed.mjs` 会**先 DROP 后 CREATE**（按外键依赖顺序），得到一个空库。业务数据由外部导入（SQL / 工具）写入，脚本本身不填充数据。
 
-库结构变更以 `schema.sql` 为**单一真源**：历史上的一次性迁移脚本（双语列 → `*_i18n`、`concerts.likes` → `concert_likes` 等）已移除；已有数据库（本地 `data.db` / 生产 Turso，需 `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` 且**具写权限**）按 `schema.sql` 与业务需要对齐即可。
+库结构变更以 `schema.sql` 为**单一真源**：历史上的一次性迁移脚本（双语列 → `*_i18n` 等）已移除，已有数据库（本地 `data.db` / 生产 Turso，需 `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` 且**具写权限**）按 `schema.sql` 与业务需要对齐即可。唯一保留的迁移脚本是幂等的 `server/db/migrate-likes.mjs`——为 `concerts` 新增 `likes` 冗余列并回填基线（因 `ALTER TABLE` 无 `IF NOT EXISTS`）。
 
 ---
 
@@ -320,35 +320,7 @@ npm run test:watch # 监听模式运行测试
 
 > 可选后续（资产级改造，未落地）：将 jpg 转码为 **WebP/AVIF** 并使用 `<picture>` + `srcset` 适配分辨率；或引入 `@nuxt/image` 统一处理响应式图与转码。收益取决于构建/部署管线，改动较大，按需评估。
 
----
 
-## 11. 测试
-
-### 11.1 单元测试（Vitest）
-
-```bash
-npm run test
-```
-
-覆盖纯函数（`node` 环境，无 DOM），共 **7 文件 / 89 用例**：
-
-- `safeHtml.test.ts`（11 用例）：HTML 净化
-- `formatWishTime.test.ts`（5 用例）：许愿时间格式化
-- `formatWishDate.test.ts`（4 用例）：水合安全的绝对日期格式化
-- `config.test.ts`（4 用例）：CONFIG 字段正确性
-- `mappers.test.ts`（18 用例）：DB 行（`*_i18n` JSON 列）→ 多语言结构映射 + `fetchAllConcerts` 装配
-- `localize.test.ts`（24 用例）：多语言结构 → 单语言本地化（`pickLocale` / `localizeConcert` / `localizeCity` / `localizeWish` / `computeCityConcertCounts`）
-- `i18n.test.ts`（23 用例）：i18n 配置 / head 中文清理 / hreflang + og:locale / 5 语言站点描述 + 源码级回归
-
-配置见根目录 `vitest.config.ts`（node 环境，`~`/`@` 别名指向 `app/`）。
-
-### 11.2 UI 验收（`test/ui-tests.md`）
-
-手动 + 自动化验收清单（UI-001 ~ UI-040），覆盖首屏 SSR、统计卡片、5 语言切换与直达链接、各模态框、API 接口（含 404/400 错误码），以及多语言 SEO / PWA（hreflang 完整性、`<html lang>` / `og:locale`、无重复 meta、manifest 品牌名、描述随语言）。SSR head 可由根目录 `verify-seo.mjs` 自动抓取校验。
-
-### 11.3 依赖 Nuxt 环境的测试
-
-依赖 `useState/useAsyncData` 的 composables（如 useData 本地化、useI18n 切换）需 Nuxt 测试环境，暂未纳入；如需可引入 `@nuxt/test-utils`。
 
 ---
 
@@ -395,3 +367,5 @@ npm run test
 - 纯内存、零依赖，单进程内有效；空桶自动清理，无内存泄漏。
 - **Serverless 局限**：Vercel / 云函数每实例独立内存、冷启动重置，限流仅在单实例内生效，跨实例不共享。如需全局精确限流，应改用 Redis 等共享存储，并在反代 / CDN 层（如 Cloudflare Rate Limiting）再加一层。
 - 阈值可在调用处覆盖：`rateLimit(ip, { windowMs, max })`。
+
+
