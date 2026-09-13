@@ -1,3 +1,9 @@
+/**
+ * safeHtml 单元测试 · Unit tests for safeHtml
+ * @description 验证白名单标签保留、非白名单标签剥标签保内容、属性丢弃、script/style 块移除（SSR 安全）。
+ *              Verifies whitelist preservation, tag-stripping-keep-content, attribute dropping and
+ *              script/style block removal (SSR-safe).
+ */
 import { describe, it, expect } from 'vitest'
 import { safeHtml } from '../../app/utils/index'
 

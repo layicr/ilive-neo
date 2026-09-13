@@ -7,17 +7,24 @@
  */
 import type { Ref } from 'vue'
 import { CONFIG } from '~/utils/config'
-import { useI18n } from './useI18n'
+import { useAppI18n } from './useI18n'
 import { useSharedState } from './useSharedState'
 
+/** 单条错误记录（持久化到 localStorage）· One error record persisted to localStorage */
 interface ErrorInfo {
+  /** 错误消息 · error message */
   message: string
+  /** 堆栈（非 Error 时为 null）· stack (null for non-Error) */
   stack: string | null
+  /** 触发上下文（如 GlobalError / UnhandledPromise）· context tag */
   context: string
+  /** ISO 时间戳 · ISO timestamp */
   timestamp: string
 }
 
+/** localStorage 存储键 · localStorage key */
 const LOG_KEY = 'errorLogs'
+/** 最多保留的错误条数（超出丢弃最旧）· max retained logs (oldest dropped) */
 const MAX_LOGS = 50
 
 /** 响应式 toast 消息状态 · Reactive toast message（共享状态，懒初始化） */
@@ -29,7 +36,7 @@ function getToastMessage(): Ref<string | null> {
 
 /** 获取错误提示文本 · Get error message by key */
 function getErrorMessage(key: string): string {
-  const { currentData } = useI18n()
+  const { currentData } = useAppI18n()
   const messages = currentData.value.errorMessages as Record<string, string>
   return messages[key] || messages.generic
 }
@@ -95,7 +102,7 @@ export function useAppError() {
   if (!injected && typeof document !== 'undefined') {
     injected = true
 
-    // 全局错误捕获
+    // 全局错误捕获 · global error capture
     window.addEventListener('error', (e) => {
       handleError(e.error, 'GlobalError', false)
     })

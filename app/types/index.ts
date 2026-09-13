@@ -1,117 +1,42 @@
 /**
- * 前端数据类型定义 · Frontend data type definitions
+ * 全局类型定义（聚合导出）· Shared types (barrel)
  *
- * @description
- * API 返回双语（Bilingual*）结构：`{ zh, en }` 形式的字段，前端一次拉取后按当前语言本地化显示，
- * 语言切换时只切换文案（computed 重算），无需重新请求 API。
+ * @module types
+ * @description 应用（客户端 / API）共享类型。各子模块（i18n / concert / city / wish /
+ *              friendLink / seo）在此统一再导出；`AppData` / `ApiResponse` 直接定义于此。
+ *              历史 `import ... from '~/types'` 或 `from '../../app/types'` 仍可用，调用方无需改动。
+ *              服务端 mappers 产出 `Localized*`（按 locale 分组的多语言对象），
+ *              客户端按当前 locale 本地化为单语言 `Concert`/`City`/`Wish`。
  */
 
-/** 双语文本对 · Bilingual text pair */
-export interface BilingualText {
-  zh: string;
-  en: string;
-}
+export * from './i18n'
+export * from './concert'
+export * from './city'
+export * from './wish'
+export * from './friendLink'
+export * from './seo'
 
-/** 双语演唱会 · Bilingual concert (API 返回) */
-export interface BilingualConcert {
-  id: number;
-  artist: BilingualText;
-  concertName: BilingualText;
-  theme: BilingualText;
-  location: BilingualText;
-  locationDetail: {
-    country: BilingualText;
-    province: BilingualText;
-    city: BilingualText;
-    venue: BilingualText;
-  };
-  seat: BilingualText | null;
-  price: BilingualText | null;
-  date: string;
-  time: string | null;
-  poster: string | null;
-  tags: { zh: string[]; en: string[] };
-  description: BilingualText;
-  images: { src: string; alt: BilingualText }[];
-  video: BilingualText | null;
-  videoUrl: BilingualText | null;
-  songlist: { zh: string; en: string; link: string | null }[];
-}
+import type { LocalizedConcert } from './concert'
+import type { LocalizedCity } from './city'
+import type { LocalizedWish } from './wish'
+import type { SiteSeoSettings } from './seo'
+import type { LocalizedFriendLink } from './friendLink'
 
-/** 双语城市 · Bilingual city (API 返回) */
-export interface BilingualCity {
-  id: number;
-  name: BilingualText;
-  icon: string | null;
-  concerts: number;
-}
-
-/** 双语许愿 · Bilingual wish (API 返回) */
-export interface BilingualWish {
-  id: number;
-  content: BilingualText;
-  time: string;
-  likes: number;
-  liked: boolean;
-}
-
-/** 演唱会（单语言本地化结果）· Concert (localized) */
-export interface Concert {
-  id: number;
-  artist: string;
-  concertName: string;
-  theme: string;
-  location: string;
-  seat: string | null;
-  price: string | null;
-  date: string;
-  time: string | null;
-  poster: string | null;
-  tags: string[];
-  description: string;
-  images: { src: string; alt: string }[];
-  video: string | null;
-  videoUrl: string | null;
-  songlist: SongItem[];
-}
-
-/** 城市（单语言本地化结果）· City (localized) */
-export interface City {
-  id: number;
-  name: string;
-  icon: string | null;
-  concerts: number;
-}
-
-/** 许愿（单语言本地化结果）· Wish (localized) */
-export interface Wish {
-  id: number;
-  content: string;
-  time: string;
-  likes: number;
-  liked: boolean;
-}
-
-/** 歌单条目（单语言本地化结果）· Songlist item (localized) */
-export interface SongItem {
-  name: string;
-  link: string | null;
-}
-
-/** 统计信息 · Stats */
-export interface Stats {
-  totalConcerts: number;
-  totalArtists: number;
-  totalCities: number;
-}
-
-/** 全量应用数据（/api/data 返回）· App data payload */
 export interface AppData {
-  concerts: BilingualConcert[];
-  cities: BilingualCity[];
-  wishes: BilingualWish[];
-  stats: Stats;
+  concerts: LocalizedConcert[]
+  cities: LocalizedCity[]
+  wishes: LocalizedWish[]
+  stats: { totalConcerts: number; totalArtists: number; totalCities: number; totalWishes: number }
+  /** 站点级 SEO 设置（DB 优先，缺失回退）· site-level SEO settings */
+  seo: SiteSeoSettings
+  /** 页脚友情链接（DB 优先，空则前端回退代码列表）· footer friend links */
+  friendLinks: LocalizedFriendLink[]
+  /** 服务端实际本地化的语言（请求带 ?lang= 时为该语言，否则 null 表示返回多语言原始形态）· locale the server actually localized to */
+  locale: Locale | null
+  generatedAt: string
 }
 
-/** 语言类型 · Language */
-export type Lang = 'zh' | 'en';
+export interface ApiResponse {
+  data: AppData
+  generatedAt: string
+}

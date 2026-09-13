@@ -8,7 +8,8 @@
  *              Mirrored from the original index.html <body> to keep visuals identical.
  */
 import { toRaw } from 'vue'
-import { useI18n } from '~/composables/useI18n'
+import { useAppI18n } from '~/composables/useI18n'
+import type { AppLocale } from '~/composables/useI18n'
 import { useData } from '~/composables/useData'
 import { useMusic } from '~/composables/useMusic'
 import { useGallery } from '~/composables/useGallery'
@@ -19,11 +20,53 @@ import { useAlbumShowcase } from '~/composables/useAlbumShowcase'
 import { useTicketModal } from '~/composables/useTicketModal'
 import { useFriendLink } from '~/composables/useFriendLink'
 import { useAppError } from '~/composables/useAppError'
-import { safeHtml, formatWishTime, formatWishDate } from '~/utils'
+import { safeHtml, pickLocale, pickHotConcertIds } from '~/utils'
 import { CONFIG } from '~/utils/config'
+import { LOCALE_DEFINITIONS } from '~~/server/lib/locales'
+import { ARTIST_DELIMITER, buildHreflangLinks, buildSiteDescription, resolveSiteUrl, toAbsoluteImageUrl } from '~/utils/seo'
 
-const { currentLanguage, currentData, currentStoriesText, initLanguage, switchLanguage } = useI18n()
-const { stats, dataReady, dataError, localizedConcerts, localizedCities, localizedWishes } = useData()
+const { currentLanguage, currentData, currentStoriesText, initLanguage, switchLanguage } = useAppI18n()
+/** vue-i18n 原始 t：带参数插值（如 songlist.totalSongs 的 {count}）· raw t for parameterized messages */
+const { t } = useI18n()
+
+// 语言切换器列表 · language switcher list（源自 server/lib/locales 单一真源；中文为默认语言，无 URL 前缀）
+const langs: { code: AppLocale; label: string; name: string }[] = LOCALE_DEFINITIONS.map((l) => ({
+  code: l.code,
+  label: l.short,
+  name: l.name
+}))
+
+// ==================== 语言下拉框 · Language dropdown ====================
+const langOpen = ref(false)
+const langSwitcherRef = ref<HTMLElement | null>(null)
+/** 当前语言项（下拉触发器展示母语全称）· current locale entry for the trigger */
+const currentLang = computed(() => langs.find((l) => l.code === currentLanguage.value) ?? langs[0])
+/** 选择语言：关闭下拉并切换（同语言不重复导航）· pick a locale */
+function selectLang(code: AppLocale): void {
+  langOpen.value = false
+  if (code === currentLanguage.value) return
+  onSwitchLang(code)
+}
+/** 点击外部关闭下拉 · close on outside click */
+function onLangDocClick(e: MouseEvent): void {
+  if (!langOpen.value) return
+  if (langSwitcherRef.value && !langSwitcherRef.value.contains(e.target as Node)) {
+    langOpen.value = false
+  }
+}
+/** Esc 关闭下拉 · close on Escape */
+function onLangKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') langOpen.value = false
+}
+onMounted(() => {
+  document.addEventListener('click', onLangDocClick)
+  document.addEventListener('keydown', onLangKeydown)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onLangDocClick)
+  document.removeEventListener('keydown', onLangKeydown)
+})
+const { stats, dataReady, dataError, localizedConcerts, localizedCities, localizedWishes, counts, seo, toggleLike } = useData()
 const { isPlaying, initBgMusic, toggleMusic } = useMusic()
 const { galleryOpen, currentImage, openGallery, closeGallery, prevImage, nextImage } = useGallery()
 const { songlistOpen, activeConcert, filteredSonglist, songlistSearch, openSonglistModal, closeSonglistModal } = useSonglist()
@@ -32,11 +75,21 @@ const { sortedConcerts, visibleIds, initTimelineReveal } = useTimeline()
 const { selectedAlbumIndex, albums, selectAlbum, applyCarouselLayout, init3DAlbumShowcase } = useAlbumShowcase()
 const { ticketModalOpen, openTicketModal, closeTicketModal } = useTicketModal()
 const { friendLinks } = useFriendLink()
-const { handleError } = useAppError()
+const { handleError, showUserMessage } = useAppError()
+
+// ==================== 点赞与「热度」标记 · Likes & hot badge ====================
+/**
+ * 点赞数前三的演唱会 id 集合（仅统计 >0，并列同显）· Top-3 liked concert ids
+ * @description 判定逻辑见 `pickHotConcertIds`（纯函数，可单测）：取点赞数最高的 3 个不同数值为阈值，
+ *              凡点赞数 ≥ 阈值者均展示火图标；不足三档时有几档显示几档。
+ *              Logic in `pickHotConcertIds`: the threshold is the top-3 distinct like levels; every concert
+ *              at or above the threshold gets the badge (fewer levels → fewer badges).
+ */
+const hotConcertIds = computed<Set<number>>(() => pickHotConcertIds(localizedConcerts.value))
 
 // ==================== SEO 元信息（动态，随语言切换）· Dynamic SEO meta ====================
-/** 站点正式地址（与 nuxt.config SITE_URL 保持一致）· Canonical site URL */
-const SITE_URL = 'https://ilive.lyc.la'
+// 说明：站点地址 siteUrl、hreflang 与描述构造逻辑统一收敛在 ~/utils/seo（纯函数，可单测）。
+// siteUrl / hreflang / description builders all live in ~/utils/seo (pure functions, unit-testable).
 /**
  * 去重艺人列表（来自数据库已预取的演唱会数据）· Unique artists from DB concerts
  * @description 从 localizedConcerts 提取 `artist` 并去重；随语言切换自动取当前语言艺人名。
@@ -45,35 +98,65 @@ const SITE_URL = 'https://ilive.lyc.la'
 const artistNames = computed(() =>
   [...new Set(localizedConcerts.value.map(c => c.artist).filter(Boolean))]
 )
-/** 当前语言下的艺人串（顿号/逗号分隔）· artist list joined by delimiter */
+/** 当前语言下的艺人串（分隔符来自 ~/utils/seo）· artist list joined by locale-specific delimiter */
 const artistListText = computed(() =>
-  currentLanguage.value === 'zh'
-    ? artistNames.value.join('、')
-    : artistNames.value.join(', ')
+  artistNames.value.join(ARTIST_DELIMITER[currentLanguage.value] ?? ', ')
 )
+// ==================== 站点 SEO（DB 优先，文案/代码回退）· Site SEO (DB-first, fallback) ====================
+// 说明：运营维度的 SEO 参数来自数据库（/api/data 的 seo 字段，见 server/lib/mappers.ts 的 fetchSiteSeo）。
+//      DB 为空 / 缺字段 / 请求失败时逐项回退到代码默认值（~/utils/seo 与 i18n message），
+//      任何情况下都不输出空 title / description（SEO_DB_MIGRATION.md「坑 1」）。
+// Operational SEO params come from the DB (/api/data `seo`, built by fetchSiteSeo); when the DB is empty,
+// a field is missing, or the query fails, each field falls back to code defaults (~/utils/seo + i18n messages);
+// title / description are never empty (see SEO_DB_MIGRATION.md "pitfall 1").
+
+/** DB 中的站点 SEO 设置（数据未就绪时为 null）· site SEO settings from DB */
+const seoSettings = computed(() => seo.value)
+/** 生效的站点地址（DB site_settings.site_url 优先 → runtimeConfig.public.siteUrl/env → 代码兜底）· effective site URL */
+const siteUrl = computed(() =>
+  seoSettings.value?.siteUrl || resolveSiteUrl(useRuntimeConfig().public.siteUrl as string | undefined)
+)
+
 /**
- * 动态站点描述（随数据库艺人变化）· Dynamic site description
- * @description 基于数据库艺人自动生成，新增/移除演唱会后 SEO 自动更新。
+ * 取 DB 中某条 SEO 多语言文案（当前语言 → 回退链）· DB copy for a key
+ * @returns 取不到时返回空串，由调用方决定回退值 · returns '' when missing; the caller decides the fallback
  */
-const currentDescription = computed(() => {
-  const artists = artistListText.value
-  if (!artists) {
-    return currentLanguage.value === 'zh'
-      ? 'Layicr的个人演唱会足迹记录网站。'
-      : 'Layicr\'s personal concert journey site.'
-  }
-  return currentLanguage.value === 'zh'
-    ? `Layicr的个人演唱会足迹记录网站，记录观看${artists}等歌手演唱会的美好回忆。`
-    : `Layicr's personal concert journey site, documenting memories of watching concerts by ${artists} and more.`
-})
-/** 动态关键词（含艺人 + 站点）· Dynamic keywords from DB artists */
+function seoCopy(key: 'site_title' | 'site_description' | 'keywords'): string {
+  const dict = seoSettings.value?.i18n?.[key]
+  if (!dict) return ''
+  return pickLocale(dict, currentLanguage.value) ?? ''
+}
+
+/** 站点名（显式字符串化，避免把 i18n 代理对象直接交给 unhead）· site name as plain string */
+const currentSiteName = computed(() => String(currentData.value.siteName))
+
+/** 当前语言的站点标题（DB 的 site_title 优先，回退 message 组合）· Current page title */
+const currentPageTitle = computed(() =>
+  seoCopy('site_title') || `${currentData.value.pageTitle} - ${currentData.value.siteName}`
+)
+
+/**
+ * 动态站点描述（DB 文案优先）· Dynamic site description
+ * @description 回退链：DB site_description → 按语言 + 当前艺人串生成的模板（~/utils/seo）。
+ */
+const currentDescription = computed(() =>
+  seoCopy('site_description') || buildSiteDescription(currentLanguage.value, artistListText.value)
+)
+
+/** 动态关键词（DB 文案优先，回退到站点名 + 艺人 + 默认词）· Dynamic keywords */
 const currentKeywords = computed(() =>
+  seoCopy('keywords') ||
   [currentData.value.siteName, ...artistNames.value, '演唱会足迹', '演唱会记录'].join(',')
 )
-/** 当前语言的站点标题 · Current page title */
-const currentPageTitle = computed(() =>
-  `${currentData.value.pageTitle} - ${currentData.value.siteName}`
-)
+
+/** OG / Twitter 兜底图（与 server/lib/mappers.ts 的 SEO_FALLBACK.ogImage 同值）· fallback OG image */
+const FALLBACK_OG_IMAGE = '/img/og-image.svg'
+/** OG / Twitter 图（DB 值 → 代码兜底；相对路径统一转绝对 URL）· absolute OG image */
+const currentOgImage = computed(() => toAbsoluteImageUrl(seoSettings.value?.ogImage || FALLBACK_OG_IMAGE, siteUrl.value))
+const currentTwitterSite = computed(() => seoSettings.value?.twitterSite || '@layicr')
+const currentTwitterCreator = computed(() => seoSettings.value?.twitterCreator || '@layicr')
+const currentRobots = computed(() => seoSettings.value?.robots || 'index, follow')
+const currentAuthor = computed(() => seoSettings.value?.author || 'layicr')
 
 useSeoMeta({
   title: currentPageTitle,
@@ -81,21 +164,24 @@ useSeoMeta({
   description: currentDescription,
   keywords: currentKeywords,
   ogDescription: currentDescription,
-  ogUrl: SITE_URL,
-  ogImage: SITE_URL + '/img/og-image.svg',
-  ogSiteName: currentData.value.siteName,
+  ogUrl: siteUrl,
+  ogImage: currentOgImage,
+  ogSiteName: currentSiteName,
   twitterCard: 'summary_large_image',
   twitterTitle: currentPageTitle,
   twitterDescription: currentDescription,
-  twitterImage: SITE_URL + '/img/og-image.svg',
-  twitterSite: '@layicr',
-  twitterCreator: '@layicr',
-  robots: 'index, follow'
+  twitterImage: currentOgImage,
+  twitterSite: currentTwitterSite,
+  twitterCreator: currentTwitterCreator,
+  robots: currentRobots,
+  author: currentAuthor
 })
 
-// ==================== JSON-LD 结构化数据 + hreflang（仅 SSR 输出）====================
+// ==================== JSON-LD 结构化数据 + hreflang（仅 SSR 输出）· JSON-LD + hreflang (SSR only) ====================
 // 说明：在 SSR 阶段构建纯 JSON 对象后一次性序列化，避免将 Vue 响应式 Proxy 对象
 //      交给 JSON.stringify / unhead（会触发 Proxy 陷阱导致序列化异常）。
+// Build a plain JSON object during SSR and serialize once, avoiding handing Vue reactive Proxies to
+// JSON.stringify / unhead (whose Proxy traps break serialization).
 
 /** 演唱会纯数据（剥离响应式 Proxy 后用于序列化）· plain concert shape for serialization */
 type PlainConcert = {
@@ -117,7 +203,7 @@ function buildMusicEvents(plain: PlainConcert[]): Record<string, unknown>[] {
     .map(c => {
       const ev: Record<string, unknown> = {
         '@type': 'MusicEvent',
-        '@id': `${SITE_URL}/#concert-${c.id}`,
+        '@id': `${siteUrl.value}/#concert-${c.id}`,
         name: c.concertName || c.artist,
         eventStatus: 'https://schema.org/EventScheduled',
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode'
@@ -126,7 +212,7 @@ function buildMusicEvents(plain: PlainConcert[]): Record<string, unknown>[] {
         ev.startDate = c.date.replace(/\./g, '-') + (c.time ? `T${c.time}` : '')
       }
       if (c.location) ev.location = { '@type': 'Place', name: c.location }
-      if (c.poster) ev.image = SITE_URL + '/' + c.poster
+      if (c.poster) ev.image = siteUrl.value + '/' + c.poster
       if (c.artist) ev.performer = { '@type': 'Person', name: c.artist }
       if (c.price) {
         const numeric = c.price.replace(/[^\d.]/g, '')
@@ -143,25 +229,25 @@ function buildJsonLd(): Record<string, unknown> {
   const graph: Record<string, unknown>[] = [
     {
       '@type': 'WebSite',
-      '@id': SITE_URL + '/#website',
-      name: currentData.value.siteName,
-      url: SITE_URL,
-      inLanguage: currentLanguage.value === 'zh' ? 'zh-CN' : 'en'
+      '@id': siteUrl.value + '/#website',
+      name: String(currentData.value.siteName),
+      url: siteUrl.value,
+      inLanguage: currentLanguage.value === 'zh-CN' ? 'zh-CN' : currentLanguage.value as string
     },
     {
       '@type': 'Person',
-      '@id': SITE_URL + '/#person',
+      '@id': siteUrl.value + '/#person',
       name: 'layicr',
-      url: SITE_URL
+      url: siteUrl.value
     },
     {
       '@type': 'ItemList',
-      name: currentData.value.pageTitle,
+      name: String(currentData.value.pageTitle),
       numberOfItems: plain.length,
       itemListElement: plain.map((c, i) => ({
         '@type': 'ListItem',
         position: i + 1,
-        item: { '@type': 'MusicEvent', name: c.concertName || c.artist, url: `${SITE_URL}/#concert-${c.id}` }
+        item: { '@type': 'MusicEvent', name: c.concertName || c.artist, url: `${siteUrl.value}/#concert-${c.id}` }
       }))
     },
     ...buildMusicEvents(plain)
@@ -171,10 +257,15 @@ function buildJsonLd(): Record<string, unknown> {
 
 // 说明：innerHTML 用 computed 让 unhead 在 useAsyncData 数据就绪后自动重新求值，
 //      从而确保 JSON-LD 包含已加载的演唱会列表（而非 setup 阶段的空数组）。
+// innerHTML is a computed so unhead re-evaluates once useAsyncData resolves, ensuring JSON-LD carries
+// the loaded concerts (not the empty array from the setup phase).
 /** JSON-LD 纯 JSON 字符串（响应式，数据就绪后更新）· serialized JSON-LD string */
 const jsonLdHTML = computed(() => JSON.stringify(buildJsonLd()))
 
-// 仅 SSR 输出 JSON-LD 与 hreflang；客户端交给 nuxt.config 静态头 + useSeoMeta
+// 仅 SSR 输出 JSON-LD 与 hreflang；客户端元信息交给 app.vue 与 useSeoMeta
+// 说明：hreflang 与 app/app.vue 使用同一组 key，由 unhead 合并去重，避免同一 hreflang 重复输出。
+// Emit JSON-LD & hreflang on SSR only; client meta is handled by app.vue and useSeoMeta.
+// hreflang links share the same keys as app/app.vue so unhead merges/dedupes them.
 if (import.meta.server) {
   useHead({
     script: [
@@ -183,17 +274,16 @@ if (import.meta.server) {
         innerHTML: jsonLdHTML
       }
     ],
-    link: [
-      { rel: 'alternate', hreflang: 'zh-CN', href: SITE_URL + '/' }
-    ]
+    link: buildHreflangLinks(langs.map(({ code }) => code), siteUrl.value)
   })
 }
 
 // 语言切换：更新 document.title + 重置故事文案 + 重新应用专辑布局（模板自动更新文案，零请求）
+// Locale switch: update document.title, reset story texts, re-apply album layout (templates update with zero extra requests).
 watch(currentLanguage, () => {
   if (typeof document === 'undefined') return
   document.title = currentData.value.pageTitle
-  // 对齐原版 initStoriesText：切换语言后重置为第 0 组并重新播放高亮动画
+  // 对齐原版 initStoriesText：切换语言后重置为第 0 组并重新播放高亮动画 · same as original initStoriesText: reset to group 0 and replay the highlight animation
   storyIndex.value = 0
   if (highlightTimer) clearTimeout(highlightTimer)
   highlightTimer = setTimeout(playHighlight, CONFIG.HIGHLIGHT_ANIMATION_DELAY)
@@ -217,25 +307,27 @@ function initDataLayout(): void {
 }
 
 // 客户端挂载后初始化；若数据已就绪（SSR 水合）则同步初始化数据布局
+// Init after client mount; if data is already ready (SSR hydration), init the data layout synchronously.
 onMounted(() => {
   if (clientInited) return
   clientInited = true
-  relativeTimeReady.value = true
   initLanguage()
   initBgMusic()
   startDynamicTextTimers()
-  // 首屏：文字先显示，延迟再播放第二行高亮填充（对齐原版 initStoriesText）
+  // 首屏：文字先显示，延迟再播放第二行高亮填充（对齐原版 initStoriesText）· first paint: show text first, then play the second-line highlight fill after a delay (same as original initStoriesText)
   if (highlightTimer) clearTimeout(highlightTimer)
   highlightTimer = setTimeout(playHighlight, CONFIG.HIGHLIGHT_ANIMATION_DELAY)
   if (dataReady.value) initDataLayout()
 })
 
 // 数据就绪后：若尚未初始化（异步加载场景）则补齐时间轴渐显与专辑布局
+// When data becomes ready: if not yet initialized (async load), set up timeline reveal and album layout.
 watch(dataReady, (ready) => {
   if (ready) initDataLayout()
 })
 
 // 数据拉取失败时给出用户可见提示（loader 已隐藏，避免页面静默空白）
+// On fetch failure show a user-visible message (loader is hidden, so avoid a silent blank page).
 watch(dataError, (err) => {
   if (err) handleError(err, 'DataFetch', true, 'loadFailed')
 })
@@ -243,6 +335,9 @@ watch(dataError, (err) => {
 // 数据真正变化时（SSR 水合、语言切换、异步数据就绪）重新观察时间轴条目，
 // 确保新渲染节点被 IntersectionObserver 捕获并按滚动渐显。
 // 注意：不能用 onUpdated —— 否则故事文案每 4 秒轮换都会触发全量 getBoundingClientRect 强制重排。
+// When data actually changes (SSR hydration, locale switch, async ready) re-observe timeline items so
+// newly rendered nodes are caught by the IntersectionObserver and revealed on scroll.
+// Note: do NOT use onUpdated — the 4s story rotation would trigger a full getBoundingClientRect reflow.
 watch(sortedConcerts, () => {
   if (typeof document === 'undefined') return
   nextTick(() => initTimelineReveal())
@@ -260,6 +355,9 @@ watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen
 // 三组轮换：每组 = 第一行(text1[i]) + 第二行(text3[i]，高亮填充)。
 // 节奏（对齐原版）：先显示第一行 → 再显示第二行 → 第二行慢慢变色 → 整组隐藏 → 下一组。
 // text2 恒为空，不参与显示。
+// Three rotating groups: each = line 1 (text1[i]) + line 2 (text3[i], highlighted fill).
+// Rhythm (same as original): show line 1 → show line 2 → line 2 slowly changes color → hide group → next.
+// text2 is always empty and never displayed.
 /** 当前组索引（0/1/2）· current group index */
 const storyIndex = ref(0)
 /** 第三行是否播放填充动画（延迟激活，实现"先显示再变色"）· highlight playing flag */
@@ -278,10 +376,10 @@ const storyText2 = computed(() => {
   return list && list.length > 0 ? list[storyIndex.value % list.length] : ''
 })
 
-/** 播放第三行高亮填充（先清除旧动画再重播，对齐原版 playHighlightAnimation） */
+/** 播放第三行高亮填充（先清除旧动画再重播，对齐原版 playHighlightAnimation）· play the highlight fill (clear old animation then replay; same as original playHighlightAnimation) */
 function playHighlight(): void {
   highlightActive.value = false
-  // 下一帧再激活，确保浏览器重排后重新播放 fillBackground
+  // 下一帧再激活，确保浏览器重排后重新播放 fillBackground · re-activate on the next frame so fillBackground replays after the browser reflow
   requestAnimationFrame(() => { highlightActive.value = true })
 }
 
@@ -290,7 +388,7 @@ function nextStoryGroup(): void {
   const len = currentStoriesText.value.text1?.length || 0
   if (len === 0) return
   storyIndex.value = (storyIndex.value + 1) % len
-  // 整组切换后，延迟再播放第二行高亮（先显示文字，再慢慢变色）
+  // 整组切换后，延迟再播放第二行高亮（先显示文字，再慢慢变色）· after switching the whole group, replay the line-2 highlight with a delay (show text first, then fade in color)
   if (highlightTimer) clearTimeout(highlightTimer)
   highlightTimer = setTimeout(playHighlight, 600)
 }
@@ -310,9 +408,15 @@ onUnmounted(() => {
 })
 
 // ==================== 个人资料角色 · Profile roles ====================
-const ROLE_TARGET_KEYS = ['declaration', 'concerts', 'cities'] as const
+/**
+ * 三项 role 的点击滚动目标（CSS 选择器）· Scroll targets for role clicks
+ * @description 顺序与 roleItems 一致：宣言 → 故事区 / 演唱会 → 时间轴 / 城市 → 统计卡片。
+ *              属 UI 结构配置（非文案），故不再放 i18n。
+ *              This is UI-structure config (not copy), so it is intentionally kept out of i18n.
+ */
+const ROLE_TARGETS = ['.section-spacing', '#timeline', '.stats-grid'] as const
 
-/** 三项 role 文本（与原版 applyComputedProperties 一致） */
+/** 三项 role 文本（与原版 applyComputedProperties 一致）· three role texts (same as original applyComputedProperties) */
 const roleItems = computed(() => {
   const prefix = currentData.value.rolesPrefix || ''
   const rolesConf = currentData.value.roles
@@ -324,14 +428,12 @@ const roleItems = computed(() => {
 })
 
 function handleRoleClick(index: number): void {
-  const key = ROLE_TARGET_KEYS[index]
-  if (!key) return
-  const targetSelector = (currentData.value.roleTarget as Record<string, string>)[key] ?? '#timeline'
+  const targetSelector = ROLE_TARGETS[index] ?? '#timeline'
   const target = document.querySelector(targetSelector) as HTMLElement | null
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-// ==================== 时间轴 helpers ====================
+// ==================== 时间轴 helpers · Timeline helpers ====================
 /** 缩略图地址 · thumbnail src */
 function thumbSrc(src: string): string {
   return src.replace('.jpg', '_thumb.jpg')
@@ -345,7 +447,7 @@ function onThumbError(event: Event, src: string): void {
 }
 
 // ==================== 事件处理 · Event handlers ====================
-function onSwitchLang(lang: 'zh' | 'en'): void {
+function onSwitchLang(lang: AppLocale): void {
   switchLanguage(lang)
 }
 
@@ -375,20 +477,56 @@ function openVideoLink(url: string): void {
   if (url) window.open(url, '_blank', 'noopener')
 }
 
-// 许愿时间水合安全：首屏/SSR 输出固定绝对日期（YYYY.MM.DD），挂载后再切相对时间，
-// 避免服务端 now / ICU 与客户端输出不一致导致 hydration mismatch。
-const relativeTimeReady = ref(false)
-function wishTimeText(time: string): string {
-  if (!relativeTimeReady.value) return formatWishDate(time)
-  return formatWishTime(time, currentLanguage.value)
+/** 点赞 / 取消点赞（乐观更新，失败回滚并提示）· toggle like with optimistic update */
+async function onToggleLike(concert: { id: number }): Promise<void> {
+  try {
+    await toggleLike(concert.id)
+  } catch (err) {
+    // 注意：事件回调中不能调用 handleError —— 其内部 getErrorMessage 会调用 useAppI18n（需 setup 上下文），
+    // 在回调里会抛「Must be called at the top of a setup function」。故此处直接取文案并弹 Toast。
+    // Note: handleError must NOT be called inside an event callback — its getErrorMessage uses useAppI18n
+    // (needs a setup context) and would throw "Must be called at the top of a setup function".
+    // So read the copy directly and show the toast here.
+    console.error('[ToggleLike]', err)
+    showUserMessage(String(currentData.value.errorMessages.generic ?? ''))
+  }
 }
+
 </script>
 
 <template>
   <div>
-    <div class="language-switcher" role="group" aria-label="语言选择">
-      <button class="lang-btn" :class="{ active: currentLanguage === 'zh' }" data-lang="zh" aria-label="切换到中文" @click="onSwitchLang('zh')">中文</button>
-      <button class="lang-btn" :class="{ active: currentLanguage === 'en' }" data-lang="en" aria-label="切换到英文" @click="onSwitchLang('en')">EN</button>
+    <div ref="langSwitcherRef" class="language-switcher" :class="{ open: langOpen }">
+      <button
+        type="button"
+        class="lang-trigger"
+        aria-haspopup="listbox"
+        :aria-expanded="langOpen"
+        aria-label="语言选择"
+        @click="langOpen = !langOpen"
+      >
+        <i class="fas fa-globe" aria-hidden="true"></i>
+        <span class="lang-trigger-label">{{ currentLang.name }}</span>
+        <i class="fas fa-chevron-down lang-trigger-arrow" aria-hidden="true"></i>
+      </button>
+      <transition name="lang-drop">
+        <ul v-show="langOpen" class="lang-menu" role="listbox" aria-label="语言选择">
+          <li
+            v-for="l in langs"
+            :key="l.code"
+            class="lang-option"
+            :class="{ active: currentLanguage === l.code }"
+            role="option"
+            :aria-selected="currentLanguage === l.code"
+            :data-lang="l.code"
+            :aria-label="`切换到${l.label}`"
+            @click="selectLang(l.code)"
+          >
+            <span class="lang-option-name">{{ l.name }}</span>
+            <i v-if="currentLanguage === l.code" class="fas fa-check lang-option-check" aria-hidden="true"></i>
+          </li>
+        </ul>
+      </transition>
     </div>
     <div class="music-player">
       <button class="music-btn" id="musicToggle" :class="{ playing: isPlaying }" aria-label="播放/暂停背景音乐" @click="onToggleMusic">
@@ -485,7 +623,14 @@ function wishTimeText(time: string): string {
             @click="selectAlbum(index)"
           >
             <div class="album-cover">
-              <img class="album-cover-img" :src="album.image" :alt="album.title" decoding="async">
+              <img
+                class="album-cover-img"
+                :src="album.image"
+                :alt="album.title"
+                :loading="index === selectedAlbumIndex ? 'eager' : 'lazy'"
+                :fetchpriority="index === selectedAlbumIndex ? 'high' : 'low'"
+                decoding="async"
+              >
             </div>
           </div>
         </div>
@@ -520,7 +665,19 @@ function wishTimeText(time: string): string {
       >
         <div class="timeline-content">
           <div class="concert-date">{{ concert.date }}{{ concert.time ? ' ' + concert.time : '' }}</div>
-          <h2 class="concert-artist">{{ concert.artist }}</h2>
+          <h2 class="concert-artist">
+            <span>{{ concert.artist }}</span>
+            <!-- 热度标记：点赞数排前三（仅 >0，并列同显），跟在歌手名后 · hot badge after the artist -->
+            <span
+              v-if="hotConcertIds.has(concert.id)"
+              class="concert-hot"
+              :title="currentData.buttons.hot"
+              :aria-label="currentData.buttons.hot"
+              role="img"
+            >
+              <i class="fas fa-fire" aria-hidden="true"></i>
+            </span>
+          </h2>
           <div v-if="concert.concertName" class="concert-name">{{ concert.concertName }}</div>
           <div class="concert-location">
             <i class="fas fa-map-marker-alt" aria-hidden="true"></i> {{ concert.location }}
@@ -556,7 +713,21 @@ function wishTimeText(time: string): string {
               >
             </div>
           </div>
-          <div v-if="(concert.songlist && concert.songlist.length) || concert.video || concert.videoUrl" class="timeline-buttons">
+          <div class="timeline-buttons">
+            <!-- 爱心点赞：图标在上、点赞数在下 · like button (heart above, count below) -->
+            <button
+              type="button"
+              class="like-btn"
+              :class="{ liked: concert.liked }"
+              :data-concert-id="concert.id"
+              :aria-pressed="concert.liked ? 'true' : 'false'"
+              :aria-label="concert.liked ? currentData.buttons.unlike : currentData.buttons.like"
+              :title="concert.liked ? currentData.buttons.unlike : currentData.buttons.like"
+              @click="onToggleLike(concert)"
+            >
+              <i class="fas fa-heart" aria-hidden="true"></i>
+              <span class="like-count">{{ concert.likes || 0 }}</span>
+            </button>
             <button v-if="concert.songlist && concert.songlist.length" class="songlist-btn" :data-concert-id="concert.id" @click="openSonglistModal(concert)">
               <i class="fas fa-music" aria-hidden="true"></i> {{ currentData.buttons.songlist }}
             </button>
@@ -588,7 +759,7 @@ function wishTimeText(time: string): string {
           <div v-for="city in localizedCities" :key="city.id" class="city-item" :data-city-id="city.id">
             <span v-if="city.icon" class="city-icon">{{ city.icon }}</span>
             <span class="city-name">{{ city.name }}</span>
-            <span class="city-concerts">{{ currentData.cityList.concertsPrefix }}{{ city.concerts }}{{ currentData.cityList.concertsSuffix }}</span>
+            <span class="city-concerts">{{ currentData.cityList.concertsPrefix }}{{ counts[city.id] ?? 0 }}{{ currentData.cityList.concertsSuffix }}</span>
           </div>
         </div>
       </div>
@@ -626,7 +797,7 @@ function wishTimeText(time: string): string {
         <button class="songlist-close" id="closeSonglistModal" aria-label="关闭歌单查看器" @click="closeSonglistModal">&times;</button>
         <div class="songlist-modal-header">
           <h3 id="songlistModalTitle">{{ activeConcert ? activeConcert.artist + ' - ' + activeConcert.concertName : '' }}</h3>
-          <p class="songlist-modal-subtitle" id="songlistModalSubtitle">{{ currentData.songlist.totalSongs.replace('{count}', String(filteredSonglist.length)) }}</p>
+          <p class="songlist-modal-subtitle" id="songlistModalSubtitle">{{ t('songlist.totalSongs', { count: filteredSonglist.length }) }}</p>
           <div class="songlist-search-container">
             <input type="text" id="songlistSearchInput" class="songlist-search-input" :placeholder="currentData.songlist.searchPlaceholder" :aria-label="currentData.songlist.searchPlaceholder" v-model="songlistSearch">
             <i class="fas fa-search songlist-search-icon"></i>
@@ -704,7 +875,7 @@ function wishTimeText(time: string): string {
               <span>{{ wish.liked ? '❤️' : '🤍' }}</span>
               <span>{{ wish.likes || 0 }}</span>
             </div>
-            <div class="wish-card-time">{{ wishTimeText(wish.time) }}</div>
+            <div class="wish-card-footer-spacer"></div>
           </div>
         </div>
       </div>
@@ -726,7 +897,7 @@ function wishTimeText(time: string): string {
             :href="link.href"
             target="_blank"
             rel="noopener noreferrer"
-            :title="currentLanguage === 'zh' ? link.title.zh : link.title.en"
+            :title="link.title"
           >
             <i :class="link.icon" aria-hidden="true"></i>
           </a>

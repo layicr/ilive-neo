@@ -1,20 +1,19 @@
 /**
- * 中文 UI 文案 · Chinese UI texts
- *
- * @description 从 public/db/datas_zh.js 迁移而来。
- *              仅含静态 UI 文案；演唱会/城市/许愿数据由服务端 API 提供。
+ * 中文 UI 文案（vue-i18n message） · Chinese UI messages
+ * @description 从原 app/locales/zh.ts 迁移为 vue-i18n 默认导出；仅含静态 UI 文案，演唱会/城市/许愿数据由 API 提供。
  */
 
-export const zh = {
+export default {
   pageTitle: 'Layicr演唱会足迹',
-  bgMusic: 'music/bgm_cn.mp3',
+  bgMusic: 'music/bgm_cn.mp3', // 解析到 public/music/ 下（背景音乐源）· resolved under public/music/
   profileLabel: '我的名字是:',
   profileSubtitle: '这是我们的演唱会，也是你的故事。',
 
   concertsLabel: '场次',
   artistsLabel: '艺人',
   citiesLabel: '城市',
-  footerText: '',
+  footerText: '', // 故意留空：页脚品牌区不显示文字
+
   siteName: 'Layicr',
   modalTitle: '演唱会城市',
   ticketModalTitle: '演唱会足迹',
@@ -26,16 +25,13 @@ export const zh = {
     citiesLabel: '城市'
   },
 
-  roleTarget: {
-    declaration: '.section-spacing',
-    concerts: '#timeline',
-    cities: '.stats-grid'
-  },
-
   buttons: {
     songlist: '查看歌单',
     watchVideo: '观看视频',
-    openVideo: '打开视频'
+    openVideo: '打开视频',
+    like: '点赞',
+    unlike: '取消点赞',
+    hot: '热门演唱会（点赞前三）'
   },
 
   tooltips: {
@@ -73,19 +69,15 @@ export const zh = {
   errorMessages: {
     generic: '操作失败，请稍后重试',
     loadFailed: '加载失败，请刷新页面'
-  }
-} as const;
+  },
 
-/**
- * 故事动态文本 · Stories dynamic texts
- * @description text1 = 第一行，text3 = 第二行（高亮填充）。
- *              原 text2 恒为空数组且从未被读取，已移除。
- */
-export const storiesTextDataZH = {
-  text1: ['说真的，', '一抹蓝，', '争朝夕，'],
-  text3: [
-    '似有若无的坦荡，强迫我们成长。',
-    '路上的脚印，永远不会停歇。',
-    '抬头仰望的世界，是不是难以到达？'
-  ]
-} as const;
+  // 故事动态文本：text1 = 第一行，text3 = 第二行（高亮填充）· story texts: text1 = line 1, text3 = line 2 (highlight)
+  stories: {
+    text1: ['说真的，', '一抹蓝，', '争朝夕，'],
+    text3: [
+      '似有若无的坦荡，强迫我们成长。',
+      '路上的脚印，永远不会停歇。',
+      '抬头仰望的世界，是不是难以到达？'
+    ]
+  }
+}

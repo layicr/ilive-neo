@@ -1,71 +1,32 @@
 /**
  * 友情链接 composable · Friend links
  *
- * @description 从 friendLink.js 迁移而来。
- *              提供页脚社交链接数据（与原版一致：Font Awesome 图标 + 中英文 title）。
+ * @description 页脚社交/友情链接（Font Awesome 图标 + 多语言名称/描述）。
+ *              数据来源 DB 驱动（`/api/data` 的 `friendLinks`，server/db/schema.sql 的 friend_links 表）；
+ *              DB 为空 / 未迁移 / 查询失败 → 展示空列表（无内置回退）。
+ *
+ *              语言切换零请求：仅按当前 locale 重新本地化同一份数据。
+ *              zh-Hant 初版为机翻，需人工校对。
  */
-
-interface FriendLink {
-  href: string
-  icon: string
-  title: { zh: string; en: string }
-}
-
-/** 友情链接数据（9 个）· Friend links data */
-export const friendLinksData: FriendLink[] = [
-  {
-    href: 'https://www.lyc.la',
-    icon: 'fas fa-globe',
-    title: { zh: 'lyc.la', en: 'lyc.la' }
-  },
-  {
-    href: 'https://github.com/layicr/ilive_neo',
-    icon: 'fab fa-github',
-    title: { zh: 'Github', en: 'Github' }
-  },
-  {
-    href: 'https://weibo.com/layicr',
-    icon: 'fab fa-weibo',
-    title: { zh: '微博', en: 'Weibo' }
-  },
-  {
-    href: 'https://mp.weixin.qq.com/s/S1sq45LC_iQuCLYxzoaRkw',
-    icon: 'fab fa-weixin',
-    title: { zh: '微信', en: 'WeChat' }
-  },
-  {
-    href: 'https://v.douyin.com/5nAiAZQoUXw/',
-    icon: 'fab fa-tiktok',
-    title: { zh: '抖音', en: 'Douyin' }
-  },
-  {
-    href: 'https://space.bilibili.com/29825132',
-    icon: 'fa fa-video-camera',
-    title: { zh: 'B站', en: 'Bilibili' }
-  },
-  {
-    href: 'https://twitter.com/layicr',
-    icon: 'fab fa-twitter',
-    title: { zh: '推特', en: 'Twitter' }
-  },
-  {
-    href: 'https://www.instagram.com/ilayicr',
-    icon: 'fab fa-instagram',
-    title: { zh: 'Instagram', en: 'Instagram' }
-  },
-  {
-    href: 'https://www.facebook.com/layicr',
-    icon: 'fab fa-facebook',
-    title: { zh: 'Facebook', en: 'Facebook' }
-  }
-]
+import { computed } from 'vue'
+import { useData } from './useData'
+import { useAppI18n } from './useI18n'
+import { resolveFriendLinks } from '../utils/friendLinks'
+import type { FriendLink, Locale } from '../types'
 
 /**
  * useFriendLink 组合式入口 · Composable entry
- * @returns 友情链接数据 · friend links
+ * @returns 当前语言的友情链接列表（DB 优先，空则展示空列表）· friend links localized for current locale
  */
 export function useFriendLink() {
+  const { friendLinks: dbFriendLinks } = useData()
+  const { currentLanguage } = useAppI18n()
+
+  const friendLinks = computed<FriendLink[]>(() =>
+    resolveFriendLinks(dbFriendLinks.value, currentLanguage.value as Locale)
+  )
+
   return {
-    friendLinks: friendLinksData
+    friendLinks
   }
 }

@@ -1,20 +1,19 @@
 /**
- * 英文 UI 文案 · English UI texts
- *
- * @description 从 public/db/datas_en.js 迁移而来。
- *              仅含静态 UI 文案；演唱会/城市/许愿数据由服务端 API 提供。
+ * 英文 UI 文案（vue-i18n message） · English UI messages
+ * @description 从原 app/locales/en.ts 迁移为 vue-i18n 默认导出；仅含静态 UI 文案。
  */
 
-export const en = {
+export default {
   pageTitle: "layicr's Concert Trail",
-  bgMusic: 'music/bgm_en.mp3',
+  bgMusic: 'music/bgm_en.mp3', // 解析到 public/music/ 下（背景音乐源）· resolved under public/music/ (BGM source)
   profileLabel: 'My name is:',
-  profileSubtitle: "This is our concert, and it's your story。",
+  profileSubtitle: "This is our concert, and it's your story.",
 
   concertsLabel: 'Concerts',
   artistsLabel: 'Artists',
   citiesLabel: 'Cities',
-  footerText: '',
+  footerText: '', // 故意留空：页脚品牌区不显示文字 · intentionally empty (footer brand shows no text)
+
   siteName: 'layicr',
   modalTitle: 'Tour Cities',
   ticketModalTitle: 'Concert Journey',
@@ -26,16 +25,13 @@ export const en = {
     citiesLabel: 'Cities'
   },
 
-  roleTarget: {
-    declaration: '.section-spacing',
-    concerts: '#timeline',
-    cities: '.stats-grid'
-  },
-
   buttons: {
     songlist: 'View Songlist',
     watchVideo: 'Watch Video',
-    openVideo: 'Open Video'
+    openVideo: 'Open Video',
+    like: 'Like',
+    unlike: 'Unlike',
+    hot: 'Popular concert (top 3 by likes)'
   },
 
   tooltips: {
@@ -73,19 +69,15 @@ export const en = {
   errorMessages: {
     generic: 'Operation failed, please try again later',
     loadFailed: 'Loading failed, please refresh the page'
-  }
-} as const;
+  },
 
-/**
- * 故事动态文本 · Stories dynamic texts
- * @description text1 = first line, text3 = second line (highlight fill).
- *              The legacy text2 was always empty and never read; removed.
- */
-export const storiesTextDataEN = {
-  text1: ['To be honest,', 'A touch of blue,', 'Seize the day,'],
-  text3: [
-    'An elusive kind of candor pushes us to grow.',
-    'Footprints on the road will never cease.',
-    'Is the world we look up to so hard to reach?'
-  ]
-} as const;
+  // 故事动态文本：text1 = 第一行，text3 = 第二行（高亮填充）· story texts: text1 = line 1, text3 = line 2 (highlight)
+  stories: {
+    text1: ['To be honest,', 'A touch of blue,', 'Seize the day,'],
+    text3: [
+      'An elusive kind of candor pushes us to grow.',
+      'Footprints on the road will never cease.',
+      'Is the world we look up to so hard to reach?'
+    ]
+  }
+}

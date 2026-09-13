@@ -7,8 +7,10 @@
  *              onMounted 时 register、onUnmounted 时用返回的卸载函数注销。
  */
 
+/** 键盘处理函数：返回 true 表示已消费（阻止默认与冒泡）· returns true when consumed (prevents default & propagation) */
 type KeyHandler = (e: KeyboardEvent) => boolean | void
 
+/** 处理器条目（按优先级降序排列）· handler entry ordered by descending priority */
 interface HandlerEntry {
   handler: KeyHandler
   priority: number
@@ -39,7 +41,7 @@ class KeyboardManager {
           break
         }
       } catch (error) {
-        console.error('键盘事件处理器执行错误:', error)
+        console.error('键盘事件处理器执行错误 · keyboard handler error:', error)
       }
     }
   }

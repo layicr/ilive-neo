@@ -4,6 +4,9 @@
  *              无需 Nuxt SSR 运行时。Nuxt 4 起 `~`/`@` 指向 srcDir（app/），
  *              故别名需指向 app/，使 app/composables/useData 等引用的
  *              `~/locales`、`~/types` 能被解析。
+ *              Unit tests target pure functions (utils/config/mappers/localize) in a plain node
+ *              environment (no Nuxt SSR runtime). Since Nuxt 4 maps `~`/`@` to srcDir (app/), the
+ *              aliases must point to app/ so that `~/locales` / `~/types` used by useData resolve.
  */
 import { defineConfig } from 'vitest/config'
 import { fileURLToPath } from 'node:url'

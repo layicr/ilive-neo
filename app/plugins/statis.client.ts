@@ -15,7 +15,7 @@
  *              - All tracking code is third-party; do not modify core logic
  */
 export default defineNuxtPlugin(() => {
-  // ==================== 百度统计 ====================
+  // ==================== 百度统计 · Baidu Analytics ====================
   // @see https://tongji.baidu.com/
   ;(window as any)._hmt = (window as any)._hmt || []
   ;(function () {
@@ -25,7 +25,7 @@ export default defineNuxtPlugin(() => {
     s.parentNode!.insertBefore(hm, s)
   })()
 
-  // ==================== Google Analytics ====================
+  // ==================== Google Analytics · 谷歌统计 ====================
   // @see https://analytics.google.com/
   ;(function () {
     const firstScript = document.createElement('script')
@@ -42,13 +42,13 @@ export default defineNuxtPlugin(() => {
     }
 
     firstScript.onerror = function () {
-      console.error('无法加载 Google Analytics gtag.js 主库。')
+      console.error('无法加载 Google Analytics gtag.js 主库 · failed to load Google Analytics gtag.js')
     }
 
     document.head.appendChild(firstScript)
   })()
 
-  // ==================== 51.la 网站统计 ====================
+  // ==================== 51.la 网站统计 · 51.la Analytics ====================
   // @see https://www.51.la/
   !function (p: any) {
     'use strict'

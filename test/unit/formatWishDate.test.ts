@@ -1,3 +1,8 @@
+/**
+ * formatWishDate 单元测试 · Unit tests for formatWishDate
+ * @description 验证水合安全的固定绝对日期输出（YYYY.MM.DD、补零、不可解析回退空串）。
+ *              Verifies the hydration-safe absolute date output (YYYY.MM.DD, zero-padding, '' on bad input).
+ */
 import { describe, it, expect } from 'vitest'
 import { formatWishDate } from '../../app/utils/index'
 

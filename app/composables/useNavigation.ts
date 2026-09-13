@@ -7,7 +7,7 @@
  *              注意：触摸/滑动手势不在此处，位于 useAlbumShowcase.ts。
  */
 import { CONFIG } from '~/utils/config'
-import { useI18n } from './useI18n'
+import { useAppI18n } from './useI18n'
 import { useSharedState } from './useSharedState'
 
 function getBackToTopVisible() {
@@ -63,7 +63,7 @@ function openVideoModal(videoId: string, title?: string): void {
   const videoModalUrl = getVideoModalUrl()
   const videoModalOpen = getVideoModalOpen()
   const videoModalTitle = getVideoModalTitle()
-  // 与原版一致：用 bvid 构造 B 站内嵌播放器地址
+  // 与原版一致：用 bvid 构造 B 站内嵌播放器地址 · same as original: build the Bilibili embed URL from bvid
   videoModalUrl.value = `https://player.bilibili.com/player.html?bvid=${videoId}&autoplay=1`
   if (title) videoModalTitle.value = title
   videoModalOpen.value = true
@@ -79,7 +79,7 @@ function closeVideoModal(): void {
 
 /** 打开反馈链接 · Open feedback link */
 function openFeedback(): void {
-  const { currentData } = useI18n()
+  const { currentData } = useAppI18n()
   const url = CONFIG.GITHUB_ISSUES_URL
   const title = currentData.value.feedback.urlTitle
   const body = currentData.value.feedback.urlBody

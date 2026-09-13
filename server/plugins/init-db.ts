@@ -24,6 +24,8 @@ import { getDbConfig, resolveFileUrl } from '../lib/db-config';
  * 表结构 SQL 路径 · path to schema.sql
  * @description 用 process.cwd() 定位源码中的 schema.sql（dev 下 cwd=项目根）。
  *              仅在本地 file: 开发时建空表读取；远程 Turso 跳过，不依赖此文件。
+ *              Locates schema.sql in the source tree via process.cwd() (cwd = project root in dev).
+ *              Only read when creating empty tables locally (file:); remote Turso skips it.
  */
 const SCHEMA_PATH = join(process.cwd(), 'server', 'db', 'schema.sql');
 
@@ -42,6 +44,8 @@ function ensureFileDir(url: string): void {
  * 是否应跳过自动建库· Whether to skip auto schema creation
  * @description 生产环境 + file: 时：运行时文件系统只读，mkdirSync/建表会失败，
  *              且表结构应已存在于随包/已初始化的库中。故跳过，仅依赖已有库文件。
+ *              In production + file: the runtime filesystem is read-only, so mkdirSync/DDL would fail,
+ *              and the schema should already exist in the shipped/initialized DB. Skip and rely on it.
  */
 function shouldSkipInit(): boolean {
   const { url: rawUrl } = getDbConfig();
@@ -63,6 +67,7 @@ async function hasConcertsTable(client: Client): Promise<boolean> {
     return r.rows.length > 0;
   } catch {
     // 连接异常/表不可达视为不可用，走初始化（建表失败会再抛错）
+    // A connection error / unreachable table is treated as "not ready" → run init (DDL errors rethrow)
     return false;
   }
 }
@@ -93,6 +98,8 @@ async function ensureEmptyDb(): Promise<void> {
   const { url: rawUrl } = getDbConfig();
   // 远程 Turso 无需自动建库（数据由用户上传）；仅本地 file: 时才自动建空表。
   // 避免每次启动误建 public/data/data.db 本地空库。
+  // Remote Turso needs no auto-create (data is uploaded by the operator); only local file: does.
+  // This avoids accidentally creating an empty public/data/data.db on every boot.
   if (!rawUrl.startsWith('file:') || shouldSkipInit()) {
     console.log('[init-db] 跳过自动建库（远程 libsql 或只读部署）· skip init (remote or read-only)');
     return;
@@ -122,7 +129,7 @@ async function ensureEmptyDb(): Promise<void> {
  *              Runs once on plugin load (before any request); warns on failure, never blocks boot.
  */
 export default defineNitroPlugin(() => {
-  // fire-and-forget：确保初始化先于请求完成（失败仅记录）
+  // fire-and-forget：确保初始化先于请求完成（失败仅记录）· fire-and-forget so init completes before requests (failures are only logged)
   void ensureEmptyDb().catch((err) => {
     console.warn('[init-db] 启动初始化异常 · boot init error:', err);
   });

@@ -18,41 +18,109 @@ body {
     position: fixed;
     top: 20px;
     right: 20px;
+    z-index: 1000;
+}
+
+.lang-trigger {
     display: flex;
-    gap: 5px;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     border-radius: 50px;
-    padding: 6px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.9);
-    z-index: 1000;
-    transition: all 0.3s ease;
-}
-
-.lang-btn {
-    padding: 8px 20px;
-    border: none;
-    background: transparent;
-    color: #4a5568;
+    color: #4851ad;
+    font-family: inherit;
     font-size: 14px;
     font-weight: 600;
-    border-radius: 50px;
     cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
-.lang-btn:hover {
-    color: #ff6b35;
+.lang-trigger:hover {
+    box-shadow: 0 12px 30px rgba(72, 81, 173, 0.22);
     transform: translateY(-1px);
 }
 
-.lang-btn.active {
+.lang-trigger > .fa-globe {
+    color: #637ec5;
+    font-size: 14px;
+}
+
+.lang-trigger-label {
+    min-width: 44px;
+    text-align: center;
+    line-height: 1;
+}
+
+.lang-trigger-arrow {
+    color: #637ec5;
+    font-size: 11px;
+    transition: transform 0.3s ease;
+}
+
+.language-switcher.open .lang-trigger-arrow {
+    transform: rotate(180deg);
+}
+
+.lang-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    min-width: 172px;
+    margin: 0;
+    padding: 7px;
+    list-style: none;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 18px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+    z-index: 1001;
+}
+
+.lang-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    color: #4a5568;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.lang-option:hover {
+    background: rgba(99, 126, 197, 0.12);
+    color: #4851ad;
+}
+
+.lang-option.active {
     background: linear-gradient(135deg, #4851adb8 0%, #637ec5 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.lang-option-check {
+    font-size: 12px;
+}
+
+/* 下拉展开/收起动效 · dropdown transition */
+.lang-drop-enter-active,
+.lang-drop-leave-active {
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: top right;
+}
+
+.lang-drop-enter-from,
+.lang-drop-leave-to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
 }
 
 .hero-section {
@@ -669,11 +737,6 @@ body {
 
 /* 许愿墙点赞为静态展示，无悬停/点击交互反馈 */
 
-.wish-card-time {
-    font-size: 12px;
-    color: #999;
-}
-
 .wish-empty {
     text-align: center;
     padding: 60px 20px;
@@ -1134,6 +1197,47 @@ body {
 .timeline-content:hover {
     transform: translateY(-5px);
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+}
+
+/* ==================== 演唱会热度标记（点赞前三，跟在歌手名后）· Hot badge ==================== */
+.concert-hot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-left: 10px;
+    vertical-align: middle;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    color: #ff6b35;
+    background: radial-gradient(circle at 50% 35%, rgba(255, 193, 7, 0.45), rgba(255, 87, 34, 0.18));
+    border: 1px solid rgba(255, 111, 0, 0.35);
+    font-size: 1.15rem;
+    box-shadow: 0 0 14px rgba(255, 111, 0, 0.4);
+    animation: concert-hot-pulse 1.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.concert-hot i {
+    filter: drop-shadow(0 0 5px rgba(255, 111, 0, 0.75));
+}
+
+@keyframes concert-hot-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 111, 0, 0.3);
+    }
+    50% {
+        transform: scale(1.12);
+        box-shadow: 0 0 18px rgba(255, 111, 0, 0.6);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .concert-hot {
+        animation: none;
+    }
 }
 
 .timeline-item:nth-child(odd) .timeline-content::after {
@@ -1626,12 +1730,16 @@ body {
     .language-switcher {
         top: 15px;
         right: 15px;
-        padding: 5px;
     }
 
-    .lang-btn {
-        padding: 6px 16px;
+    .lang-trigger {
+        padding: 8px 14px;
+        gap: 7px;
         font-size: 13px;
+    }
+
+    .lang-menu {
+        min-width: 158px;
     }
 
     /* 英雄区域 - 减少内边距 */
@@ -2168,6 +2276,60 @@ body {
     justify-content: center;
 }
 
+/* ==================== 爱心点赞按钮（图标在上、计数在下）· Like button ==================== */
+.like-btn {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 38px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #8a8fa3;
+    border: 1px solid rgba(72, 81, 173, 0.2);
+    border-radius: 12px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.like-btn i {
+    font-size: 15px;
+    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.25s ease;
+}
+
+.like-btn .like-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6a7fc5;
+}
+
+.like-btn:hover {
+    transform: translateY(-2px);
+    border-color: rgba(231, 76, 60, 0.45);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.18);
+}
+
+.like-btn:hover i {
+    transform: scale(1.15);
+    color: #e74c3c;
+}
+
+.like-btn.liked {
+    background: rgba(231, 76, 60, 0.12);
+    border-color: rgba(231, 76, 60, 0.5);
+}
+
+.like-btn.liked i {
+    color: #e74c3c;
+}
+
+.like-btn:active i {
+    transform: scale(0.9);
+}
+
 /* ==================== 视频按钮样式 ==================== */
 .video-btn {
     background: linear-gradient(45deg, #8c9ed9, #ff8e8e);
@@ -2384,6 +2546,26 @@ body {
     .songlist-btn {
         padding: 5px 10px;
         font-size: 11px;
+    }
+
+    .like-btn {
+        min-width: 34px;
+        padding: 3px 6px;
+    }
+
+    .like-btn i {
+        font-size: 13px;
+    }
+
+    .like-btn .like-count {
+        font-size: 10px;
+    }
+
+    .concert-hot {
+        width: 30px;
+        height: 30px;
+        margin-left: 8px;
+        font-size: 0.95rem;
     }
 }
 

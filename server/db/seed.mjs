@@ -52,7 +52,7 @@ async function createSchema(client) {
   await client.execute('PRAGMA foreign_keys = OFF;');
 
   // 先删子表（引用外键的表）· drop child tables first (those holding FKs)
-  for (const t of ['concert_songlist', 'concert_images', 'concert_tags']) {
+  for (const t of ['concert_likes', 'concert_songlist', 'concert_images', 'concert_tags']) {
     await client.execute(`DROP TABLE IF EXISTS ${t};`);
   }
   // 再删主表· then drop parent tables
@@ -117,7 +117,7 @@ async function main() {
   await createSchema(client);
 
   // 校验空表· verify empty tables
-  const tables = ['concerts', 'concert_tags', 'concert_images', 'concert_songlist', 'cities', 'wishes'];
+  const tables = ['concerts', 'concert_likes', 'concert_tags', 'concert_images', 'concert_songlist', 'cities', 'wishes'];
   const counts = {};
   for (const t of tables) {
     const r = await client.execute(`SELECT COUNT(*) AS n FROM ${t}`);

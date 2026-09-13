@@ -26,7 +26,7 @@ export function useTimeline() {
    */
   const visibleIds = useSharedState<Record<number, boolean>>('timeline:visibleIds', () => ({}))
 
-  // 与原版一致：按 id 降序排序（最新的在前）
+  // 与原版一致：按 id 降序排序（最新的在前）· same as original: sort by id desc (newest first)
   const sortedConcerts = computed(() =>
     [...localizedConcerts.value].sort((a, b) => b.id - a.id)
   )

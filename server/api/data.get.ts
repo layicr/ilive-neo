@@ -1,77 +1,134 @@
 /**
- * GET /api/data · 全量双语数据（单端点一次拉取）· All bilingual data in one request
+ * GET /api/data · 聚合端点（多语言）
  *
- * @description 合并 concerts/cities/wishes/stats 为单端点，前端（含 SSR 预取）一次拉取即可。
- *              城市场次数复用同一份 concerts 计算，消除原多端点重复全量查询。
- * @returns { concerts, cities, wishes, stats }
+ * @description 返回演唱会 / 城市 / 许愿的多语言数据（LocalizedConcert / LocalizedCity / LocalizedWish），
+ *              前端按当前 locale 本地化。支持可选 `?lang=` 直接返回单语言本地化结果（便于爬虫 / 分享 / SEO）。
+ *              回退链由前端 pickLocale 保证：未翻译语言回退到 zh。
  *
- * 缓存：生产环境用 Nitro SWR 缓存（defineCachedEventHandler）。
- *      数据基本静态（仅许愿墙会变），缓存可省去每次请求 4 次全表查询 + 93KB 序列化；
- *      dev 下不缓存，避免改数据不刷新。
+ *              点赞：每场演唱会的 `likes`（总数）与 `liked`（当前请求 IP 是否点赞）一并返回。
+ *              为避免「共享缓存串用户」，分两层：
+ *                · 内层 buildShared —— 只产出与请求者无关的共享数据（含点赞计数），生产环境做 1 小时 SWR 缓存；
+ *                · 外层 export —— 非缓存，拿到共享数据后按当前 IP 合并 `liked` 再返回。
+ *              生产环境启用 Nitro SWR 缓存（仅共享层）。
+ *
+ *              GET /api/data aggregation (multi-locale). Returns multi-locale concerts/cities/wishes for
+ *              the client to localize, or single-locale results when `?lang=` is given (crawler/share/SEO).
+ *              Likes are split into two layers to avoid cross-user cache leakage: the inner `buildShared`
+ *              emits only request-agnostic data (with like counts, 1h SWR in production); the outer
+ *              export (uncached) merges `liked` for the current IP before returning.
  */
-import { getTursoClient } from '../lib/turso';
-import { fetchAllConcerts, computeCityConcertCounts, type CityRow } from '../lib/mappers';
+import { getTursoClient } from '../lib/turso'
+import {
+  fetchAllConcerts,
+  fetchSiteSeo,
+  fetchFriendLinks,
+  fetchLikeCounts,
+  fetchLikedConcertIds,
+  getClientIp,
+  parseI18n,
+  LOCALES
+} from '../lib/mappers'
+import type { CityRow } from '../lib/mappers'
+import { localizeConcert, localizeCity, localizeWish, computeCityConcertCounts } from '../../app/utils'
+import type { Locale, LocalizedCity, LocalizedWish, AppData, ApiResponse } from '../../app/types'
 
-/** 许愿行 · wish row */
-interface WishRow {
-  id: number;
-  content_zh: string;
-  content_en: string;
-  time: string;
-  likes: number | null;
-  liked: number | null;
-}
+const buildShared = defineEventHandler(async (event) => {
+  const client = getTursoClient()
 
-const buildData = defineEventHandler(async () => {
-  const client = getTursoClient();
-  const concerts = await fetchAllConcerts(client);
+  // SEO 设置、友情链接、点赞计数与业务数据并行取回，并入同一响应体（不新增 API 端点、不增加请求数）
+  // Fetch SEO settings, friend links, like counts and business data in parallel and merge them into one response body (no extra endpoints, no extra requests)
+  const [concertRowsRaw, cityRows, wishRows, seo, friendLinks, likeCounts] = await Promise.all([
+    fetchAllConcerts(client),
+    client.execute('SELECT id, country_i18n, name_i18n, seq, icon FROM cities ORDER BY seq'),
+    client.execute('SELECT id, content_i18n, likes, liked FROM wishes ORDER BY id DESC'),
+    fetchSiteSeo(client),
+    fetchFriendLinks(client),
+    fetchLikeCounts(client)
+  ])
 
-  // 统计信息 · Statistics
-  const totalConcerts = concerts.length;
-  const totalArtists = new Set(concerts.map(c => c.artist.zh)).size;
+  // 装配点赞计数；liked 为「按请求 IP」字段，此处固定 false，由外层非缓存 handler 合并（缓存不得携带个人状态）
+  // Attach like counts; `liked` is a per-request-IP field, kept false here and merged by the outer uncached handler (the cache must not carry personal state)
+  const concertRows = concertRowsRaw.map((c) => ({ ...c, likes: likeCounts.get(c.id) ?? 0, liked: false }))
 
-  const cityRows = (await client.execute(
-    'SELECT id, country_zh, country_en, name_zh, name_en, icon FROM cities ORDER BY id ASC'
-  )).rows as unknown as CityRow[];
-  const counts = computeCityConcertCounts(concerts, cityRows);
+  const cities: LocalizedCity[] = (cityRows.rows as unknown as CityRow[]).map((c) => ({
+    id: c.id,
+    name: parseI18n(c.name_i18n),
+    seq: c.seq ?? 0,
+    icon: c.icon ?? null
+  }))
 
-  const wishRows = (await client.execute(
-    'SELECT id, content_zh, content_en, time, likes, liked FROM wishes ORDER BY id ASC'
-  )).rows as unknown as WishRow[];
+  const wishes: LocalizedWish[] = (wishRows.rows as unknown as any[]).map((w) => ({
+    id: w.id,
+    content: parseI18n(w.content_i18n),
+    likes: Number(w.likes ?? 0),
+    liked: Boolean(w.liked)
+  }))
 
-  return {
-    concerts,
-    cities: cityRows.map(city => ({
-      id: city.id,
-      name: {
-        zh: city.name_zh,
-        en: city.name_en
-      },
-      icon: city.icon ?? null,
-      concerts: counts[city.id] ?? 0
-    })),
-    wishes: wishRows.map(row => ({
-      id: row.id,
-      content: {
-        zh: row.content_zh,
-        en: row.content_en
-      },
-      time: row.time,
-      likes: row.likes ?? 0,
-      liked: row.liked ?? 0
-    })),
-    stats: {
-      totalConcerts,
-      totalArtists,
-      totalCities: cityRows.length
-    }
-  };
-});
+  const stats = {
+    totalConcerts: concertRows.length,
+    totalArtists: new Set(concertRows.map((c) => c.artist['zh-CN'])).size,
+    totalCities: cities.length,
+    totalWishes: wishes.length
+  }
 
-export default import.meta.dev
-  ? buildData
-  : defineCachedEventHandler(buildData, {
+  const counts = computeCityConcertCounts(concertRows, cities)
+
+  // 可选：?lang= 直接本地化为单语言结果（便于爬虫 / SEO）· optional ?lang localization
+  const langParam = (getQuery(event).lang as string | undefined) ?? ''
+  const locale: Locale | null = (LOCALES as string[]).includes(langParam) ? (langParam as Locale) : null
+
+  let concertsOut: unknown[] = concertRows
+  let citiesOut: unknown[] = cities.map((c) => ({ ...c, concertCount: counts[c.id] ?? 0 }))
+  let wishesOut: unknown[] = wishes
+
+  if (locale) {
+    concertsOut = concertRows.map((c) => localizeConcert(c, locale))
+    citiesOut = cities.map((c) => ({ ...localizeCity(c, locale), concertCount: counts[c.id] ?? 0 }))
+    wishesOut = wishes.map((w) => localizeWish(w, locale))
+  }
+
+  const data = {
+    concerts: concertsOut,
+    cities: citiesOut,
+    wishes: wishesOut,
+    stats,
+    seo,
+    friendLinks,
+    locale,
+    generatedAt: new Date().toISOString()
+  } as unknown as AppData
+
+  return { data, generatedAt: data.generatedAt } as ApiResponse
+})
+
+/** 共享层（可按 URL 缓存；不含任何按 IP 的个人状态）· shared, cacheable layer */
+const cachedShared = import.meta.dev
+  ? buildShared
+  : defineCachedEventHandler(buildShared, {
       maxAge: 60 * 60,
       swr: true,
-      name: 'api-data'
-    });
+      name: 'all-data'
+    })
+
+/**
+ * 外层：非缓存，按当前请求 IP 合并 `liked` 后返回
+ * @description 必须每次执行，否则会把某个访问者的已点赞状态缓存并返回给其他人。
+ *              Outer, uncached: merges `liked` for the current request IP before returning.
+ *              Must run on every request, otherwise one visitor's liked state could be cached and
+ *              served to others.
+ */
+export default defineEventHandler(async (event) => {
+  const shared = (await cachedShared(event)) as ApiResponse
+  const ip = getClientIp(event)
+  const likedIds = await fetchLikedConcertIds(getTursoClient(), ip)
+
+  const concerts = (shared.data.concerts as unknown as { id: number }[]).map((c) => ({
+    ...c,
+    liked: likedIds.has(Number(c.id))
+  }))
+
+  return {
+    data: { ...shared.data, concerts },
+    generatedAt: shared.generatedAt
+  } as ApiResponse
+})
