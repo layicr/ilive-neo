@@ -15,11 +15,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '~': fileURLToPath(new URL('app/', import.meta.url)),
-      '@': fileURLToPath(new URL('app/', import.meta.url))
+      '@': fileURLToPath(new URL('app/', import.meta.url)),
+      // Nuxt 自动导入的桩（仅测试环境生效，不参与生产构建）· stubs for Nuxt auto-imports (tests only)
+      '#app': fileURLToPath(new URL('test/stubs/nuxt-app.ts', import.meta.url)),
+      '#imports': fileURLToPath(new URL('test/stubs/nuxt-app.ts', import.meta.url))
     }
   },
   test: {
     environment: 'node',
-    include: ['test/unit/**/*.test.ts']
+    include: ['test/unit/**/*.test.ts'],
+    // Nuxt 自动导入（裸标识符 useState/$fetch/useI18n…）的全局桩 · global stubs for Nuxt auto-imports
+    setupFiles: ['test/setup/nuxt-auto-imports.ts']
   }
 })

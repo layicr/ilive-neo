@@ -51,7 +51,7 @@ export default {
 
   feedback: {
     urlTitle: '[Bug Report]',
-    urlBody: 'Description:%0A%0APlease describe the issue you encountered in detail...'
+    urlBody: 'Description:\n\nPlease describe the issue you encountered in detail...'
   },
 
   cityList: {
@@ -68,7 +68,8 @@ export default {
 
   errorMessages: {
     generic: 'Operation failed, please try again later',
-    loadFailed: 'Loading failed, please refresh the page'
+    loadFailed: 'Loading failed, please refresh the page',
+    rateLimited: 'Too many requests, please try again later'
   },
 
   // 故事动态文本：text1 = 第一行，text3 = 第二行（高亮填充）· story texts: text1 = line 1, text3 = line 2 (highlight)

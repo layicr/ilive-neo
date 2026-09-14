@@ -42,12 +42,12 @@ CREATE TABLE IF NOT EXISTS concert_likes (
 -- 按 IP 查询点赞集合 / 统计加速 · speed up per-IP like lookups (liked set, counts)
 CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);
 
--- 演唱会标签 · Concert tags（每行一个标签，i18n 为各语言数组 JSON）
--- Concert tags (one row per tag; i18n is a per-locale array JSON)
+-- 演唱会标签 · Concert tags（每行一个标签，i18n 为「每语言一个值」JSON：值为字符串或字符串数组）
+-- Concert tags (one row per tag; i18n is a per-locale JSON whose value is a string or string array)
 CREATE TABLE IF NOT EXISTS concert_tags (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   concert_id  INTEGER NOT NULL REFERENCES concerts(id) ON DELETE CASCADE,  -- 演唱会编号 · concert id
-  i18n        TEXT NOT NULL,                      -- {"zh":[".."],"en":[".."],...}
+  i18n        TEXT NOT NULL,                      -- {"zh-CN":"..","en":"..","zh-Hant":".."}（值可为字符串或数组；parseTags 两种均兼容）
   seq         INTEGER DEFAULT 0                   -- 排序 · sort order
 );
 

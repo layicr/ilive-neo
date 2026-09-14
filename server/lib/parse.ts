@@ -18,19 +18,57 @@ import type { Locale, LocalizedText, LocalizedTags } from '../../app/types';
 export function parseI18n(json: string | null | undefined): LocalizedText {
   if (!json) return { 'zh-CN': '' };
   try {
-    const obj = JSON.parse(json) as Partial<Record<Locale, string>>;
-    return { 'zh-CN': obj['zh-CN'] ?? '', ...obj };
+    const obj = JSON.parse(json) as unknown;
+    // 脏数据防护：仅接受普通对象（数组 / 标量 / null 一律回退）· only plain objects are accepted
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return { 'zh-CN': '' };
+    const record = obj as Record<string, unknown>;
+    // 仅保留字符串值（null / 数字等脏数据丢弃），并保证基语言 zh-CN 存在
+    // keep string values only (drop null / number noise) and guarantee the base zh-CN key
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (typeof value === 'string') result[key] = value;
+    }
+    result['zh-CN'] = result['zh-CN'] ?? '';
+    return result as LocalizedText;
   } catch {
     return { 'zh-CN': '' };
   }
 }
 
-/** 解析多语言标签列（JSON 数组）· Parse a localized-tags column */
+/**
+ * 解析多语言标签列（JSON 对象；每行一个标签）
+ * · Parse a localized-tags column (JSON object; one tag per row)
+ * @description i18n 列实际存储为「每语言一个字符串」（`{"zh-CN":"摇滚","en":"Rock"}`，一行一标签），
+ *              亦兼容「每语言一个字符串数组」（`{"zh-CN":["摇滚"],"en":["Rock"]}`）。两种形态都归一化为
+ *              `string[]`：字符串 → 单元素数组、数组 → 过滤其中的字符串元素、其它类型丢弃。
+ *              解析失败一律回退空 `zh-CN` 数组，绝不抛错。
+ *              The column stores a string per locale (one tag per row) in practice, while the array form
+ *              is also accepted; both are normalized to `string[]`. On parse failure it falls back to an
+ *              empty `zh-CN` array and never throws.
+ */
 export function parseTags(json: string | null | undefined): LocalizedTags {
   if (!json) return { 'zh-CN': [] };
   try {
-    const obj = JSON.parse(json) as Partial<Record<Locale, string[]>>;
-    return { 'zh-CN': obj['zh-CN'] ?? [], ...obj };
+    const obj = JSON.parse(json) as unknown;
+    // 脏数据防护：仅接受普通对象（数组 / 标量 / null 一律回退空数组）· only plain objects are accepted
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return { 'zh-CN': [] };
+    const record = obj as Record<string, unknown>;
+    // 逐语言归一化：字符串 → 单元素数组；数组 → 仅留字符串元素；其余丢弃
+    // normalize per locale: string → single-element array; array → keep only string items; drop the rest
+    const out: Partial<Record<Locale, string[]>> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (typeof value === 'string') {
+        const v = value.trim();
+        if (v) out[key as Locale] = [v];
+      } else if (Array.isArray(value)) {
+        const arr = value.filter((x): x is string => typeof x === 'string');
+        if (arr.length) out[key as Locale] = arr;
+      }
+    }
+    // 保证基语言 zh-CN 必存在（缺失补空数组，避免中文页回退到其它语言）
+    // guarantee the base zh-CN key (fall back to empty so zh page never falls back to en)
+    out['zh-CN'] = out['zh-CN'] ?? [];
+    return out as LocalizedTags;
   } catch {
     return { 'zh-CN': [] };
   }

@@ -18,11 +18,31 @@ import { pickLocale } from './index'
 export const FRIEND_LINK_ICON_FALLBACK = 'fas fa-globe'
 
 /**
+ * 链接协议白名单净化（渲染前最后一道防线）· Sanitize a link by protocol allow-list
+ * @description 仅放行 `http(s)://` 绝对地址、站内相对路径与页内锚点；`javascript:` / `data:` /
+ *              `vbscript:` / `file:` 以及协议相对 `//host` 一律返回空串（由调用方过滤），
+ *              防止 DB 中的 `friend_links.href` 被写成脚本伪协议后直接落到 `<a href>` 形成点击型 XSS。
+ *              同时剥离空白与控制字符，防 `java\nscript:` 这类混淆绕过。
+ *              Only http(s) absolute URLs, site-relative paths and in-page anchors pass; script-ish
+ *              schemes and protocol-relative URLs are dropped (empty string). Control chars are stripped.
+ */
+export function sanitizeHref(raw: string | null | undefined): string {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+  const stripped = value.replace(/[\u0000-\u0020\u007f]/g, '')
+  if (!stripped) return ''
+  if (/^https?:\/\//i.test(stripped)) return stripped
+  if (/^[#/]/.test(stripped) && !stripped.startsWith('//')) return stripped
+  return ''
+}
+
+/**
  * 单条友情链接本地化（字段级兜底，无内置列表）· Localize one friend link with per-field fallback
- * @description icon 缺失 → 通用图标；title 缺失 → href 本身；description 缺失 → null。
+ * @description icon 缺失 → 通用图标；title 缺失 → href 本身；description 缺失 → null；
+ *              href 走协议白名单，非法协议置空后由 resolveFriendLinks 过滤。
  */
 export function localizeFriendLink(link: LocalizedFriendLink, locale: Locale): FriendLink {
-  const href = (link.href ?? '').trim()
+  const href = sanitizeHref(link.href)
   return {
     href,
     icon: (link.icon ?? '').trim() || FRIEND_LINK_ICON_FALLBACK,

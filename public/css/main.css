@@ -6,12 +6,20 @@
     box-sizing: border-box;
 }
 
+html {
+    /* 说明（真实缺陷修复）：横向溢出必须用 clip 而非 hidden。
+       body 上的 overflow-x: hidden 会传播到视口并使移动端 layout viewport 被内容撑大（shrink-to-fit），
+       表现为整页被缩放、fixed/绝对定位元素坐标漂移（如城市弹窗关闭按钮跑到可视区外，tap 反复失败）。
+       clip 只做裁剪、不建立滚动容器，既不出现横向滚动条，也不会撑大视口。 */
+    overflow-x: clip;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: #fafafa;
     min-height: 100vh;
     position: relative;
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 .language-switcher {

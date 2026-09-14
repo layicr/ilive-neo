@@ -61,13 +61,24 @@ export function safeHtml(html: unknown): unknown {
         return '';
       }
 
-      // 仅 <span> 允许保留 style（过滤 javascript:），其余属性全部丢弃
-      // only <span> may keep style (javascript: filtered); all other attributes are dropped
+      // 仅 <span> 允许保留 style；命中 javascript: / expression() / behavior: / url(javascript:) 一律剥除。
+      // 关键：先对 style 做「数字实体解码」再检测，避免 `&#x6a;avascript:` 之类混淆绕过（历史缺口）。
+      // only <span> may keep style; javascript: / expression() / behavior: / url(javascript:) are rejected.
+      // Numeric entities are decoded before matching so obfuscated payloads are still caught.
       let attrStr = '';
       if (tag === 'span') {
         const styleMatch = attrs.match(/\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
         const styleValue = styleMatch ? (styleMatch[1] ?? styleMatch[2] ?? '') : '';
-        if (styleValue && !/javascript:/i.test(styleValue)) {
+        const decoded = styleValue
+          .replace(/&#x([0-9a-f]{1,6});?/gi, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+          .replace(/&#(\d{1,7});?/g, (_m, dec: string) => String.fromCharCode(Number(dec)))
+          .toLowerCase();
+        const unsafeStyle =
+          /javascript:/.test(decoded) ||
+          /expression\s*\(/.test(decoded) ||
+          /behavior\s*:/.test(decoded) ||
+          /url\s*\(\s*['"]?\s*javascript:/.test(decoded);
+        if (styleValue && !unsafeStyle) {
           attrStr = ` style="${styleValue.replace(/"/g, '&quot;')}"`;
         }
       }

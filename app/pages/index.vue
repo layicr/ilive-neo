@@ -282,7 +282,9 @@ if (import.meta.server) {
 // Locale switch: update document.title, reset story texts, re-apply album layout (templates update with zero extra requests).
 watch(currentLanguage, () => {
   if (typeof document === 'undefined') return
-  document.title = currentData.value.pageTitle
+  // 标题来源与 useHead 保持一致：DB 的 site_title 优先，回退 `pageTitle - siteName`
+  // （修复：此前直接写入 pageTitle，导致客户端切换语言后 <title> 与 SSR 直出的标题不一致）
+  document.title = currentPageTitle.value
   // 对齐原版 initStoriesText：切换语言后重置为第 0 组并重新播放高亮动画 · same as original initStoriesText: reset to group 0 and replay the highlight animation
   storyIndex.value = 0
   if (highlightTimer) clearTimeout(highlightTimer)
@@ -481,13 +483,19 @@ function openVideoLink(url: string): void {
 async function onToggleLike(concert: { id: number }): Promise<void> {
   try {
     await toggleLike(concert.id)
-  } catch (err) {
+  } catch (err: any) {
     // 注意：事件回调中不能调用 handleError —— 其内部 getErrorMessage 会调用 useAppI18n（需 setup 上下文），
     // 在回调里会抛「Must be called at the top of a setup function」。故此处直接取文案并弹 Toast。
     // Note: handleError must NOT be called inside an event callback — its getErrorMessage uses useAppI18n
     // (needs a setup context) and would throw "Must be called at the top of a setup function".
     // So read the copy directly and show the toast here.
-    console.error('[ToggleLike]', err)
+    // 限流：友好提示，不打 console.error（避免惊吓用户）· rate-limited: friendly toast, no scary log
+    if (err?.code === 'rate_limited') {
+      showUserMessage(String(currentData.value.errorMessages.rateLimited ?? ''))
+      return
+    }
+    // 其他错误：仅开发环境记录，并弹通用提示 · other errors: log in dev, show generic toast
+    if (import.meta.dev) console.error('[ToggleLike]', err)
     showUserMessage(String(currentData.value.errorMessages.generic ?? ''))
   }
 }

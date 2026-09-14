@@ -151,6 +151,17 @@ describe('mapConcert — 演唱会行 → 多语言对象映射', () => {
     expect(result.videoUrl).toBe(null)
   })
 
+  it('tags 为「每语言字符串」存储（实际数据形态）时也合并为每语言数组，中文不再回退英文', () => {
+    const tags: TagRow[] = [
+      { concert_id: 1, i18n: T({ 'zh-CN': '摇滚', en: 'Rock' }) },
+      { concert_id: 1, i18n: T({ 'zh-CN': '流行', en: 'Pop' }) }
+    ]
+    const result = mapConcert(buildRow(), tags, [], [])
+    expect(result.tags['zh-CN']).toEqual(['摇滚', '流行'])
+    expect(result.tags.en).toEqual(['Rock', 'Pop'])
+    expect(result.tags['zh-Hant']).toEqual([])
+  })
+
   it('tags 合并多行为「每语言数组」，缺失语言补空数组', () => {
     const tags: TagRow[] = [
       { concert_id: 1, i18n: A({ 'zh-CN': ['摇滚'], en: ['Rock'] }) },

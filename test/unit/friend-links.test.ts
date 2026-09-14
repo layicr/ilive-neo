@@ -175,3 +175,63 @@ describe('UT-13d 多语言取值与字段级回退', () => {
     expect(links[0].icon).toBe(FRIEND_LINK_ICON_FALLBACK)
   })
 })
+
+describe('UT-13e 安全：href 协议白名单（防 javascript: 注入 · 服务端 + 前端双层）', () => {
+  /** 逐条构造 DB 行 · build a link with the given href */
+  const withHref = (href: string) => ({
+    id: 1,
+    href,
+    icon: '',
+    title: { 'zh-CN': '站点' },
+    description: null,
+    seq: 1
+  })
+
+  it('服务端 mapFriendLink：javascript: / data: / vbscript: / file: 一律置空', () => {
+    for (const bad of [
+      'javascript:alert(1)',
+      'JaVaScRiPt:alert(1)',
+      'data:text/html;base64,PHNjcmlwdD4=',
+      'vbscript:msgbox(1)',
+      'file:///C:/Windows/System32/calc.exe'
+    ]) {
+      expect(mapFriendLink(row({ id: 1, href: bad })).href).toBe('')
+    }
+  })
+
+  it('服务端 mapFriendLink：http(s) 与站内相对路径放行', () => {
+    expect(mapFriendLink(row({ id: 1, href: 'https://ok.example.com/a?b=1#c' })).href).toBe(
+      'https://ok.example.com/a?b=1#c'
+    )
+    expect(mapFriendLink(row({ id: 1, href: 'http://ok.example.com' })).href).toBe('http://ok.example.com')
+    expect(mapFriendLink(row({ id: 1, href: '/about' })).href).toBe('/about')
+  })
+
+  it('服务端 mapFriendLink：协议相对 //host 被拒绝（避免跳转到外部站点）', () => {
+    expect(mapFriendLink(row({ id: 1, href: '//evil.example.com/x' })).href).toBe('')
+  })
+
+  it('前端 resolveFriendLinks：非法协议条目被整条过滤，合法条目保留', () => {
+    const links = resolveFriendLinks(
+      [withHref('javascript:alert(1)'), withHref('https://good.example.com'), withHref('data:text/html,x')],
+      'zh-CN'
+    )
+    expect(links).toHaveLength(1)
+    expect(links[0].href).toBe('https://good.example.com')
+  })
+
+  it('前端 localizeFriendLink：控制字符混淆（java\\nscript:）被净化后剔除', () => {
+    expect(localizeFriendLink(withHref('java\nscript:alert(1)') as never, 'zh-CN').href).toBe('')
+    expect(localizeFriendLink(withHref('  javascript:alert(1)\t') as never, 'zh-CN').href).toBe('')
+  })
+
+  it('前端 localizeFriendLink：占位/纯空 href 保持为空（不被误判为相对路径）', () => {
+    expect(localizeFriendLink(withHref('   ') as never, 'zh-CN').href).toBe('')
+    expect(localizeFriendLink(withHref('') as never, 'zh-CN').href).toBe('')
+  })
+
+  it('锚点与站点相对路径仍可用（不误伤正常链接）', () => {
+    expect(localizeFriendLink(withHref('#top') as never, 'zh-CN').href).toBe('#top')
+    expect(localizeFriendLink(withHref('/about') as never, 'zh-CN').href).toBe('/about')
+  })
+})

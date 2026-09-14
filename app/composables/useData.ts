@@ -11,6 +11,13 @@ import { useAppI18n } from './useI18n'
 import type { Concert, City, Wish, LocalizedConcert, LocalizedCity, LocalizedWish, LocalizedFriendLink, Locale, ApiResponse, SiteSeoSettings } from '../types'
 import { localizeConcert, localizeCity, localizeWish, computeCityConcertCounts } from '../utils'
 
+/** 点赞在途标记（按演唱会 id）：防止连点并发重复请求 · in-flight guard per concert id */
+const likeInFlight = new Set<number>()
+/** 点赞冷却（按演唱会 id，记录上次完成时间戳）：连点过快时忽略，避免打满服务端限流（429）· per-id cooldown */
+const likeCooldown = new Map<number, number>()
+/** 同一演唱会两次点赞的最小间隔（毫秒）· minimum gap between toggles for the same concert */
+const LIKE_COOLDOWN_MS = 700
+
 interface UseDataReturn {
   loading: globalThis.Ref<boolean>
   /** 数据是否已就绪（!loading && !error）· data ready flag */
@@ -137,6 +144,12 @@ export function useData(): UseDataReturn {
    * @param id 演唱会编号 · concert id
    */
   async function toggleLike(id: number): Promise<void> {
+    // 防抖：同一演唱会请求在途、或刚完成尚在冷却期，直接忽略本次点击，避免连点打满服务端限流（429）。
+    // Debounce: ignore clicks while a request is in-flight or within the cooldown window.
+    if (likeInFlight.has(id)) return
+    const last = likeCooldown.get(id) ?? 0
+    if (Date.now() - last < LIKE_COOLDOWN_MS) return
+
     const c = concerts.value.find((x) => x.id === id)
     if (!c) return
 
@@ -146,6 +159,7 @@ export function useData(): UseDataReturn {
     // 乐观更新：翻转本用户的覆盖（整体替换以保证响应式）· optimistic flip of the per-user override
     likeOverrides.value = { ...likeOverrides.value, [id]: nextLiked }
 
+    likeInFlight.add(id)
     try {
       const res = await $fetch<{ id: number; likes: number; liked: boolean }>('/api/like', {
         method: 'POST',
@@ -153,12 +167,17 @@ export function useData(): UseDataReturn {
       })
       // 以服务端状态为准校准（只覆盖 liked；likes 始终取服务端实时值）
       likeOverrides.value = { ...likeOverrides.value, [id]: res.liked }
-    } catch (e) {
+    } catch (e: any) {
       // 失败回滚：恢复为服务端原始状态（删除该键，交回服务端值）· rollback to server state
       const rest = { ...likeOverrides.value }
       delete rest[id]
       likeOverrides.value = rest
+      // 标注限流，供调用处展示「操作太频繁」而非通用错误 · mark rate-limit for the caller
+      if (e?.status === 429) e.code = 'rate_limited'
       throw e
+    } finally {
+      likeInFlight.delete(id)
+      likeCooldown.set(id, Date.now())
     }
   }
 

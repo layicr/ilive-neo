@@ -51,7 +51,7 @@ export default {
 
   feedback: {
     urlTitle: '[問題反饋]',
-    urlBody: '問題描述：%0A%0A請在此處詳細描述您遇到的問題...'
+    urlBody: '問題描述：\n\n請在此處詳細描述您遇到的問題...'
   },
 
   cityList: {
@@ -68,7 +68,8 @@ export default {
 
   errorMessages: {
     generic: '操作失敗，請稍後重試',
-    loadFailed: '載入失敗，請重新整理頁面'
+    loadFailed: '載入失敗，請重新整理頁面',
+    rateLimited: '操作太頻繁，請稍後再試'
   },
 
   // 故事動態文字：text1 = 第一行，text3 = 第二行（高亮填充）· story texts: text1 = line 1, text3 = line 2 (highlight)

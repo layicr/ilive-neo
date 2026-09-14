@@ -217,3 +217,38 @@ describe('isConcertLiked — 单场点赞判断（EXISTS 查询）', () => {
     expect(await isConcertLiked(failingClient(), 3, '1.2.3.4')).toBe(false)
   })
 })
+
+/** 未迁移库：concerts 无 likes 冗余列，UPDATE 会抛错 · pre-migration DB, no `likes` column */
+function noLikesColumnClient(): Client {
+  const table = new Set<string>()
+  return {
+    execute: async (q: unknown) => {
+      const sql = typeof q === 'string' ? q : String((q as { sql: string }).sql)
+      const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as (number | string)[]
+
+      if (sql.startsWith('DELETE FROM concert_likes')) {
+        const [concertId, ip] = args
+        const k = `${concertId}::${ip}`
+        const had = table.has(k)
+        if (had) table.delete(k)
+        return { rows: [], rowsAffected: had ? 1 : 0 }
+      }
+      if (sql.startsWith('INSERT OR IGNORE INTO concert_likes')) {
+        const [concertId, ip] = args
+        table.add(`${concertId}::${ip}`)
+        return { rows: [], rowsAffected: 1 }
+      }
+      if (sql.startsWith('UPDATE concerts')) throw new Error('SQLITE_ERROR: no such column: likes')
+      if (sql.includes('COUNT(*)')) return { rows: [{ n: table.size }], rowsAffected: 0 }
+      return { rows: [], rowsAffected: 0 }
+    }
+  } as unknown as Client
+}
+
+describe('冗余计数回退 — concerts.likes 列缺失（未迁移库）', () => {
+  it('UPDATE 抛错时回退实时 COUNT(*)，点赞 / 取消仍正确', async () => {
+    const client = noLikesColumnClient()
+    expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 1, liked: true })
+    expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 0, liked: false })
+  })
+})

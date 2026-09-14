@@ -77,14 +77,7 @@ function closeVideoModal(): void {
   videoModalUrl.value = ''
 }
 
-/** 打开反馈链接 · Open feedback link */
-function openFeedback(): void {
-  const { currentData } = useAppI18n()
-  const url = CONFIG.GITHUB_ISSUES_URL
-  const title = currentData.value.feedback.urlTitle
-  const body = currentData.value.feedback.urlBody
-  window.open(`${url}?title=${title}&body=${body}`, '_blank', 'noopener')
-}
+
 
 /**
  * useNavigation 组合式入口 · Composable entry
@@ -95,6 +88,11 @@ export function useNavigation() {
   const videoModalOpen = getVideoModalOpen()
   const videoModalUrl = getVideoModalUrl()
   const videoModalTitle = getVideoModalTitle()
+  // 反馈按钮由 @click 事件回调触发，回调不在 setup 上下文里，不能在回调内调用 useAppI18n（会抛
+  // 「Must be called at the top of a setup function」）。在 setup 内捕获 currentData，让事件回调通过闭包读取。
+  // The feedback button fires from an @click handler (outside the setup context); capture currentData here
+  // so the handler can read it via closure instead of calling useAppI18n() inside the callback.
+  const { currentData } = useAppI18n()
 
   let stopScrollListener: (() => void) | null = null
 
@@ -106,6 +104,16 @@ export function useNavigation() {
     stopScrollListener?.()
     stopScrollListener = null
   })
+
+  /** 打开反馈链接 · Open feedback link */
+  function openFeedback(): void {
+    const url = CONFIG.GITHUB_ISSUES_URL
+    // 标题/正文含非 ASCII 字符（中文/换行等），必须 encodeURIComponent，否则浏览器会把 URL 视为非法而报错。
+    // Title/body contain non-ASCII chars; encodeURIComponent is required or the browser rejects the URL.
+    const title = encodeURIComponent(currentData.value.feedback.urlTitle)
+    const body = encodeURIComponent(currentData.value.feedback.urlBody)
+    window.open(`${url}?title=${title}&body=${body}`, '_blank', 'noopener')
+  }
 
   return {
     backToTopVisible,

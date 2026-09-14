@@ -51,7 +51,7 @@ export default {
 
   feedback: {
     urlTitle: '[问题反馈]',
-    urlBody: '问题描述：%0A%0A请在此处详细描述您遇到的问题...'
+    urlBody: '问题描述：\n\n请在此处详细描述您遇到的问题...'
   },
 
   cityList: {
@@ -68,7 +68,8 @@ export default {
 
   errorMessages: {
     generic: '操作失败，请稍后重试',
-    loadFailed: '加载失败，请刷新页面'
+    loadFailed: '加载失败，请刷新页面',
+    rateLimited: '操作太频繁，请稍后再试'
   },
 
   // 故事动态文本：text1 = 第一行，text3 = 第二行（高亮填充）· story texts: text1 = line 1, text3 = line 2 (highlight)
