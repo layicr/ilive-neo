@@ -66,6 +66,27 @@ export default {
     emptyMessage: '还没有人许愿，来做第一个许愿的人吧！'
   },
 
+  guestbook: {
+    title: '留言板',
+    nicknamePlaceholder: '昵称',
+    emailPlaceholder: '邮箱',
+    contentPlaceholder: '留下你的足迹与心情，也欢迎在歌曲下与我聊聊',
+    publish: '发布留言',
+    viewCard: '卡片',
+    viewList: '列表',
+    reply: '回复',
+    replyNicknamePlaceholder: '昵称',
+    replyEmailPlaceholder: '邮箱',
+    replyContentPlaceholder: '回复内容',
+    replySubmit: '提交回复',
+    more: '更多',
+    empty: '还没有留言，来做第一个留言的人吧！',
+    prev: '上一页',
+    next: '下一页',
+    required: '昵称、邮箱与内容均需填写完整',
+    invalidEmail: '请输入正确的邮箱地址'
+  },
+
   errorMessages: {
     generic: '操作失败，请稍后重试',
     loadFailed: '加载失败，请刷新页面',

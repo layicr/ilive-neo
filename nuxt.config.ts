@@ -1,7 +1,7 @@
 /**
  * Nuxt 配置 · Nuxt configuration
  *
- * @description 演唱会足迹迁移项目的 Nuxt4 总配置（SSR、runtimeConfig、Head、Tailwind CDN 等）
+ * @description 演唱会足迹迁移项目的 Nuxt4 总配置（SSR、runtimeConfig、Head、PWA、SEO 等）
  *              Nuxt4 config for the concert journey migration (SSR, runtimeConfig, Head, etc.)
  *              Nuxt 4 起 srcDir 默认为 app/：app.vue、pages/、composables/、plugins/、utils/、
  *              locales/、types/ 均位于 app/ 下；server/ 与 public/ 仍位于项目根。

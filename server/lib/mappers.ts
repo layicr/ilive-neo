@@ -19,6 +19,7 @@ export * from './concerts';
 export * from './seo';
 export * from './friendLinks';
 export * from './concertLikes';
+export * from './guestbook';
 
 /** 语言顺序（兼容历史 `import { LOCALES } from './mappers'`）· Locale order re-export */
 export { LOCALES } from './locales';

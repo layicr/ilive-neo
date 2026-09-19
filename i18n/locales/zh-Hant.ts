@@ -66,6 +66,27 @@ export default {
     emptyMessage: '還沒有人許願，來做第一個許願的人吧！'
   },
 
+  guestbook: {
+    title: '留言板',
+    nicknamePlaceholder: '暱稱',
+    emailPlaceholder: '郵箱',
+    contentPlaceholder: '留下你的足跡與心情，也歡迎在歌曲下與我聊聊',
+    publish: '發佈留言',
+    viewCard: '卡片',
+    viewList: '列表',
+    reply: '回覆',
+    replyNicknamePlaceholder: '暱稱',
+    replyEmailPlaceholder: '郵箱',
+    replyContentPlaceholder: '回覆內容',
+    replySubmit: '提交回覆',
+    more: '更多',
+    empty: '還沒有留言，來做第一個留言的人吧！',
+    prev: '上一頁',
+    next: '下一頁',
+    required: '暱稱、郵箱與內容均需填寫完整',
+    invalidEmail: '請輸入正確的郵箱地址'
+  },
+
   errorMessages: {
     generic: '操作失敗，請稍後重試',
     loadFailed: '載入失敗，請重新整理頁面',

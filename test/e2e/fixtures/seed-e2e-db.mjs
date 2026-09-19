@@ -39,6 +39,9 @@ const XSS_NAME = '经典演唱会</script><script>window.__xssJsonLd = 1</script
 const SCHEMA = readFileSync(path.join(projectRoot, 'server/db/schema.sql'), 'utf8')
 
 const BUSINESS_TABLES = [
+  // 留言回复需先于主留言删除（外键）· delete replies before messages (FK)
+  'guestbook_reply',
+  'guestbook',
   'concert_likes',
   'concert_songlist',
   'concert_images',
@@ -231,6 +234,43 @@ async function main() {
     await client.execute({
       sql: 'INSERT INTO friend_links (href, icon, title_i18n, description_i18n, seq, enabled) VALUES (?,?,?,?,?,1)',
       args: [href, icon, title, null, seq]
+    })
+  }
+
+  // 7) 留言板：主留言 + 回复（覆盖「回复超过 3 条折叠 + 更多分页」与 UGC 文本渲染安全）
+  //    · 主留言 1：15 条回复 → 首屏 3 条 + 「更多」每次 +10（3 → 13 → 15）
+  //    · 主留言 2：2 条回复（不超过 3，不出现「更多」）
+  //    · 主留言 3：无回复
+  //    · 主留言 4：内容与回复均含 HTML/脚本载荷（验证前端 {{ }} 文本渲染不执行）
+  const GB_XSS = '<script>window.__xssGb = 1</script>'
+  const GB_REPLY_XSS = '<img src=x onerror="window.__xssGbReply = 1">'
+  const guestbookMessages = [
+    [1, 'Alice', 'alice@example.com', '第一条留言 · 欢迎来到留言板', 'Chrome', 'Windows 10/11', 1, '2026-02-04 10:00:00'],
+    [2, 'Bob', 'bob@example.com', '第二条留言', 'Firefox', 'macOS', 1, '2026-02-03 10:00:00'],
+    [3, 'Carol', 'carol@example.com', '第三条留言（无回复）', null, null, 1, '2026-02-02 10:00:00'],
+    [4, 'Mallory', 'mallory@example.com', GB_XSS, null, null, 1, '2026-02-01 10:00:00']
+  ]
+  for (const [id, nickname, email, content, browser, os, approved, createdAt] of guestbookMessages) {
+    await client.execute({
+      sql: `INSERT INTO guestbook (id, nickname, email, content, browser, os, is_approved, created_at)
+            VALUES (?,?,?,?,?,?,?,?)`,
+      args: [id, nickname, email, content, browser, os, approved, createdAt]
+    })
+  }
+
+  const guestbookReplies = []
+  for (let i = 1; i <= 15; i++) {
+    const mm = String(i).padStart(2, '0')
+    guestbookReplies.push([i, 1, `R${i}`, 'r@example.com', `reply-${mm}`, null, null, 1, `2026-02-04 10:${mm}:00`])
+  }
+  guestbookReplies.push([16, 2, 'R16', null, 'reply-to-2-a', null, null, 1, '2026-02-03 11:00:00'])
+  guestbookReplies.push([17, 2, 'R17', null, 'reply-to-2-b', null, null, 1, '2026-02-03 11:01:00'])
+  guestbookReplies.push([18, 4, 'Mallory', null, GB_REPLY_XSS, null, null, 1, '2026-02-01 11:00:00'])
+  for (const [id, gid, nickname, email, content, browser, os, approved, createdAt] of guestbookReplies) {
+    await client.execute({
+      sql: `INSERT INTO guestbook_reply (id, guestbook_id, nickname, email, content, browser, os, is_approved, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)`,
+      args: [id, gid, nickname, email, content, browser, os, approved, createdAt]
     })
   }
 

@@ -13,15 +13,15 @@ AIGC:
 
 > Nuxt4 + Turso 演唱会足迹站点的测试体系存档 · 单元测试（Vitest）+ 端到端测试（Playwright，桌面 / 移动双端）。
 
-最后更新：**2026-09-14**
+最后更新：**2026-09-19**
 
 ## 一、目录结构
 
 | 路径 | 说明 |
 |------|------|
-| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **19 文件 / 278 用例** |
+| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **20 文件 / 303 用例** |
 | `unit/*.mjs` | 手工辅助脚本：`verify-seo.mjs` / `dump-head.mjs` / `html-head.mjs`（SSR head 与 SEO 探测）、`seed-test.mjs`（本地测试数据准备） |
-| `e2e/` | 端到端测试源码（`*.spec.ts`，由 Playwright 运行），共 **5 套件 / 46 用例** |
+| `e2e/` | 端到端测试源码（`*.spec.ts`，由 Playwright 运行），共 **6 套件 / 54 用例** |
 | `e2e/helpers.ts` | E2E 公共辅助（首页导航、hydration 等待等） |
 | `e2e/fixtures/e2e-env.ts` | E2E 环境常量（测试库路径 / 端口 / baseURL 单点定义） |
 | `e2e/fixtures/seed-e2e-db.mjs` | E2E 专用 fixture 库种子脚本（幂等、含恶意用例数据） |
@@ -45,7 +45,7 @@ AIGC:
 ## 三、运行方式
 
 ```bash
-# 单元测试（19 文件 / 278 用例）
+# 单元测试（20 文件 / 303 用例）
 npm test
 npm run test:watch            # 监听模式
 
@@ -78,15 +78,16 @@ E2E_PORT=3000 npx playwright test                # Bash
 
 ## 五、覆盖范围
 
-**单元 / 功能 / 安全（`unit/`，19 文件 278 用例）**：`safeHtml`（含 XSS 绕过专项：实体编码混淆、`expression()` / `behavior:`、事件属性丢弃、幂等性）、`localize`、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、`seo-utils`、`seo-settings`、`i18n`、`config`、`formatWishDate` / `formatWishTime`、`composables`（useSharedState / useAppError / useNavigation / useFriendLink / useMusic）、`useData`、`useAppI18n`。
+**单元 / 功能 / 安全（`unit/`，20 文件 303 用例）**：`safeHtml`（含 XSS 绕过专项：实体编码混淆、`expression()` / `behavior:`、事件属性丢弃、幂等性）、`localize`、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`guestbook`（留言 / 回复读写、父留言校验、IN 批量取回复、可选邮箱与 UGC 原样存储、UA 解析）、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、`seo-utils`、`seo-settings`、`i18n`、`config`、`formatWishDate` / `formatWishTime`、`composables`（useSharedState / useAppError / useNavigation / useFriendLink / useMusic）、`useData`、`useAppI18n`。
 
-**端到端（`e2e/`，5 套件 46 用例）**：
+**端到端（`e2e/`，6 套件 54 用例）**：
 
 | 套件 | 用例数 | 主要覆盖 |
 |------|--------|----------|
 | `ui-structure.spec.ts` | 10 | hero / 相册 / 时间轴结构、静态资源 200、语言下拉与音乐按钮行为 |
 | `i18n-seo.spec.ts` | 8 | 多语言路由、SEO head 实渲染（title / canonical / hreflang / og:locale）、语言切换 |
 | `ue-interaction.spec.ts` | 11 | 加载态、点赞（防连点 / 持久化 / 取消）、模态与筛选、运行期无 console error |
+| `guestbook.spec.ts` | 8 | 留言板结构、回复折叠「更多」分页（3→13→15）、回复表单邮箱与表情、邮箱校验、UGC 文本渲染安全 |
 | `security.spec.ts` | 9 | XSS 载荷真实渲染不执行、外链 rel 与伪协议白名单、API 非法参数、静态目录暴露面 |
 | `mobile-responsive.spec.ts` | 8 | 移动视口与触摸、横向溢出、触摸交互（Pixel 5 六条 + iPhone 12 两条） |
 

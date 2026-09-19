@@ -216,6 +216,21 @@
 
 > 端到端对应：`POST /api/like` 与 `/api/data` 的 `likes` / `liked`，见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
 
+## UT-15 留言板 — 读写模块（已自动化）
+
+> 被测对象：`server/lib/guestbook.ts`（`createGuestbookMessage` / `createGuestbookReply` /
+> `fetchGuestbookMessages`）与 `server/lib/ua.ts`（`parseUserAgent`），用内存 Client 桩执行。
+> 已落地为 `test/unit/guestbook.test.ts`（17 例）。
+
+| 分组 | 断言 |
+|------|------|
+| 主留言写入 | 提交即 `is_approved=1`（自动通过）并回显自增 id；UGC 原样落库（含 HTML 不转义，转义交前端 `{{ }}` 负责） |
+| 回复写入 | 校验父留言存在且已通过，否则返回 `null`（不存在 / 未通过均拒绝，避免孤立回复）；邮箱为可选字段（提供则写入 `guestbook_reply.email`，缺省为 null） |
+| 读取 | 仅返回 `is_approved=1` 的主留言与回复；按 `created_at DESC, id DESC` 分页；本页回复用一条 `IN (...)` 批量取回（无 N+1） |
+| UA 解析 | 浏览器判定（Edge 优先于 Chrome / Firefox / Safari）；系统判定（Windows 10-11 / macOS / Android / iOS / Linux）；空 / 缺失 UA → `Unknown` |
+
+> 端到端对应：`test/e2e/guestbook.spec.ts`（留言板结构、回复折叠「更多」分页、回复表单邮箱与表情、邮箱校验 `novalidate`、UGC 文本渲染安全），见 `test/ui-tests.md` 的 UI-049 ~ UI-056。
+
 ---
 
 ## 运行方式（已接入 vitest）
@@ -250,3 +265,4 @@ npm run test:watch # 监听模式
 - **UT-12 SEO 参数数据库化 / 回退链**：已自动化 → `test/unit/seo-settings.test.ts`（15 例，`fetchSiteSeo` DB 优先 + 空库 / 单行缺失 / 字段空值 / 查询失败的回退链 + 多语言取值 + canonical 语言前缀）。端到端对应见 `test/ui-tests.md` 的 UI-041 ~ UI-044。
 - **UT-13 友情链接**：已自动化 → `test/unit/friend-links.test.ts`（17 例，DB 优先 + 空库/查询失败回退 + 多语言取值 + 字段级兜底）。
 - **UT-14 演唱会点赞**：已自动化 → `test/unit/concertLikes.test.ts`（11 例，IP 归一化 + 点赞/取消切换 + 计数聚合 + 表缺失容错）。端到端对应见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
+- **UT-15 留言板**：已自动化 → `test/unit/guestbook.test.ts`（17 例，主留言自动通过 + UGC 原样落库 + 回复父留言校验 + 可选邮箱 + `IN (...)` 批量取回复 + UA 解析）。端到端对应见 `test/e2e/guestbook.spec.ts` 与 `test/ui-tests.md` 的 UI-049 ~ UI-056。

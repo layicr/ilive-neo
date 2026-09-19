@@ -25,7 +25,7 @@
  */
 
 import type { Client } from '@libsql/client';
-import { getRequestIP, type H3Event } from 'h3';
+import { getRequestHeader, getRequestIP, type H3Event } from 'h3';
 
 /** 点赞切换结果 · Result of toggling a like */
 export interface LikeToggleResult {
@@ -49,20 +49,33 @@ export function resolveClientIp(raw: string | null | undefined): string {
 
 /**
  * 从请求取得「归一化」客户端 IP · Resolve & normalize the client IP from the request
- * @description 安全要点（修复直接采信 `X-Forwarded-For` 最左值可被伪造的问题）：
- *              · 仅当 `NUXT_TRUST_PROXY=true`（部署在可信反代 / CDN 后，且反代**覆写** XFF 为真实客户端 IP）时，
- *                才通过 `getRequestIP(event, { xForwardedFor: true })` 采信 `X-Forwarded-For`；
- *              · 否则（默认，含直连部署）使用 TCP 对端 socket 地址（`req.socket.remoteAddress`），客户端无法伪造。
- *              旧写法 `getRequestIP(event, { xForwardedFor: true })` 无条件读取最左 XFF，直连部署下会被随意伪造 IP，
- *              进而无限刷赞 / 污染「热门前三」判定，故已移除。
+ * @description 安全要点（递进信任链）：
+ *              · 部署在 Vercel（`VERCEL=1`）时，优先取平台注入的 `x-vercel-forwarded-for`
+ *                （单一真实客户端 IP，由平台覆写、客户端无法伪造）；并把 XFF 纳入信任，
+ *                以 `getRequestIP({ xForwardedFor:true })` 取最左 XFF 作为兜底。
+ *              · 其它可信反代 / CDN（Cloudflare、nginx）后，仅当显式 `NUXT_TRUST_PROXY=true`
+ *                （且反代**覆写** XFF 为真实客户端 IP）时才采信 XFF；
+ *              · 否则（默认，含直连部署）使用 TCP 对端 socket 地址，客户端无法伪造。
+ *              旧写法 `getRequestIP(event, { xForwardedFor: true })` 无条件读取最左 XFF，
+ *              直连部署下会被随意伪造 IP，进而无限刷赞 / 污染判定，故已移除。
+ *
+ *              Trust chain (defense in depth): on Vercel prefer the platform-injected
+ *              x-vercel-forwarded-for (single, unspoofable client IP); elsewhere only trust
+ *              X-Forwarded-For behind an explicit NUXT_TRUST_PROXY; otherwise the socket address.
  *
  * @param event Nitro 事件 · Nitro event
  */
 export function getClientIp(event: H3Event): string {
-  // 仅显式声明「在可信反代后」才采信 XFF；否则用不可伪造的 socket 地址。
-  // Trust X-Forwarded-For only when explicitly behind a trusted proxy; else use the socket address.
-  const trustProxy = process.env.NUXT_TRUST_PROXY === 'true';
-  return resolveClientIp(getRequestIP(event, { xForwardedFor: trustProxy }));
+  // Vercel 平台：优先用平台覆写的 x-vercel-forwarded-for（单值真实客户端 IP，最可信）
+  // Vercel: prefer the platform-overwritten x-vercel-forwarded-for (single, trusted client IP)
+  if (process.env.VERCEL === '1') {
+    const vff = getRequestHeader(event, 'x-vercel-forwarded-for')
+    if (vff) return resolveClientIp(String(vff).split(',')[0])
+  }
+  // 仅显式声明「在可信反代后」或在 Vercel 上时，才采信 XFF；否则用不可伪造的 socket 地址。
+  // Trust X-Forwarded-For only behind a trusted proxy (NUXT_TRUST_PROXY) or on Vercel; else the socket address.
+  const trustProxy = process.env.NUXT_TRUST_PROXY === 'true' || process.env.VERCEL === '1'
+  return resolveClientIp(getRequestIP(event, { xForwardedFor: trustProxy }))
 }
 
 /**

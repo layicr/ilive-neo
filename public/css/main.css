@@ -758,6 +758,421 @@ body {
     }
 }
 
+/* ==================== Guestbook · 留言板 ==================== */
+.guestbook-section {
+    padding: 80px 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.gb-header {
+    text-align: left;
+    margin-bottom: 30px;
+}
+
+.gb-title {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #4851AD 0%, #FF6B35 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: inline-block;
+}
+
+.gb-title::before {
+    content: '✨';
+    -webkit-text-fill-color: initial;
+    margin-right: 8px;
+}
+
+/* 提交卡片 · submit card */
+.gb-submit-card {
+    background: transparent;
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.gb-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.gb-input {
+    flex: 1;
+    min-width: 140px;
+    border: 1px solid #d98a44;
+    border-radius: 999px;
+    padding: 12px 16px;
+    background: #fff;
+    color: #3a2a1b;
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+}
+
+.gb-input:focus {
+    border-color: #b06a2c;
+    box-shadow: 0 0 0 2px rgba(217, 138, 68, 0.2);
+}
+
+/* 覆盖浏览器自动填充的黄色底色 · override browser autofill yellow background */
+.gb-input:-webkit-autofill,
+.gb-input:-webkit-autofill:hover,
+.gb-input:-webkit-autofill:focus,
+.gb-input-sm:-webkit-autofill,
+.gb-input-sm:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset;
+    box-shadow: 0 0 0 1000px #fff inset;
+    -webkit-text-fill-color: #3a2a1b;
+    caret-color: #3a2a1b;
+}
+
+.gb-input-content {
+    flex: 3;
+}
+
+.gb-emoji-btn {
+    border: none;
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    background: #fff;
+    cursor: pointer;
+    padding: 0;
+}
+
+.gb-btn {
+    border: none;
+    border-radius: 999px;
+    padding: 12px 22px;
+    background: #7c4620;
+    color: #fff;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background 0.2s ease, transform 0.2s ease;
+    font-family: inherit;
+}
+
+.gb-btn:hover {
+    background: #633718;
+}
+
+.gb-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.gb-btn-ghost {
+    background: transparent;
+    color: #d98a44;
+    border: 1px solid #d98a44;
+}
+
+.gb-btn-ghost:hover {
+    background: #f3d9bc;
+}
+
+.gb-btn-sm {
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 999px;
+}
+
+.gb-emoji-panel {
+    width: 100%;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 12px;
+    display: none;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gb-emoji-panel.show {
+    display: flex;
+}
+
+.gb-emoji-item {
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.gb-emoji-item:hover {
+    background: #f3d9bc;
+}
+
+.gb-form-error {
+    margin-top: 12px;
+    color: #fff;
+    background: rgba(176, 0, 32, 0.85);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.gb-form-error--inline {
+    margin-top: 8px;
+}
+
+/* 工具栏 · toolbar */
+.gb-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 24px;
+}
+
+.gb-view-switch {
+    display: inline-flex;
+    background: #fff;
+    border: 1px solid #f1e3d0;
+    border-radius: 999px;
+    padding: 4px;
+}
+
+.gb-view-switch button {
+    border: none;
+    background: transparent;
+    padding: 8px 20px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: #8a7a68;
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.gb-view-switch button.active {
+    background: #d98a44;
+    color: #fff;
+}
+
+/* 状态 · status */
+.gb-status {
+    text-align: center;
+    color: #8a7a68;
+    padding: 40px 0;
+    font-size: 15px;
+}
+
+.gb-status-error {
+    color: #b00020;
+}
+
+.gb-empty {
+    text-align: center;
+    color: #8a7a68;
+    padding: 40px 0;
+    font-size: 16px;
+}
+
+/* 卡片墙 · card wall */
+.gb-card-wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 24px;
+}
+
+.gb-message-card {
+    background: linear-gradient(145deg, #ffffff 0%, #fdf6ec 100%);
+    border: 1px solid #f1e3d0;
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 10px 24px rgba(195, 134, 74, 0.14), 0 2px 6px rgba(195, 134, 74, 0.08);
+    transform: rotate(var(--r, 0deg));
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+}
+
+.gb-message-card::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 16px;
+    width: 42px;
+    height: 14px;
+    background: rgba(232, 180, 122, 0.45);
+    border-radius: 2px;
+    opacity: 0.6;
+}
+
+.gb-card-wall .gb-message-card:nth-child(3n) {
+    --r: -1.1deg;
+}
+
+.gb-card-wall .gb-message-card:nth-child(3n + 1) {
+    --r: 0.9deg;
+}
+
+.gb-card-wall .gb-message-card:nth-child(3n + 2) {
+    --r: -0.7deg;
+}
+
+.gb-message-card:hover {
+    transform: rotate(0) translateY(-6px);
+    box-shadow: 0 18px 36px rgba(195, 134, 74, 0.22), 0 6px 14px rgba(195, 134, 74, 0.12);
+}
+
+.gb-message-text {
+    font-size: 17px;
+    line-height: 1.7;
+    margin-bottom: 12px;
+    font-weight: 500;
+    color: #3a2a1b;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.gb-message-meta {
+    font-size: 12px;
+    color: #8a7a68;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.gb-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* 回复 · replies */
+.gb-reply-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gb-reply-more {
+    align-self: flex-start;
+}
+
+.gb-reply-item {
+    background: #fff8ee;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    border-left: 2px solid #d98a44;
+}
+
+.gb-reply-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #3a2a1b;
+}
+
+.gb-reply-meta {
+    font-size: 11px;
+    color: #8a7a68;
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.gb-reply-form {
+    margin-top: 12px;
+    display: none;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.gb-reply-form.show {
+    display: flex;
+}
+
+.gb-input-sm {
+    flex: 1;
+    min-width: 100px;
+    border-radius: 8px;
+    border: 1px solid #d98a44;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #3a2a1b;
+    background: #fff;
+    outline: none;
+}
+
+.gb-input-sm:focus {
+    border-color: #b06a2c;
+}
+
+/* 列表视图 · list view */
+.gb-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.gb-list-view .gb-message-card {
+    transform: none;
+    border-radius: 14px;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 10px 24px rgba(195, 134, 74, 0.14);
+}
+
+.gb-list-view .gb-message-card::before {
+    display: none;
+}
+
+.gb-list-view .gb-message-text {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+/* 分页 · pagination */
+.gb-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-top: 40px;
+    font-size: 15px;
+    color: #8a7a68;
+}
+
+.gb-page-info {
+    background: #fff;
+    border: 1px solid #f1e3d0;
+    border-radius: 999px;
+    padding: 10px 20px;
+    min-width: 90px;
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .gb-title {
+        font-size: 26px;
+    }
+
+    .gb-form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gb-input,
+    .gb-btn {
+        width: 100%;
+    }
+}
+
 /* Footer */
 .footer {
     padding: 50px 20px;
@@ -1933,10 +2348,6 @@ body {
 }
 
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
 
 
 
@@ -2607,53 +3018,6 @@ body {
     box-shadow: 0 0 30px rgba(72, 81, 173, 0.2);
 }
 
-/* 歌单切换按钮样式 */
-.songlist-nav {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    z-index: 10;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-}
-
-.songlist-nav:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-50%) scale(1.1);
-    border-color: rgba(255, 255, 255, 0.4);
-}
-
-.songlist-nav.disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.songlist-nav.disabled:hover {
-    transform: translateY(-50%);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.songlist-prev {
-    left: -60px;
-}
-
-.songlist-next {
-    right: -60px;
-}
-
 .songlist-modal-header {
     background: linear-gradient(90deg, #4851ad, #637ec5);
     padding: 20px 30px;
@@ -2875,44 +3239,6 @@ body {
         width: 95%;
         max-width: none;
         margin: 10px;
-    }
-    
-    /* 歌单切换按钮移动端适配 */
-    .songlist-nav {
-        width: 44px; /* 移动端最小触摸目标尺寸 */
-        height: 44px;
-        font-size: 20px;
-        top: 15px; /* 放在顶部 */
-        transform: none;
-        border-width: 2px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    }
-    
-    .songlist-nav:active {
-        transform: scale(0.95);
-        background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .songlist-nav:hover {
-        transform: scale(1.05);
-    }
-    
-    .songlist-nav.disabled:hover {
-        transform: none;
-    }
-    
-    .songlist-nav.disabled:active {
-        transform: none;
-    }
-    
-    .songlist-prev {
-        left: 10px;
-        right: auto;
-    }
-    
-    .songlist-next {
-        right: 10px;
-        left: auto;
     }
     
     .songlist-modal-header {
@@ -3372,15 +3698,6 @@ body {
 }
 
 /* 动画定义 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
 @keyframes slideUp {
     from {
         opacity: 0;

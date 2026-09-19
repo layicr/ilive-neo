@@ -38,9 +38,9 @@
 | 多语言 | `@nuxtjs/i18n` v10（3 语言：zh / en / zh-Hant，`strategy: prefix_except_default`，默认 zh 无前缀）|
 | 语言 | TypeScript（`strict` 开启，构建期 `typeCheck: false`）|
 | 动画 | GSAP 3.12.2（CDN）|
-| 样式 | Tailwind CSS（CDN）、Font Awesome 6.4.0（CDN）、`public/css/*.css` |
+| 样式 | `public/css/main.css`（含从 Tailwind CDN 迁移的手写工具类）、Font Awesome 6.4.0（CDN） |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，node 环境，10 文件 / 143 用例）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**20 文件 / 303 用例**）+ Playwright（E2E，**6 套件 / 54 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -48,7 +48,7 @@
 - `@vite-pwa/nuxt`：PWA / Service Worker
 - `@nuxtjs/i18n`（v10）：多语言路由 / SEO / vue-i18n 集成
 - `nuxt`、`vue`、`vue-router`：框架
-- 开发依赖：`vitest`、`typescript`、`@types/node`
+- 开发依赖：`vitest`、`@vue/test-utils`、`happy-dom`、`@nuxt/test-utils`、`@playwright/test`、`playwright`、`typescript`、`@types/node`
 
 ---
 
@@ -74,11 +74,13 @@ ilive_neo/
 │   │   ├── useKeyboard.ts     # 键盘手势
 │   │   ├── useSharedState.ts  # 跨组件共享状态（useState 封装）
 │   │   ├── useFriendLink.ts   # 友情链接
+│   │   ├── useGuestbook.ts    # 留言板（分页列表 / 发布留言 / 发布回复 / 卡片·列表视图）
 │   │   └── useAppError.ts     # 全局错误处理 + Toast
 │   ├── plugins/
 │   │   └── statis.client.ts   # 第三方统计注入（百度/GA/51.la，客户端插件）
-│   ├── types/
-│   │   └── index.ts           # 前端数据类型（Locale / Localized* / Concert / City / Wish / AppData 等）
+│   ├── types/                 # 前端数据类型（i18n / concert / city / wish / friendLink / guestbook / seo）
+│   │   ├── index.ts           # 汇总再导出（Locale / Localized* / Concert / City / Wish / AppData 等）
+│   │   └── guestbook.ts       # 留言板领域模型（GuestbookMessage / GuestbookReply / GuestbookPage）
 │   └── utils/
 │       ├── config.ts          # 全局配置常量 CONFIG
 │       ├── index.ts           # 工具函数（safeHtml / 时间格式化 / pickLocale / localize* / computeCityConcertCounts）
@@ -90,25 +92,39 @@ ilive_neo/
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  海报与现场照片
+│   ├── data/data.db           # 本地 SQLite（开发兜底；线上走远程 Turso）
 │   ├── robots.txt             # 爬虫规则 + sitemap 引用
 │   └── sitemap.xml            # 站点地图（当前仅收录默认语言首页；多语言 hreflang 由页面 useHead 输出）
 ├── server/                    # Nitro 服务端
 │   ├── api/
 │   │   ├── data.get.ts        # GET /api/data（单端点聚合：concerts/cities/wishes/stats/seo/friendLinks + 点赞）
 │   │   ├── like.post.ts       # POST /api/like（演唱会点赞/取消，按 IP 去重）
-│   │   └── concerts/[id].get.ts  # GET /api/concerts/:id（单场详情 + likes/liked）
+│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id（单场详情 + likes/liked）
+│   │   ├── guestbook.get.ts   # GET /api/guestbook（分页读取已通过留言及其回复）
+│   │   ├── guestbook.post.ts  # POST /api/guestbook（发布留言，提交即通过）
+│   │   └── guestbook/reply.post.ts  # POST /api/guestbook/reply（发布回复，校验父留言存在且已通过）
 │   ├── lib/
-│   │   ├── turso.ts           # LibSQL 客户端单例（file:/libsql: 切换；仅点赞接口有写操作）
-│   │   ├── concertLikes.ts    # 点赞读写（计数聚合 / 按 IP 查询 / 切换写入）
-│   │   └── mappers.ts         # DB 行（*_i18n JSON 列）→ 多语言结构映射（parseI18n / mapConcert / fetchAllConcerts）
+│   │   ├── turso.ts           # LibSQL 客户端单例（file:/libsql: 切换）
+│   │   ├── db-config.ts       # 本地 file: 库路径解析（默认 public/data/data.db）
+│   │   ├── mappers.ts         # 数据映射层 barrel（再导出 parse/concerts/seo/friendLinks/concertLikes/guestbook）
+│   │   ├── parse.ts           # i18n JSON 列解析（parseI18n / parseTags / has，绝不抛错）
+│   │   ├── concerts.ts        # 演唱会行类型 + mapConcert / fetchConcert / fetchAllConcerts
+│   │   ├── seo.ts             # SEO_I18N_KEYS / SEO_FALLBACK / fetchSiteSeo（DB 优先 + 代码回退）
+│   │   ├── friendLinks.ts     # 友情链接映射（含 href 协议白名单 sanitizeHref）
+│   │   ├── concertLikes.ts    # 点赞读写 + getClientIp（按 IP 去重、可取消）
+│   │   ├── guestbook.ts       # 留言/回复读写（仅读已通过；回复父留言校验；IN 批量取回复无 N+1）
+│   │   ├── ua.ts              # 服务端 UA 解析（浏览器 / 系统）
+│   │   ├── rateLimit.ts       # 每 IP 内存限流（点赞与留言写接口共用）
+│   │   └── locales.ts         # 语言定义（LOCALES）
 │   ├── plugins/
 │   │   └── init-db.ts         # Nitro 启动时幂等初始化（远程 Turso 跳过）
 │   └── db/
-│       ├── schema.sql         # 表结构（7 张表，可翻译字段为 *_i18n JSON 列）
+│       ├── schema.sql         # 表结构（12 张表，可翻译字段为 *_i18n JSON 列）
 │       └── seed.mjs           # 建空库脚本（DROP + CREATE，不含业务数据）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（safeHtml / 时间格式化 / config / mappers / localize / i18n+SEO）
+│   ├── unit/                  # Vitest 单元测试（20 文件 / 303 用例）
+│   ├── e2e/                   # Playwright 端到端测试（6 套件 / 54 用例，桌面/移动双 project + fixture 库种子）
 │   ├── ui-tests.md            # UI 验收清单（手动 + 自动化）
 │   └── unit-tests.md / README.md
 └── doc/
@@ -133,12 +149,12 @@ app/pages/index.vue (setup)
   ├─ useMusic()           → 背景音乐（onMounted 初始化，跟随语言切换音轨）
   ├─ useGallery()         → 画廊（懒取一次 localizedConcerts，避免重复 useData）
   ├─ useAlbumShowcase()   → 专辑轮播（GSAP）
-  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()
+  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()/useGuestbook()
   ├─ useSeoMeta()         → 页面级动态 title/description/og/twitter（随 locale 切换 + 数据库艺人）
   └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
 
 app/app.vue (setup)
-  └─ useHead + useI18n    → 全站语言相关 SEO：<html lang>、5 语言 hreflang（含 x-default）、
+  └─ useHead + useI18n    → 全站语言相关 SEO：<html lang>、3 语言 hreflang（含 x-default）、
                             og:locale / og:locale:alternate；与语言无关的静态 meta 留在 nuxt.config.ts
 ```
 
@@ -148,7 +164,7 @@ app/app.vue (setup)
 - 语言切换**不重新请求 API**：`localizedConcerts` 等 computed 依赖 `currentLanguage`，切换只重算前端派生值，零网络请求。
 - `app/pages/index.vue` 的 `<script setup>` 承载全部交互逻辑 + 页面级 SEO 动态 meta；全站语言 SEO（`<html lang>` / hreflang / `og:locale`）由 `app/app.vue` 输出，两侧用同名 `key` 合并去重，避免 head 中出现重复 meta。
 
-### 4.2 服务端数据层（单端点）
+### 4.2 服务端数据层
 
 - `GET /api/data`（`server/api/data.get.ts`）：**单端点聚合**，一次返回 `{ concerts, cities, wishes, stats }`。城市场次数复用同一份 concerts 计算（`computeCityConcertCounts`），消除原多端点重复全量查询。
 - `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist: { zh, en, 'zh-Hant' }`、`location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析）；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
@@ -164,10 +180,11 @@ useAsyncData('app-data') → GET /api/data
 localizedConcerts (computed, 按 currentLanguage 选单语言)
 ```
 
+- 留言板（`server/lib/guestbook.ts`）：`guestbook`（主留言）+ `guestbook_reply`（回复）两张表；写入即 `is_approved=1`（自动通过），回复先校验父留言存在且已通过（否则返回 `null` → 接口 404）；读取仅返回已通过内容，本页回复用一条 `IN (...)` 批量取回（无 N+1）。邮箱仅入库、不对外返回；浏览器/系统/IP 由服务端采集（`ua.ts` / `getClientIp`）。
 - `server/lib/turso.ts`：`getTursoClient()` 惰性创建全局单例客户端。根据 `runtimeConfig.turso.databaseUrl` 自动切换：
   - `libsql://xxx.turso.io` → 远程 Turso（生产/线上，需 `NUXT_TURSO_AUTH_TOKEN`）
   - `file:./public/data/data.db` → 本地 SQLite（开发兜底）
-  - 项目 API 全为 SELECT（纯只读），`createClient` 不做 `readOnly` 配置。
+  - 写操作仅限点赞（`/api/like`）与留言板（`/api/guestbook`、`/api/guestbook/reply`），其余为 SELECT；`createClient` 不做 `readOnly` 配置。
 - `server/plugins/init-db.ts`：Nitro 启动时幂等初始化——**仅当本地 `file:` 且 `concerts` 表不存在时**建空表；**远程 Turso 直接跳过**（避免误建本地空库）。
 
 ### 4.3 SEO 动态元信息
@@ -176,7 +193,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 
 - `useSeoMeta` 随 `currentLanguage` 动态输出 title/description/og/twitter。
 - **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
-- `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）+ **hreflang**（5 语言 + `x-default`，与 `app.vue` 用同名 key 合并去重）。
+- `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）+ **hreflang**（3 语言 + `x-default`，与 `app.vue` 用同名 key 合并去重）。
 - JSON-LD 用 `JSON.parse(JSON.stringify(toRaw(...)))` 剥离 Vue 响应式 Proxy，用 `computed` 保证在数据就绪后输出完整演唱会列表。
 
 ---
@@ -194,8 +211,13 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 | `cities` | 城市表（`name_i18n` + `icon`） |
 | `wishes` | 许愿墙（`content_i18n` + `likes` + `liked`） |
 | `concert_likes` | 演唱会点赞（`concert_id` + `ip` + `created_at`，`UNIQUE(concert_id, ip)` 按 IP 去重、可取消） |
+| `friend_links` | 友情链接（`href` + `icon` + `title_i18n` + `description_i18n` + `seq` + `enabled`） |
+| `site_settings` | 站点设置（如 `site_url`，优先于环境变量） |
+| `site_seo_i18n` | 站点 SEO 多语言（`site_title` / `site_description` / `site_keywords` 等） |
+| `guestbook` | 留言板主留言（`nickname` + `email` + `content` + 服务端采集 `browser`/`os`/`user_agent`/`ip` + `is_approved`） |
+| `guestbook_reply` | 留言回复（`guestbook_id` 外键级联删除 + `nickname` + 可选 `email` + `content` + 服务端采集字段 + `is_approved`） |
 
-所有可翻译字段统一为 **`*_i18n` JSON 列**，形如 `{"zh":"…","en":"…","zh-Hant":"…"}`（由 `parseI18n` 解析，`zh` 为基语言，缺失语言在 UI 层回退；历史库若残留 `ja`/`ko` 键不参与展示）。`location` 由 `country/province/city/venue` 四段拆分存储，映射时按 **`国家 · 省 · 市 · 场馆`** 逐语言重组（`mappers.ts` 的 `joinLocation` / `mapLocationDetail`，空段自动省略，不跨语言回退）。
+所有可翻译字段统一为 **`*_i18n` JSON 列**，形如 `{"zh-CN":"…","en":"…","zh-Hant":"…"}`（由 `parseI18n` 解析，`zh-CN` 为基语言，缺失语言在 UI 层回退；历史库若残留 `ja`/`ko` 键不参与展示）。`location` 由 `country/province/city/venue` 四段拆分存储，映射时按 **`国家 · 省 · 市 · 场馆`** 逐语言重组（`mappers.ts` 的 `joinLocation` / `mapLocationDetail`，空段自动省略，不跨语言回退）。
 
 ### 5.2 初始化
 
@@ -205,7 +227,7 @@ npm run db:seed   # 或 npm run db:init（等价）—— 先 DROP 后 CREATE，
 
 `seed.mjs` 会**先 DROP 后 CREATE**（按外键依赖顺序），得到一个空库。业务数据由外部导入（SQL / 工具）写入，脚本本身不填充数据。
 
-库结构变更以 `schema.sql` 为**单一真源**：历史上的一次性迁移脚本（双语列 → `*_i18n` 等）已移除，已有数据库（本地 `data.db` / 生产 Turso，需 `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` 且**具写权限**）按 `schema.sql` 与业务需要对齐即可。唯一保留的迁移脚本是幂等的 `server/db/migrate-likes.mjs`——为 `concerts` 新增 `likes` 冗余列并回填基线（因 `ALTER TABLE` 无 `IF NOT EXISTS`）。
+库结构变更以 `schema.sql` 为**单一真源**：历史上的一次性迁移脚本（双语列 → `*_i18n`、`likes` 冗余列等）已全部移除。已有数据库（本地 `data.db` / 生产 Turso，需 `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` 且**具写权限**）如需对齐新增表（`guestbook` / `guestbook_reply` / `site_settings` / `site_seo_i18n` / `friend_links` 等），直接执行 `schema.sql` 即可（其为 `CREATE TABLE/INDEX IF NOT EXISTS`，幂等可重复执行），无需迁移脚本。
 
 ---
 
@@ -217,6 +239,8 @@ npm run db:seed   # 或 npm run db:init（等价）—— 先 DROP 后 CREATE，
 |------|------|--------|
 | `NUXT_TURSO_DATABASE_URL` | 数据库 URL（`libsql:` 远程 或 `file:` 本地） | `file:./public/data/data.db` |
 | `NUXT_TURSO_AUTH_TOKEN` | 远程 Turso 鉴权 token | 空 |
+| `NUXT_TRUST_PROXY` | 是否信任 `X-Forwarded-For`（**自建**反代 / CDN 前置时设 `true`；Vercel 自动处理，无需设置） | 空（关闭） |
+| `VERCEL` | 由 Vercel 平台**自动注入**（`=1`），用于识别平台并优先取 `x-vercel-forwarded-for` | 平台注入 |
 
 > **关键**：必须用 **`NUXT_` 前缀**，Nuxt 才会在**运行时**覆盖 `runtimeConfig.turso.*`。若用 `TURSO_` 前缀，`nuxt.config.ts` 求值时 `process.env` 可能读不到，导致落回本地 `file:` 默认值。
 
@@ -256,8 +280,9 @@ npm run build      # 生产构建（Nitro，可部署到 Vercel）
 npm run preview    # 预览生产构建
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，10 文件 / 143 用例）
+npm run test       # 运行单元测试（vitest run，20 文件 / 303 用例）
 npm run test:watch # 监听模式运行测试
+npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed fixture 库并启动隔离 dev server）
 ```
 
 ---
@@ -269,8 +294,11 @@ npm run test:watch # 监听模式运行测试
 | GET | `/api/data` | 单端点聚合：演唱会（含 `likes` / `liked`）+ 城市 + 许愿 + 统计 + SEO + 友链；可选 `?lang=<locale>` 直接返回单语言本地化结果，响应含 `locale` 字段（= 请求语言或 null） |
 | GET | `/api/concerts/:id` | 单场详情（含 tags/images/songlist 与 `likes` / `liked`），非法 id 400、未找到 404 |
 | POST | `/api/like` | 演唱会点赞/取消（body `{ id }`，按 IP 去重可反复切换），返回 `{ id, likes, liked }`；非法 id 400、未找到 404 |
+| GET | `/api/guestbook` | 分页读取已通过留言及其已通过回复（`?page=` / `?pageSize=`，默认 9、上限 50） |
+| POST | `/api/guestbook` | 发布留言（body `{ nickname, email, content }`，提交即自动通过），返回 `{ id, ok }`；字段非法/超限 400、超频 429 |
+| POST | `/api/guestbook/reply` | 发布回复（body `{ guestbookId, nickname, content, email? }`，邮箱可选），父留言不存在/未通过 404 |
 
-> 前端调用 `/api/data`、`/api/concerts/:id` 与 `POST /api/like`。
+> 前端调用 `/api/data`、`/api/concerts/:id`、`POST /api/like` 与留言板三接口（`GET /api/guestbook`、`POST /api/guestbook`、`POST /api/guestbook/reply`）。
 > 点赞计数并入 `/api/data`（不新增 GET 请求）；为避免共享缓存把「按 IP 的 liked」串给其他访问者，
 > `/api/data` 拆为「内层缓存共享数据 + 外层按 IP 合并 liked」。
 
@@ -288,11 +316,11 @@ npm run test:watch # 监听模式运行测试
 ### 9.2 静态文件
 
 - `public/robots.txt`：允许所有爬虫，`Disallow: /api/`，引用 sitemap。
-- `public/sitemap.xml`：当前仅收录默认语言首页（`https://ilive.lyc.la/`，含 `zh-CN` 一条 `xhtml:link` 备用链接）。5 语言 hreflang 由 `app/app.vue` 与 `app/pages/index.vue` 在页面 head 中输出，不依赖 sitemap。
+- `public/sitemap.xml`：当前仅收录默认语言首页（`https://ilive.lyc.la/`，含 `zh-CN` 一条 `xhtml:link` 备用链接）。3 语言 hreflang 由 `app/app.vue` 与 `app/pages/index.vue` 在页面 head 中输出，不依赖 sitemap。
 
 ### 9.3 动态元信息（`app/pages/index.vue`）
 
-- `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库艺人动态生成（5 种语言的描述模板见 `app/utils/seo.ts`）。
+- `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库艺人动态生成（3 种语言的描述模板见 `app/utils/seo.ts`）。
 - JSON-LD：WebSite + Person + ItemList + MusicEvent（每场演唱会）。
 - hreflang：`zh-CN` / `en` / `zh-Hant` + `x-default`（默认语言 `zh` 的 href 为 `https://ilive.lyc.la/`，无 `/zh` 前缀）。
 - `<html lang>` 与 `og:locale` / `og:locale:alternate`：由 `app/app.vue` 统一输出（`app/utils/seo.ts` 的 `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` 纯函数）。
@@ -331,6 +359,8 @@ npm run test:watch # 监听模式运行测试
 3. 推送代码，Vercel 执行 `nuxt build` 生成 Nitro serverless 产物。
 4. `public/robots.txt` / `sitemap.xml` 会被 Nitro 打包为静态文件。
 5. 首次部署后访问 `/api/data` 确认返回远程 Turso 数据。
+6. **真实客户端 IP**：Vercel 运行时自动注入 `VERCEL=1`，`getClientIp()` 会优先取平台覆写的 `x-vercel-forwarded-for`（单值、不可伪造），因此点赞去重 / 限流 / 留言板 IP 采集**无需**额外配置 `NUXT_TRUST_PROXY`。
+7. 静态资源压缩：`nitro.compressPublicAssets: true` 已开启，`public/**` 静态资源自动压缩。
 
 ---
 
@@ -341,7 +371,8 @@ npm run test:watch # 监听模式运行测试
 - 所有 `useState`/`useAsyncData` 必须在 composable 函数体内（懒初始化），**禁止模块顶层调用**，否则 SSR 报 `instance unavailable`。
 - **环境变量必须用 `NUXT_` 前缀**；`TURSO_` 前缀在 config 求值阶段可能读不到。
 - **远程 Turso 时 `init-db.ts` 跳过建库**，避免误建本地空库文件。
-- `concert_likes` 已加索引 `idx_concert_likes_ip`（按 `ip` 查询点赞集合/统计加速）。**存量本地库**需在 `schema.sql` 变更后手动执行 `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);`（或重跑 `db:seed --force` 重建）方生效。
+- `concert_likes` 已加索引 `idx_concert_likes_ip`（按 `ip` 查询点赞集合/统计加速）。**存量本地库**需在 `schema.sql` 变更后手动执行 `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);`（或重跑 `npm run db:seed` 破坏性重建）方生效。
+- **留言板为写接口**：`POST /api/guestbook` 与 `POST /api/guestbook/reply` 会写库（提交即 `is_approved=1`），本地 `file:` 模式需保证库文件可写；线上 Turso 需写权限。
 - 前端 `useData` 现按当前语言请求 `/api/data?lang=<locale>`（key 含 locale 分语言缓存），`localizedConcerts/Cities/Wishes` 在「服务端已本地化」时直接透传、否则前端 `localizeConcert`；`counts` 单语言时读服务端预置的 `city.concertCount`（不再前端跨语言重算）。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
 - **token 安全**：`.env` 已加入 `.gitignore`。若 token 曾提交进 git 历史，应立即到 Turso 控制台**更换新 token**。
@@ -355,17 +386,27 @@ npm run test:watch # 监听模式运行测试
 ### 14.1 不可伪造的客户端 IP · Spoof-proof client IP
 
 - **禁止**直接采信 `X-Forwarded-For` 最左值：无条件 `getRequestIP(event, { xForwardedFor: true })` 会读取客户端可随意伪造的 XFF 最左条目，直连部署下可伪造成任意 IP、绕过去重无限刷赞。
-- 现统一经 `getClientIp(event)`（`server/lib/concertLikes.ts`）获取 IP，逻辑为：
-  - 仅当环境变量 `NUXT_TRUST_PROXY=true` 时，才通过 `getRequestIP(event, { xForwardedFor: true })` 采信 `X-Forwarded-For`；
-  - 否则（默认，含直连部署）回退到 TCP 对端 `socket.remoteAddress`——由操作系统给出，客户端无法伪造。
+- 现统一经 `getClientIp(event)`（`server/lib/concertLikes.ts`）获取 IP，递进信任链为：
+  1. **Vercel（运行时自动注入 `VERCEL=1`）**：优先取 `x-vercel-forwarded-for`（平台覆写的**单值真实客户端 IP**，客户端无法伪造），并把 XFF 纳入信任作为兜底；
+  2. **其它反代 / CDN**：仅当显式 `NUXT_TRUST_PROXY=true` 时采信 `X-Forwarded-For`；
+  3. **否则（默认，含直连部署）**：回退到 TCP 对端 `socket.remoteAddress`——由操作系统给出，客户端无法伪造。
 - **直连部署**：不设 `NUXT_TRUST_PROXY`（默认关闭），IP 取 socket 地址，天然不可伪造。
-- **反代 / CDN 部署（Vercel、Cloudflare、nginx 等）**：设 `NUXT_TRUST_PROXY=true`。**前提**：反代需「覆写」（而非追加）`X-Forwarded-For` 为真实客户端 IP（如 nginx `proxy_set_header X-Forwarded-For $remote_addr;`）。若仅追加，最左条目仍可能含伪造值。
+- **Vercel 部署**：**无需**手动设置 `NUXT_TRUST_PROXY`，运行时 `VERCEL=1` 即自动启用平台注入的真实 IP。
+- **自建反代 / CDN（Cloudflare、nginx 等）**：设 `NUXT_TRUST_PROXY=true`。**前提**：反代需「覆写」（而非追加）`X-Forwarded-For` 为真实客户端 IP（如 nginx `proxy_set_header X-Forwarded-For $remote_addr;`）。若仅追加，最左条目仍可能含伪造值。
 
 ### 14.2 点赞基础限流 · Like rate limiting
 
-- `server/lib/rateLimit.ts`：每 IP 每 60 秒最多 10 次（`rateLimit(ip)`），超出返回 `429` 并带 `Retry-After`（秒）。
+- `server/lib/rateLimit.ts`：每 IP 每 60 秒最多 10 次（`rateLimit(ip)`），超出返回 `429` 并带 `Retry-After`（秒）。点赞（`POST /api/like`）与留言板写接口（`POST /api/guestbook`、`POST /api/guestbook/reply`）共用该限流。
 - 纯内存、零依赖，单进程内有效；空桶自动清理，无内存泄漏。
 - **Serverless 局限**：Vercel / 云函数每实例独立内存、冷启动重置，限流仅在单实例内生效，跨实例不共享。如需全局精确限流，应改用 Redis 等共享存储，并在反代 / CDN 层（如 Cloudflare Rate Limiting）再加一层。
 - 阈值可在调用处覆盖：`rateLimit(ip, { windowMs, max })`。
+
+### 14.3 用户生成内容（留言板）· UGC safety
+
+- **存储原文、渲染转义**：留言 / 回复内容原样入库（不做 HTML 转义），前端一律用 Vue 文本插值 `{{ }}` 渲染（自动转义），**不使用 `v-html`** —— 从根本上避免 XSS。
+- **服务端采集**：昵称 / 内容之外，浏览器、系统、UA、IP 全部由服务端采集，不信任前端自报（`server/lib/ua.ts` + `getClientIp`）。
+- **邮箱仅入库、不对外返回**：`guestbook` / `guestbook_reply` 的 `email` 列不随读接口暴露。
+- **长度与格式校验**：昵称 ≤ 40 / 内容 ≤ 1000 / 邮箱 ≤ 120 且格式校验；写接口复用同一条限流。
+- **端到端回归**：`test/e2e/guestbook.spec.ts` 断言脚本 / 事件载荷「以纯文本渲染、不执行」。
 
 

@@ -66,6 +66,27 @@ export default {
     emptyMessage: 'No wishes yet, be the first to make one!'
   },
 
+  guestbook: {
+    title: 'Guestbook',
+    nicknamePlaceholder: 'Nickname',
+    emailPlaceholder: 'Email (required)',
+    contentPlaceholder: 'Say something…',
+    publish: 'Post message',
+    viewCard: 'Cards',
+    viewList: 'List',
+    reply: 'Reply',
+    replyNicknamePlaceholder: 'Nickname',
+    replyEmailPlaceholder: 'Email',
+    replyContentPlaceholder: 'Reply…',
+    replySubmit: 'Submit reply',
+    more: 'More',
+    empty: 'No messages yet, be the first to leave one!',
+    prev: 'Prev',
+    next: 'Next',
+    required: 'Nickname, email and content are all required',
+    invalidEmail: 'Please enter a valid email address'
+  },
+
   errorMessages: {
     generic: 'Operation failed, please try again later',
     loadFailed: 'Loading failed, please refresh the page',

@@ -178,3 +178,54 @@ INSERT OR IGNORE INTO friend_links (href, icon, title_i18n, description_i18n, se
   ('https://www.facebook.com/layicr', 'fab fa-facebook',
    json_object('zh-CN','Facebook','en','Facebook','zh-Hant','Facebook'),
    json_object('zh-CN','Facebook','en','Facebook profile','zh-Hant','Facebook'), 9, 1);
+
+-- ==================== 访客留言板 · Guestbook ====================
+-- 说明：访客留言（主留言）与回复（子留言）两张表。内容字段直接存 Unicode 文本（含 emoji），
+-- Note: guestbook (parent messages) + guestbook_reply (child replies). Content stored as raw
+--        Unicode text (emoji-friendly); no i18n JSON since user-generated content is single-locale.
+--       is_approved：0 待审核 / 1 已通过（对外展示）/ 2 垃圾或删除。当前业务策略为「提交即自动通过」，
+--       is_approved: 0 pending / 1 approved (public) / 2 spam-or-deleted. Current policy auto-approves
+--       但保留字段与 GET 过滤，后续可平滑接入审核后台。
+--       (is_approved=1 on submit), but the field + GET filter are kept for a future moderation backend.
+
+-- 留言板 · Guestbook（主留言）
+CREATE TABLE IF NOT EXISTS guestbook (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,   -- 自增主键 · auto-increment primary key
+  nickname    TEXT NOT NULL,                       -- 昵称 · nickname
+  email       TEXT NOT NULL,                       -- 邮箱（仅存储，不对外展示）· email (stored, never rendered)
+  content     TEXT NOT NULL,                       -- 留言内容（支持 emoji 的 Unicode 文本）· content (Unicode, emoji-friendly)
+  browser     TEXT NULL,                           -- 浏览器（服务端解析 UA 得到）· browser (parsed from UA server-side)
+  os          TEXT NULL,                           -- 操作系统 · operating system
+  user_agent  TEXT NULL,                           -- 原始 UA 字符串 · raw user-agent
+  ip          TEXT NULL,                           -- 访客 IP（服务端采集，不信任前端自报）· visitor IP (server-side, never client-claimed)
+  is_approved BOOLEAN DEFAULT 0,                   -- 0 待审核 / 1 已通过 / 2 删除 · 0 pending / 1 approved / 2 deleted
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- 创建时间 · created at
+  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP   -- 更新时间 · updated at
+);
+
+-- 索引：按时间倒序分页展示 · index for time-descending pagination
+CREATE INDEX IF NOT EXISTS idx_guestbook_created ON guestbook(created_at DESC);
+-- 索引：按审核状态筛选 · index for approval-status filtering
+CREATE INDEX IF NOT EXISTS idx_guestbook_approved ON guestbook(is_approved);
+
+-- 留言回复 · Guestbook replies（每条主留言的回复）
+CREATE TABLE IF NOT EXISTS guestbook_reply (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,   -- 自增主键 · auto-increment primary key
+  guestbook_id INTEGER NOT NULL,                  -- 关联主留言 ID · parent message id
+  nickname    TEXT NOT NULL,                       -- 昵称 · nickname
+  email       TEXT NULL,                           -- 邮箱（可选）· email (optional)
+  content     TEXT NOT NULL,                       -- 回复内容（支持 emoji）· reply content (emoji-friendly)
+  browser     TEXT NULL,                           -- 浏览器 · browser
+  os          TEXT NULL,                           -- 操作系统 · os
+  user_agent  TEXT NULL,                           -- 原始 UA 字符串 · raw user-agent
+  ip          TEXT NULL,                           -- 访客 IP · visitor IP
+  is_approved BOOLEAN DEFAULT 0,                   -- 0 待审核 / 1 已通过 / 2 删除 · 0 pending / 1 approved / 2 deleted
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- 创建时间 · created at
+  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- 更新时间 · updated at
+  FOREIGN KEY (guestbook_id) REFERENCES guestbook(id) ON DELETE CASCADE  -- 主留言删除时级联删除回复 · cascade delete replies
+);
+
+-- 索引：快速查某条留言的全部回复 · index for all replies of a message
+CREATE INDEX IF NOT EXISTS idx_reply_gid ON guestbook_reply(guestbook_id);
+-- 索引：按审核状态筛选回复 · index for reply approval-status filtering
+CREATE INDEX IF NOT EXISTS idx_reply_approved ON guestbook_reply(is_approved);

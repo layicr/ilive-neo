@@ -12,16 +12,31 @@
  *              of `fetchLikeCounts`/`fetchLikeCount`/`fetchLikedConcertIds`; tolerance when the
  *              `concert_likes` table is missing (treated as "no likes", never throws).
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import type { Client } from '@libsql/client'
+import type { H3Event } from 'h3'
 import {
   resolveClientIp,
+  getClientIp,
   fetchLikeCount,
   fetchLikeCounts,
   fetchLikedConcertIds,
   isConcertLiked,
   toggleConcertLike
 } from '../../server/lib/concertLikes'
+
+/** 最小 H3Event 桩 · minimal H3Event stub (only the fields getClientIp reads) */
+function fakeEvent(headers: Record<string, string | undefined>, remoteAddress = '127.0.0.1'): H3Event {
+  return {
+    context: {},
+    node: {
+      req: {
+        headers,
+        socket: { remoteAddress }
+      }
+    }
+  } as unknown as H3Event
+}
 
 /** 内存点赞表桩 · in-memory like table stub */
 function stubClient(initial: { concert_id: number; ip: string }[] = [], initialLikes: Record<number, number> = {}): Client {
@@ -250,5 +265,54 @@ describe('冗余计数回退 — concerts.likes 列缺失（未迁移库）', ()
     const client = noLikesColumnClient()
     expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 1, liked: true })
     expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 0, liked: false })
+  })
+})
+
+describe('getClientIp — 客户端 IP 解析（含 Vercel 真实 IP）', () => {
+  const prevVercel = process.env.VERCEL
+  const prevTrust = process.env.NUXT_TRUST_PROXY
+
+  afterEach(() => {
+    // 还原环境变量，避免污染其它用例 · restore env after each case
+    if (prevVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = prevVercel
+    if (prevTrust === undefined) delete process.env.NUXT_TRUST_PROXY
+    else process.env.NUXT_TRUST_PROXY = prevTrust
+  })
+
+  it('Vercel（VERCEL=1）优先取平台注入的 x-vercel-forwarded-for（最左真实客户端 IP）', () => {
+    process.env.VERCEL = '1'
+    delete process.env.NUXT_TRUST_PROXY
+    const ip = getClientIp(
+      fakeEvent({ 'x-vercel-forwarded-for': '203.0.113.7, 10.0.0.1', 'x-forwarded-for': 'spoofed, 203.0.113.7' })
+    )
+    expect(ip).toBe('203.0.113.7')
+  })
+
+  it('Vercel 下即使伪造 x-forwarded-for 也不会被采信（x-vercel-forwarded-for 优先且平台覆写）', () => {
+    process.env.VERCEL = '1'
+    // 仅发 x-forwarded-for（无 vercel 头）→ 走 getRequestIP 的 XFF 分支，取最左（伪造值），但真实部署中 Vercel 会同时注入 vercel 头
+    const ip = getClientIp(fakeEvent({ 'x-forwarded-for': '198.51.100.9, 10.0.0.1' }))
+    expect(ip).toBe('198.51.100.9')
+  })
+
+  it('非 Vercel 且未声明 NUXT_TRUST_PROXY → 用不可伪造的 socket 地址（防 XFF 伪造刷量）', () => {
+    delete process.env.VERCEL
+    delete process.env.NUXT_TRUST_PROXY
+    const ip = getClientIp(fakeEvent({ 'x-forwarded-for': '198.51.100.9' }, '127.0.0.1'))
+    expect(ip).toBe('127.0.0.1')
+  })
+
+  it('非 Vercel 但显式 NUXT_TRUST_PROXY=true（可信反代覆写 XFF）→ 取最左 XFF', () => {
+    delete process.env.VERCEL
+    process.env.NUXT_TRUST_PROXY = 'true'
+    const ip = getClientIp(fakeEvent({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }, '127.0.0.1'))
+    expect(ip).toBe('203.0.113.7')
+  })
+
+  it('取不到任何 IP → unknown（兜底，功能不崩）', () => {
+    delete process.env.VERCEL
+    delete process.env.NUXT_TRUST_PROXY
+    expect(getClientIp(fakeEvent({}, ''))).toBe('unknown')
   })
 })

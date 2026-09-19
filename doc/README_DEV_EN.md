@@ -39,9 +39,9 @@ Key principles:
 | Multilingual | `@nuxtjs/i18n` v10 (3 languages: zh / en / zh-Hant, `strategy: prefix_except_default`, default zh has no prefix) |
 | Language | TypeScript (`strict` enabled, `typeCheck: false` at build time) |
 | Animation | GSAP 3.12.2 (CDN) |
-| Styling | Tailwind CSS (CDN), Font Awesome 6.4.0 (CDN), `public/css/*.css` |
+| Styling | `public/css/main.css` (includes hand-written utilities migrated from Tailwind CDN), Font Awesome 6.4.0 (CDN) |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, node environment, 10 files / 143 cases) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **20 files / 303 cases**) + Playwright (E2E, **6 suites / 54 cases**) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -49,7 +49,7 @@ Key principles:
 - `@vite-pwa/nuxt`: PWA / Service Worker
 - `@nuxtjs/i18n` (v10): multilingual routing / SEO / vue-i18n integration
 - `nuxt`, `vue`, `vue-router`: Framework
-- Dev dependencies: `vitest`, `typescript`, `@types/node`
+- Dev dependencies: `vitest`, `@vue/test-utils`, `happy-dom`, `@nuxt/test-utils`, `@playwright/test`, `playwright`, `typescript`, `@types/node`
 
 ---
 
@@ -75,11 +75,13 @@ ilive_neo/
 │   │   ├── useKeyboard.ts     # Keyboard gestures
 │   │   ├── useSharedState.ts  # Cross-component shared state (useState wrapper)
 │   │   ├── useFriendLink.ts   # Friend links
+│   │   ├── useGuestbook.ts    # Guestbook (paginated list / post message / post reply / card·list view)
 │   │   └── useAppError.ts     # Global error handling + Toast
 │   ├── plugins/
 │   │   └── statis.client.ts   # Third-party analytics injection (Baidu/GA/51.la, client-side plugin)
-│   ├── types/
-│   │   └── index.ts           # Frontend data types (Locale / Localized* / Concert / City / Wish / AppData, etc.)
+│   ├── types/                 # Frontend data types (i18n / concert / city / wish / friendLink / guestbook / seo)
+│   │   ├── index.ts           # Barrel re-exports (Locale / Localized* / Concert / City / Wish / AppData, etc.)
+│   │   └── guestbook.ts       # Guestbook domain models (GuestbookMessage / GuestbookReply / GuestbookPage)
 │   └── utils/
 │       ├── config.ts          # Global configuration constants CONFIG
 │       ├── index.ts           # Utility functions (safeHtml / time formatting / pickLocale / localize* / computeCityConcertCounts)
@@ -91,26 +93,39 @@ ilive_neo/
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  Posters and live photos
+│   ├── data/data.db           # Local SQLite (development fallback; production uses remote Turso)
 │   ├── robots.txt             # Crawler rules + sitemap reference
 │   └── sitemap.xml            # Sitemap (currently only the default-language homepage; multilingual hreflang is emitted by page useHead)
 ├── server/                    # Nitro server-side
 │   ├── api/
 │   │   ├── data.get.ts        # GET /api/data: aggregation (concerts/cities/wishes/stats/seo/friendLinks + likes)
 │   │   ├── like.post.ts       # POST /api/like (like/unlike a concert, deduped by IP)
-│   │   └── concerts/[id].get.ts  # GET /api/concerts/:id (single concert details + likes/liked)
+│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id (single concert details + likes/liked)
+│   │   ├── guestbook.get.ts   # GET /api/guestbook (paginated approved messages + their replies)
+│   │   ├── guestbook.post.ts  # POST /api/guestbook (post a message, auto-approved)
+│   │   └── guestbook/reply.post.ts  # POST /api/guestbook/reply (post a reply, validates the parent message)
 │   ├── lib/
-│   │   ├── turso.ts           # LibSQL client singleton (file:/libsql: switching; writes only for likes)
-│   │   ├── concertLikes.ts    # Like read/write (count aggregation / per-IP query / toggle)
-│   │   └── mappers.ts         # DB row (*_i18n JSON columns) → multilingual structure mapping (parseI18n / mapConcert / fetchAllConcerts)
+│   │   ├── turso.ts           # LibSQL client singleton (file:/libsql: switching)
+│   │   ├── db-config.ts       # Local file: database path resolution (defaults to public/data/data.db)
+│   │   ├── mappers.ts         # Data mapping barrel (re-exports parse/concerts/seo/friendLinks/concertLikes/guestbook)
+│   │   ├── parse.ts           # i18n JSON column parsing (parseI18n / parseTags / has; never throws)
+│   │   ├── concerts.ts        # Concert row types + mapConcert / fetchConcert / fetchAllConcerts
+│   │   ├── seo.ts             # SEO_I18N_KEYS / SEO_FALLBACK / fetchSiteSeo (DB-first + code fallback)
+│   │   ├── friendLinks.ts     # Friend link mapping (with href protocol allow-list sanitizeHref)
+│   │   ├── concertLikes.ts    # Like read/write + getClientIp (per-IP dedupe, togglable)
+│   │   ├── guestbook.ts       # Message/reply read/write (approved only; parent validation; batched IN replies, no N+1)
+│   │   ├── ua.ts              # Server-side UA parsing (browser / OS)
+│   │   ├── rateLimit.ts       # Per-IP in-memory rate limiter (shared by likes and guestbook writes)
+│   │   └── locales.ts         # Locale definitions (LOCALES)
 │   ├── plugins/
 │   │   └── init-db.ts         # Idempotent initialization on Nitro startup (skipped for remote Turso)
 │   └── db/
-│       ├── schema.sql         # Table structure (7 tables, translatable fields are *_i18n JSON columns)
-│       ├── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
-│       └── migrate-likes.mjs  # Idempotent migration for the denormalized concerts.likes column
+│       ├── schema.sql         # Table structure (12 tables, translatable fields are *_i18n JSON columns)
+│       └── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (safeHtml / time formatting / config / mappers / localize / i18n+SEO / friend-links / concertLikes)
+│   ├── unit/                  # Vitest unit tests (20 files / 303 cases)
+│   ├── e2e/                   # Playwright end-to-end tests (6 suites / 54 cases, desktop/mobile projects + fixture DB seed)
 │   ├── ui-tests.md            # UI acceptance checklist (manual + automated)
 │   └── unit-tests.md / README.md
 └── doc/
@@ -135,7 +150,7 @@ app/pages/index.vue (setup)
   ├─ useMusic()           → Background music (initialized in onMounted, follows language track switching)
   ├─ useGallery()         → Gallery (lazy-fetches localizedConcerts once, avoids duplicating useData)
   ├─ useAlbumShowcase()   → Album carousel (GSAP)
-  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()
+  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()/useGuestbook()
   ├─ useSeoMeta()         → Dynamic title/description/og/twitter (switches with locale + database artists)
   └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
 
@@ -150,7 +165,7 @@ Key points:
 - **Language switching does NOT re-request the API**: `localizedConcerts` and other computed values depend on `currentLanguage`; switching only recalculates frontend-derived values with zero network requests.
 - `app/pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta; site-wide language SEO (`<html lang>` / hreflang / `og:locale`) is emitted by `app/app.vue`, and both sides merge by the same `key` to avoid duplicate meta in the head.
 
-### 4.2 Server-Side Data Layer (Single Endpoint)
+### 4.2 Server-Side Data Layer
 
 - `GET /api/data` (`server/api/data.get.ts`): **Single-endpoint aggregation**, returns `{ concerts, cities, wishes, stats }` in one response. City concert counts reuse the same concerts data via `computeCityConcertCounts`, eliminating the original multi-endpoint redundant full-table queries.
 - `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist: { zh, en, 'zh-Hant' }`, `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`); `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
@@ -166,10 +181,11 @@ useAsyncData('app-data') → GET /api/data
 localizedConcerts (computed, selects single language by currentLanguage)
 ```
 
+- Guestbook (`server/lib/guestbook.ts`): two tables — `guestbook` (messages) + `guestbook_reply` (replies). Writes set `is_approved=1` (auto-approved); a reply first validates that its parent message exists and is approved (otherwise returns `null` → HTTP 404). Reads return only approved content, and this page's replies are fetched in a single `IN (...)` batch (no N+1). Emails are stored but never returned; browser/OS/IP are collected server-side (`ua.ts` / `getClientIp`).
 - `server/lib/turso.ts`: `getTursoClient()` lazily creates a global singleton client. Auto-switches based on `runtimeConfig.turso.databaseUrl`:
   - `libsql://xxx.turso.io` → Remote Turso (production/online, requires `NUXT_TURSO_AUTH_TOKEN`)
   - `file:./public/data/data.db` → Local SQLite (development fallback)
-  - All project APIs are SELECT (read-only) except the like endpoints; `createClient` does not apply `readOnly`.
+  - Writes are limited to likes (`/api/like`) and the guestbook (`/api/guestbook`, `/api/guestbook/reply`); all other endpoints are SELECT. `createClient` does not apply `readOnly`.
 - `server/plugins/init-db.ts`: Idempotent initialization on Nitro startup — **only creates empty tables when using local `file:` and the `concerts` table does not exist**; **remote Turso skips directly** (avoids accidentally creating a local empty database).
 
 ### 4.3 Dynamic SEO Meta Information
@@ -196,8 +212,13 @@ In `app/pages/index.vue`:
 | `cities` | Cities table (`name_i18n` + `icon`) |
 | `wishes` | Wishes wall (`content_i18n` + `likes` + `liked`) |
 | `concert_likes` | Concert likes (`concert_id` + `ip` + `created_at`, `UNIQUE(concert_id, ip)` — one per IP, togglable) |
+| `friend_links` | Friend links (`href` + `icon` + `title_i18n` + `description_i18n` + `seq` + `enabled`) |
+| `site_settings` | Site settings (e.g. `site_url`, takes precedence over env vars) |
+| `site_seo_i18n` | Site SEO multilingual (`site_title` / `site_description` / `site_keywords`, etc.) |
+| `guestbook` | Guestbook messages (`nickname` + `email` + `content` + server-collected `browser`/`os`/`user_agent`/`ip` + `is_approved`) |
+| `guestbook_reply` | Guestbook replies (`guestbook_id` FK cascade delete + `nickname` + optional `email` + `content` + server-collected fields + `is_approved`) |
 
-All translatable fields are unified as **`*_i18n` JSON columns**, shaped like `{"zh":"…","en":"…","zh-Hant":"…"}` (parsed by `parseI18n`; `zh` is the base language, missing languages fall back at the UI layer; legacy `ja`/`ko` keys from old databases are not shown). `location` is split into four segments `country/province/city/venue` and reassembled per language as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation` / `mapLocationDetail`, empty segments auto-omitted, no cross-language fallback).
+All translatable fields are unified as **`*_i18n` JSON columns**, shaped like `{"zh-CN":"…","en":"…","zh-Hant":"…"}` (parsed by `parseI18n`; `zh-CN` is the base language, missing languages fall back at the UI layer; legacy `ja`/`ko` keys from old databases are not shown). `location` is split into four segments `country/province/city/venue` and reassembled per language as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation` / `mapLocationDetail`, empty segments auto-omitted, no cross-language fallback).
 
 ### 5.2 Initialization
 
@@ -207,7 +228,7 @@ npm run db:seed   # or npm run db:init (equivalent) — DROP then CREATE, result
 
 `seed.mjs` **DROP then CREATEs** (in foreign key dependency order), resulting in an empty database. Business data is imported externally (SQL / tools); the script itself does not populate data.
 
-Schema changes treat `schema.sql` as the **single source of truth**: historical one-off migrations (bilingual columns → `*_i18n`, etc.) have been removed, and existing databases (local `data.db` / production Turso, requiring `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` with **write access**) should be aligned to `schema.sql` and business needs. The only retained migration is the idempotent `server/db/migrate-likes.mjs` — it adds the denormalized `likes` column to `concerts` and backfills the baseline (because `ALTER TABLE` has no `IF NOT EXISTS`).
+Schema changes treat `schema.sql` as the **single source of truth**: all historical one-off migrations (bilingual columns → `*_i18n`, the denormalized `likes` column, etc.) have been removed. Existing databases (local `data.db` / production Turso, requiring `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` with **write access**) can be brought up to date for new tables (`guestbook` / `guestbook_reply` / `site_settings` / `site_seo_i18n` / `friend_links`, etc.) by simply running `schema.sql` — it uses `CREATE TABLE/INDEX IF NOT EXISTS` and is idempotent, so no migration script is needed.
 
 ---
 
@@ -219,6 +240,8 @@ Schema changes treat `schema.sql` as the **single source of truth**: historical 
 |------|------|--------|
 | `NUXT_TURSO_DATABASE_URL` | Database URL (`libsql:` remote or `file:` local) | `file:./public/data/data.db` |
 | `NUXT_TURSO_AUTH_TOKEN` | Remote Turso auth token | Empty |
+| `NUXT_TRUST_PROXY` | Whether to trust `X-Forwarded-For` (set `true` when behind a **self-hosted** reverse proxy / CDN; Vercel handles this automatically, no need to set it) | Empty (disabled) |
+| `VERCEL` | Automatically injected by the Vercel platform (`=1`); used to detect the platform and prefer `x-vercel-forwarded-for` | Platform-injected |
 
 > **Critical**: Must use the **`NUXT_` prefix**, Nuxt will override `runtimeConfig.turso.*` at **runtime**. If using the `TURSO_` prefix, `process.env` may not be readable during `nuxt.config.ts` evaluation, causing fallback to the local `file:` default.
 
@@ -258,8 +281,9 @@ npm run build      # Production build (Nitro, deployable to Vercel)
 npm run preview    # Preview production build
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 10 files / 143 cases)
+npm run test       # Run unit tests (vitest run, 20 files / 303 cases)
 npm run test:watch # Run tests in watch mode
+npm run test:e2e   # Run end-to-end tests (Playwright, 6 suites; seeds the fixture DB and boots an isolated dev server)
 ```
 
 ---
@@ -271,6 +295,9 @@ npm run test:watch # Run tests in watch mode
 | GET | `/api/data` | Single-endpoint aggregation: concerts (with `likes` / `liked`) + cities + wishes + stats + SEO + friend links; optional `?lang=<locale>` returns single-locale results and the response carries a `locale` field (= requested locale, or null) |
 | GET | `/api/concerts/:id` | Single concert details (incl. tags/images/songlist and `likes` / `liked`), 400 for invalid id, 404 for not found |
 | POST | `/api/like` | Like/unlike a concert (body `{ id }`, deduped by IP, togglable); returns `{ id, likes, liked }`; 400 / 404 on errors |
+| GET | `/api/guestbook` | Paginated approved messages + their approved replies (`?page=` / `?pageSize=`, default 9, max 50) |
+| POST | `/api/guestbook` | Post a message (body `{ nickname, email, content }`, auto-approved on submit); returns `{ id, ok }`; 400 on invalid/over-length fields, 429 when rate-limited |
+| POST | `/api/guestbook/reply` | Post a reply (body `{ guestbookId, nickname, content, email? }`, email optional); 404 when the parent message is missing/unapproved |
 
 > Like counts ride along with `/api/data` (no extra GET). To avoid leaking a per-IP `liked` flag through the shared
 > cache, `/api/data` is split into a cached shared layer (counts included) plus a non-cached per-IP merge layer.
@@ -293,7 +320,7 @@ npm run test:watch # Run tests in watch mode
 
 ### 9.3 Dynamic Meta Information (`app/pages/index.vue`)
 
-- `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from database artists (5-language description templates in `app/utils/seo.ts`).
+- `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from database artists (3-language description templates in `app/utils/seo.ts`).
 - JSON-LD: WebSite + Person + ItemList + MusicEvent (per concert).
 - hreflang: `zh-CN` / `en` / `zh-Hant` + `x-default` (default language `zh` href is `https://ilive.lyc.la/`, no `/zh` prefix).
 - `<html lang>` and `og:locale` / `og:locale:alternate`: emitted uniformly by `app/app.vue` (`app/utils/seo.ts`'s `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` pure functions).
@@ -332,6 +359,8 @@ The site ships 300+ static jpgs (posters + gallery). Already in place:
 3. Push code, Vercel executes `nuxt build` to generate Nitro serverless output.
 4. `public/robots.txt` / `sitemap.xml` will be packaged as static files by Nitro.
 5. After first deployment, visit `/api/data` to confirm remote Turso data is returned.
+6. **Real client IP**: At runtime Vercel injects `VERCEL=1`, so `getClientIp()` prefers the platform-overwritten `x-vercel-forwarded-for` (single value, unspoofable). Like dedupe / rate limiting / guestbook IP capture therefore need **no** extra `NUXT_TRUST_PROXY` configuration.
+7. Static asset compression: `nitro.compressPublicAssets: true` is enabled, so `public/**` assets are compressed automatically.
 
 ---
 
@@ -342,7 +371,8 @@ The site ships 300+ static jpgs (posters + gallery). Already in place:
 - All `useState`/`useAsyncData` must be inside composable function bodies (lazy initialization), **module-level calls are prohibited**, otherwise SSR throws `instance unavailable`.
 - **Environment variables must use the `NUXT_` prefix**; the `TURSO_` prefix may not be readable during config evaluation.
 - **Remote Turso skips database creation in `init-db.ts`**, avoiding accidentally creating local empty database files.
-- `concert_likes` now has an index `idx_concert_likes_ip` (speeds up per-IP like-set/count lookups). **Existing local databases** must manually run `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);` after the schema change (or rebuild via `db:seed --force`) for it to take effect.
+- `concert_likes` now has an index `idx_concert_likes_ip` (speeds up per-IP like-set/count lookups). **Existing local databases** must manually run `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);` after the schema change (or rebuild via `npm run db:seed`, which is destructive) for it to take effect.
+- **The guestbook has write endpoints**: `POST /api/guestbook` and `POST /api/guestbook/reply` write to the database (auto-approved on submit). In local `file:` mode the database file must be writable; on Turso it requires write access.
 - The client `useData` now requests `/api/data?lang=<locale>` per current locale (key carries the locale for per-language caching). `localizedConcerts/Cities/Wishes` pass through when the server already localized, otherwise `localizeConcert` runs client-side; `counts` reads the server-precomputed `city.concertCount` in single-locale mode (no cross-locale recompute).
 - After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
 - **Token security**: `.env` is added to `.gitignore`. If a token was ever committed to git history, immediately **rotate to a new token** in the Turso dashboard.
@@ -356,17 +386,27 @@ Likes are deduplicated per IP (`UNIQUE(concert_id, ip)`) — one vote per user �
 ### 14.1 Spoof-proof client IP
 
 - **Never** trust the leftmost `X-Forwarded-For` entry unconditionally: `getRequestIP(event, { xForwardedFor: true })` reads the client-supplied leftmost XFF, which an attacker can forge — on a direct deploy they can impersonate arbitrary IPs and bypass dedup.
-- All IP resolution now goes through `getClientIp(event)` (`server/lib/concertLikes.ts`), whose logic is:
-  - Trust `X-Forwarded-For` (via `getRequestIP(event, { xForwardedFor: true })`) only when `NUXT_TRUST_PROXY=true`;
-  - Otherwise (default, including direct deploy) fall back to the TCP peer `socket.remoteAddress` — supplied by the OS, not forgeable by the client.
+- All IP resolution now goes through `getClientIp(event)` (`server/lib/concertLikes.ts`), following a progressive trust chain:
+  1. **Vercel (runtime auto-injects `VERCEL=1`)**: prefer `x-vercel-forwarded-for` (the platform-overwritten, **single unspoofable real client IP**), with XFF also trusted as a fallback;
+  2. **Other reverse proxies / CDNs**: trust `X-Forwarded-For` only when `NUXT_TRUST_PROXY=true` is explicitly set;
+  3. **Otherwise (default, including direct deploy)**: fall back to the TCP peer `socket.remoteAddress` — supplied by the OS, not forgeable by the client.
 - **Direct deploy**: leave `NUXT_TRUST_PROXY` unset (off by default) → the IP is the socket address, inherently not spoofable.
-- **Behind a reverse proxy / CDN (Vercel, Cloudflare, nginx, …)**: set `NUXT_TRUST_PROXY=true`. **Prerequisite**: the proxy must **overwrite** (not append to) `X-Forwarded-For` with the real client IP (e.g. nginx `proxy_set_header X-Forwarded-For $remote_addr;`). If it only appends, the leftmost entry may still carry a forged value.
+- **Vercel deploy**: **no** need to set `NUXT_TRUST_PROXY` manually; at runtime `VERCEL=1` automatically enables the platform-provided real IP.
+- **Self-hosted reverse proxy / CDN (Cloudflare, nginx, …)**: set `NUXT_TRUST_PROXY=true`. **Prerequisite**: the proxy must **overwrite** (not append to) `X-Forwarded-For` with the real client IP (e.g. nginx `proxy_set_header X-Forwarded-For $remote_addr;`). If it only appends, the leftmost entry may still carry a forged value.
 
 ### 14.2 Like rate limiting
 
-- `server/lib/rateLimit.ts`: at most 10 requests per IP per 60s (`rateLimit(ip)`); on exceed returns `429` with `Retry-After` (seconds).
+- `server/lib/rateLimit.ts`: at most 10 requests per IP per 60s (`rateLimit(ip)`); on exceed returns `429` with `Retry-After` (seconds). Likes (`POST /api/like`) and the guestbook write endpoints (`POST /api/guestbook`, `POST /api/guestbook/reply`) share this limiter.
 - Pure in-memory, zero-dependency, effective within a single process; empty buckets are pruned automatically (no memory leak).
 - **Serverless caveat**: on Vercel / cloud functions each instance has its own memory and resets on cold start, so the limit applies only within a single instance and is not shared across instances. For global accuracy, use a shared store (e.g. Redis) and add another layer at the proxy / CDN (e.g. Cloudflare Rate Limiting).
 - Thresholds are overridable at the call site: `rateLimit(ip, { windowMs, max })`.
+
+### 14.3 User-Generated Content (Guestbook) · UGC safety
+
+- **Store raw, escape on render**: message / reply content is stored as-is (no HTML escaping) and always rendered on the frontend via Vue text interpolation `{{ }}` (auto-escaped), **never `v-html`** — eliminating XSS at the root.
+- **Server-collected**: besides nickname / content, browser, OS, UA and IP are all collected server-side, never trusted from the client (`server/lib/ua.ts` + `getClientIp`).
+- **Email stored but never returned**: the `email` column of `guestbook` / `guestbook_reply` is not exposed by any read endpoint.
+- **Length & format validation**: nickname ≤ 40 / content ≤ 1000 / email ≤ 120 and format-checked; write endpoints reuse the same rate limiter.
+- **End-to-end regression**: `test/e2e/guestbook.spec.ts` asserts that script / event payloads are "rendered as plain text, not executed".
 
 

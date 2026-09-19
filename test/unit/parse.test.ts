@@ -69,10 +69,22 @@ describe('parseTags — 多语言标签数组列', () => {
     expect(parseTags('oops')).toEqual({ 'zh-CN': [] })
   })
 
-  it('zh-CN 值不是数组时兜底为空数组（脏数据防护）', () => {
-    const out = parseTags('{"zh-CN":"not-an-array","en":["Rock"]}')
+  it('zh-CN 值为字符串时归一化为单元素数组（兼容「一行一标签」存储）', () => {
+    const out = parseTags('{"zh-CN":"摇滚","en":["Rock"]}')
+    expect(out['zh-CN']).toEqual(['摇滚'])
+    expect(out.en).toEqual(['Rock'])
+  })
+
+  it('空白字符串与非法标量被丢弃，zh-CN 兜底为空数组（脏数据防护）', () => {
+    expect(parseTags('{"zh-CN":"   ","en":["Rock"]}')['zh-CN']).toEqual([])
+    const out = parseTags('{"zh-CN":123,"en":["Rock"]}')
     expect(out['zh-CN']).toEqual([])
     expect(out.en).toEqual(['Rock'])
+  })
+
+  it('数组内的非字符串元素被过滤，仅保留字符串项', () => {
+    const out = parseTags('{"zh-CN":["摇滚",1,null,"现场"],"en":["Rock"]}')
+    expect(out['zh-CN']).toEqual(['摇滚', '现场'])
   })
 })
 
