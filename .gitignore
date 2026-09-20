@@ -39,3 +39,6 @@ test-results/
 .codebuddy/
 
 bak/
+test/report
+
+public/data
