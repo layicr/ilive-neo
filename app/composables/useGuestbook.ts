@@ -10,7 +10,6 @@
  *              Wraps guestbook list pagination + publish message/reply + view state. State via useState
  *              (SSR-safe). New messages are newest → jump to page 1 after posting; replies refresh the page.
  */
-import { computed } from 'vue'
 import { useState } from '#app'
 import type { GuestbookMessage, GuestbookPage } from '../types'
 
@@ -117,10 +116,6 @@ export function useGuestbook(): UseGuestbookReturn {
   function goPage(p: number): void {
     if (p >= 1 && p <= totalPages.value) void fetchMessages(p)
   }
-
-  // computed 透传（保持返回形状稳定）· pass-through computed for a stable return shape
-  const messagesRef = computed(() => messages.value)
-  void messagesRef
 
   return {
     messages,

@@ -1423,11 +1423,29 @@ body {
 .music-player {
     position: fixed;
     bottom: 170px;
-    right: 8px;
+    right: 30px; /* 与 feedback / back-to-top 对齐（均为 30px）· align with feedback & back-to-top */
+    display: flex;
+    flex-direction: column; /* 音乐按钮在上、universe 在下 · music button on top, universe below */
+    align-items: center;
+    gap: 12px;
+    z-index: 999;
+}
+
+/* 音乐按钮 + 波形一组（音乐按钮置顶）· music button grouped with its wave */
+.music-main {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    z-index: 999;
+    justify-content: center;
+}
+
+/* 波形绝对定位到音乐按钮右侧：避免撑宽分组、导致上下两枚按钮左右错位 */
+.music-main .music-wave {
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 8px;
 }
 
 .music-btn {
@@ -1469,6 +1487,17 @@ body {
                 0 0 30px rgba(72, 81, 173, 0.4), /* 播放状态发光 */
                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
     animation: pulse 2s ease-in-out infinite;
+}
+
+/* universe 图标按钮 · universe icon link (shares .music-btn circle styling) */
+.xy-btn {
+    text-decoration: none;
+}
+
+.xy-icon {
+    width: 26px;
+    height: 26px;
+    display: block;
 }
 
 @keyframes pulse {
@@ -1537,7 +1566,7 @@ body {
 @media (max-width: 768px) {
     .music-player {
         bottom: 160px; /* 移动端位置调整 */
-        right: 3px;
+        right: 20px; /* 与移动端 feedback / back-to-top 对齐 · align with mobile feedback & back-to-top */
     }
 
     .music-btn {

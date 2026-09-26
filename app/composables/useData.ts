@@ -5,7 +5,7 @@
  * @description 在客户端组合式函数中获取聚合数据（/api/data），并按当前 locale 本地化为单语言。
  *              多语言文案与数据均经 @nuxtjs/i18n 的 locale（URL 前缀驱动）确定，SSR 安全。
  */
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useAsyncData, useState } from '#app'
 import { useAppI18n } from './useI18n'
 import type { Concert, City, Wish, LocalizedConcert, LocalizedCity, LocalizedWish, LocalizedFriendLink, Locale, ApiResponse, SiteSeoSettings } from '../types'

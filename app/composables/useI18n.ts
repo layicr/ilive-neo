@@ -13,7 +13,7 @@
  *              `useI18n` 冲突；业务方统一 import `useAppI18n`。
  */
 
-import { computed, unref } from 'vue'
+import { computed } from 'vue'
 import type { Locale } from '../types'
 import { DEFAULT_LOCALE } from '../../server/lib/locales'
 

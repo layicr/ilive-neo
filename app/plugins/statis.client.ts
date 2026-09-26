@@ -14,10 +14,26 @@
  *              - The `var _hmt` declaration must be kept as-is (Baidu standard)
  *              - All tracking code is third-party; do not modify core logic
  */
+/**
+ * 第三方统计脚本挂在 window 上的全局量 · Globals injected by third-party analytics scripts
+ * @description 原先全靠 `as any` 断言绕过类型，此处统一声明，避免拼写错误与隐式 any。
+ *              Declared once here instead of casting to `any` everywhere.
+ */
+declare global {
+  interface Window {
+    /** 百度统计队列 · Baidu queue */
+    _hmt?: unknown[]
+    /** Google Analytics 数据层 · Google Analytics data layer */
+    dataLayer?: unknown[]
+    /** 51.la SDK 挂载对象 · 51.la SDK root object */
+    LA?: { ids?: unknown[] } & Record<string, unknown>
+  }
+}
+
 export default defineNuxtPlugin(() => {
   // ==================== 百度统计 · Baidu Analytics ====================
   // @see https://tongji.baidu.com/
-  ;(window as any)._hmt = (window as any)._hmt || []
+  window._hmt = window._hmt || []
   ;(function () {
     const hm = document.createElement('script')
     hm.src = 'https://hm.baidu.com/hm.js?314959f767a1bf837f2a6bc8ba6f5e2d'
@@ -33,9 +49,10 @@ export default defineNuxtPlugin(() => {
     firstScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-Y7B6DLCXSE'
 
     firstScript.onload = function () {
-      window.dataLayer = window.dataLayer || []
-      function gtag(...args: any[]) {
-        ;(window.dataLayer as any[]).push(args)
+      // 直接得到已初始化的数组引用，无需再断言 · grab the initialized array, no more casts
+      const dataLayer = (window.dataLayer ??= [])
+      function gtag(...args: unknown[]) {
+        dataLayer.push(args)
       }
       gtag('js', new Date())
       gtag('config', 'G-Y7B6DLCXSE')
@@ -69,11 +86,18 @@ export default defineNuxtPlugin(() => {
       n.id = 'LA_COLLECT'
       i.d = n
       const o = function () {
-        ;(s as any).LA.ids.push(i)
+        window.LA?.ids?.push(i)
       }
-      ;(s as any).LA
-        ? (s as any).LA.ids && o()
-        : ((s as any).LA = p, (s as any).LA.ids = [], o())
+      if (window.LA) {
+        // SDK 已就绪：仅在 ids 存在时登记 · SDK already present: register only if ids is ready
+        if (window.LA.ids) o()
+      } else {
+        // 首次加载：以 p 本身作为 window.LA（与原脚本语义完全一致）
+        // First load: use p itself as window.LA (same semantics as the legacy script)
+        const la = (window.LA = p)
+        la.ids = []
+        o()
+      }
       r.parentNode!.insertBefore(n, r)
     }()
   }({ id: 'L8VlyZ1HkDS0E3VO', ck: 'L8VlyZ1HkDS0E3VO' })

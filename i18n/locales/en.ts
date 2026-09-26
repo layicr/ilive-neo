@@ -36,6 +36,7 @@ export default {
 
   tooltips: {
     musicToggle: 'Play/Pause Background Music',
+    universe: 'Visit my universe',
     feedback: 'Report Issue',
     backToTop: 'Back to Top'
   },
@@ -70,7 +71,7 @@ export default {
     title: 'Guestbook',
     nicknamePlaceholder: 'Nickname',
     emailPlaceholder: 'Email',
-    contentPlaceholder: 'Leave your footprints and feelings here; you are also welcome to chat with me under a song',
+    contentPlaceholder: 'Leave your footprints and feelings here, you are also welcome to chat with me under a song',
     publish: 'Post message',
     viewCard: 'Cards',
     viewList: 'List',

@@ -8,6 +8,8 @@
  *                    避免 N+1；
  *              · 写：`toggleConcertLike` —— 存在则取消（DELETE），不存在则点赞（INSERT OR IGNORE），
  *                    天然幂等、支持反复切换，返回最新 `{ likes, liked }`。
+ *                    **这四步必须原子完成**：已迁移到交互式事务（BEGIN IMMEDIATE）内执行，
+ *                    并以 COUNT(*) 重算冗余计数而非 ±1（详见该函数注释）。
  *
  *              容错：`concert_likes` 表缺失（未迁移）时读操作视为「无点赞」，绝不阻断页面；
  *              写操作会抛错，由接口层转为 5xx。
@@ -24,8 +26,17 @@
  *              No Nitro runtime dependency (only @libsql/client), so it is directly unit-testable.
  */
 
-import type { Client } from '@libsql/client';
+import type { Client, Transaction } from '@libsql/client';
 import { getRequestHeader, getRequestIP, type H3Event } from 'h3';
+
+/**
+ * 执行器抽象 · Executor abstraction
+ * @description `Client` 与 `Transaction` 都提供同签名的 `execute`，把点赞切换的步骤抽成纯步骤函数后
+ *              既能在事务内跑，也能在不支持事务的客户端上顺序跑。
+ *              Both Client and Transaction expose the same `execute` signature, so the toggle steps can run
+ *              inside a transaction or sequentially on clients without transaction support.
+ */
+export type LikeExecutor = Pick<Client, 'execute'>;
 
 /** 点赞切换结果 · Result of toggling a like */
 export interface LikeToggleResult {
@@ -103,7 +114,7 @@ export async function fetchLikeCounts(client: Client): Promise<Map<number, numbe
  * @param client LibSQL 客户端 · client
  * @param concertId 演唱会编号 · concert id
  */
-export async function fetchLikeCount(client: Client, concertId: number): Promise<number> {
+export async function fetchLikeCount(client: LikeExecutor, concertId: number): Promise<number> {
   try {
     const r = await client.execute({
       sql: 'SELECT COUNT(*) AS n FROM concert_likes WHERE concert_id = ?',
@@ -156,10 +167,82 @@ export async function isConcertLiked(client: Client, concertId: number, ip: stri
   }
 }
 
+/** 该 (concert_id, ip) 行是否存在 · whether the like row exists */
+async function likeRowExists(exec: LikeExecutor, concertId: number, ip: string): Promise<boolean> {
+  const r = await exec.execute({
+    sql: 'SELECT 1 FROM concert_likes WHERE concert_id = ? AND ip = ? LIMIT 1',
+    args: [concertId, ip]
+  });
+  return r.rows.length > 0;
+}
+
+/**
+ * 以真实点赞行为准「重算」concerts.likes 冗余列 · Recompute the denormalized counter from truth
+ * @description 旧实现是在确认分支上 `likes ± 1`：四条语句非原子，并发（双击 / 重试 / 多实例）下
+ *              会**永久漂移**（如 `INSERT OR IGNORE` 因并发冲突被忽略却仍 +1）。
+ *              这里改成**单条 UPDATE 内用 COUNT(*) 赋值** —— 计数不再依赖「上一次是否准」，天然自愈。
+ *
+ *              未迁移库没有 `concerts.likes` 列，属预期回退，退用实时 COUNT(*)；
+ *              **其它失败必须向上抛**，否则冗余列会长期不一致且无人察觉（旧实现一律静默吞掉）。
+ */
+async function syncLikesColumn(exec: LikeExecutor, concertId: number): Promise<number> {
+  try {
+    await exec.execute({
+      sql: 'UPDATE concerts SET likes = (SELECT COUNT(*) FROM concert_likes WHERE concert_id = ?) WHERE id = ?',
+      args: [concertId, concertId]
+    });
+    const r = await exec.execute({
+      sql: 'SELECT likes FROM concerts WHERE id = ?',
+      args: [concertId]
+    });
+    return Number((r.rows[0] as unknown as { likes: number } | undefined)?.likes ?? 0) || 0;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/no such column|has no column|no column named/i.test(msg)) throw e;
+    return fetchLikeCount(exec, concertId);
+  }
+}
+
+/**
+ * 切换点赞的步骤实现（事务内外共用）· Toggle steps (shared by the transactional and sequential paths)
+ * @description 返回的 `liked` 一律以**库中真实行状态**为准：INSERT OR IGNORE 在并发抢先插入时会静默
+ *              no-op，此时补一次 EXISTS 判断，杜绝「返回 liked=true 但库中无行」这类不一致。
+ */
+async function runToggle(exec: LikeExecutor, concertId: number, ip: string): Promise<LikeToggleResult> {
+  const del = await exec.execute({
+    sql: 'DELETE FROM concert_likes WHERE concert_id = ? AND ip = ?',
+    args: [concertId, ip]
+  });
+
+  const existed = Number(del.rowsAffected ?? 0) > 0;
+  let liked: boolean;
+  if (existed) {
+    // 原本已点赞 → 已删除，本次是取消 · was liked → removed, so this toggle is an unlike
+    liked = false;
+  } else {
+    // 原本未点赞 → 插入 · was absent → insert
+    const ins = await exec.execute({
+      sql: 'INSERT OR IGNORE INTO concert_likes (concert_id, ip) VALUES (?, ?)',
+      args: [concertId, ip]
+    });
+    liked = Number(ins.rowsAffected ?? 0) > 0 || (await likeRowExists(exec, concertId, ip));
+  }
+
+  return { likes: await syncLikesColumn(exec, concertId), liked };
+}
+
 /**
  * 切换点赞（已点赞则取消）· Toggle a like (like when absent, unlike when present)
- * @description 先 DELETE，命中则视为取消（rowsAffected > 0）；未命中则 INSERT OR IGNORE 视为点赞。
- *              依赖 `UNIQUE(concert_id, ip)` 保证同一 IP 对同一场仅一条记录，天然幂等、可反复切换。
+ * @description 依赖 `UNIQUE(concert_id, ip)` 保证同一 IP 对同一场仅一条记录，天然幂等、可反复切换。
+ *
+ *              **原子性**：`DELETE → INSERT → 重算冗余列` 三步存在「先读后写」依赖，若中间被穿插，
+ *              轻则计数漂移，重则返回与库中不一致的 `liked`。因此在交互式事务（`"write"` 模式，
+ *              等价于 BEGIN IMMEDIATE）内串行化执行，任一语句失败即整体回滚。
+ *
+ *              Atomicity: DELETE → INSERT → recompute has a read-modify-write dependency. Interleaving
+ *              drifts the counter or yields a `liked` that disagrees with the table, so the whole sequence
+ *              runs inside an interactive transaction (`"write"` = BEGIN IMMEDIATE) and rolls back on any error.
+ *
  * @param client LibSQL 客户端 · client
  * @param concertId 演唱会编号 · concert id
  * @param ip 客户端 IP（经 resolveClientIp 归一化）· normalized client IP
@@ -170,36 +253,33 @@ export async function toggleConcertLike(
   concertId: number,
   ip: string
 ): Promise<LikeToggleResult> {
-  const del = await client.execute({
-    sql: 'DELETE FROM concert_likes WHERE concert_id = ? AND ip = ?',
-    args: [concertId, ip]
-  });
-
-  const liked = Number(del.rowsAffected ?? 0) === 0;
-  if (liked) {
-    await client.execute({
-      sql: 'INSERT OR IGNORE INTO concert_likes (concert_id, ip) VALUES (?, ?)',
-      args: [concertId, ip]
-    });
+  if (typeof client.transaction !== 'function') {
+    // 极简客户端（测试替身 / 未来可能的轻量驱动）不支持事务：保持旧的顺序执行语义
+    return runToggle(client, concertId, ip);
   }
 
-  // 维护 concerts.likes 冗余计数：仅在确认发生的分支 ±1（liked=点赞 +1，取消 -1），避免同一次操作重复增减；
-  // 未迁移库（无 likes 列）或客户端桩不支持该语句时回退实时 COUNT(*)。
-  // Maintain the concerts.likes denormalized count: ±1 only on the confirmed branch (like=+1, unlike=-1),
-  // never double-counting one toggle; fall back to live COUNT(*) on a pre-migration DB (no likes column) or unsupported stub.
-  let likes: number
+  let tx: Transaction;
   try {
-    await client.execute({
-      sql: 'UPDATE concerts SET likes = MAX(likes + ?, 0) WHERE id = ?',
-      args: [liked ? 1 : -1, concertId]
-    })
-    const r = await client.execute({
-      sql: 'SELECT likes FROM concerts WHERE id = ?',
-      args: [concertId]
-    })
-    likes = Number((r.rows[0] as unknown as { likes: number } | undefined)?.likes ?? 0) || 0
+    tx = await client.transaction('write');
   } catch {
-    likes = await fetchLikeCount(client, concertId)
+    // 环境不支持交互式事务（如远程端不支持）→ 降级为顺序执行，保证点赞功能可用
+    return runToggle(client, concertId, ip);
   }
-  return { likes, liked };
+
+  try {
+    const res = await runToggle(tx as unknown as LikeExecutor, concertId, ip);
+    await tx.commit();
+    return res;
+  } catch (e) {
+    // 回滚，避免留下半截写入；回滚自身失败不必掩盖原始错误
+    try {
+      await tx.rollback();
+    } catch {
+      /* 事务已失效，原始错误才是关键 */
+    }
+    throw e;
+  } finally {
+    // commit / rollback 后再 close 是空操作（见 @libsql/core Transaction.close 文档）
+    tx.close();
+  }
 }

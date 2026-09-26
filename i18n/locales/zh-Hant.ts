@@ -36,6 +36,7 @@ export default {
 
   tooltips: {
     musicToggle: '播放/暫停背景音樂',
+    universe: '前往我的宇宙',
     feedback: '反饋問題',
     backToTop: '返回頂部'
   },

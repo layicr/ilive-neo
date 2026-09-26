@@ -118,7 +118,42 @@ const cachedShared = import.meta.dev
  *              served to others.
  */
 export default defineEventHandler(async (event) => {
-  const shared = (await cachedShared(event)) as ApiResponse
+  const shared = (await cachedShared(event)) as ApiResponse | undefined
+
+  /**
+   * 条件请求命中（If-None-Match / If-Modified-Since）：
+   * Nitro 缓存层会自行写入 304 并结束响应，然后向调用方返回 **undefined**
+   * （见 nitropack/dist/runtime/internal/cache.mjs 的 handleCacheHeaders 分支：`if (handleCacheHeaders(...)) { return }`）。
+   *
+   * 必须在此提前返回，否则：
+   *  1. `shared.data` 解引用 undefined → TypeError（**仅生产环境**：dev 走未缓存分支，故 E2E 抓不到）；
+   *  2. 响应已结束后仍会继续写 body（write-after-end）；
+   *  3. 会再做一次毫无意义的按 IP 点赞查询。
+   *
+   * Conditional request hit: Nitro's cache layer writes 304 itself, ends the response and returns
+   * **undefined**. Bail out early — otherwise `shared.data` throws a TypeError (production only,
+   * since dev uses the uncached branch), we'd write to a finished response, and run a pointless
+   * per-IP likes query.
+   */
+  if (!shared?.data) return
+
+  /**
+   * 覆盖内层缓存蹭到本响应上的 `cache-control` —— **本响应含按 IP 的个人状态**。
+   *
+   * 内层 `defineCachedEventHandler` 会把缓存条目自带的 `cache-control`（`s-maxage=3600,
+   * stale-while-revalidate`）、`etag` / `last-modified` 一并写到同一个 event 的响应上
+   * （nitropack cache.mjs 里遍历 `response.headers` 复制的那段在缓存命中时同样执行）。
+   * 于是这份**含当前 IP 点赞态**的响应会被 CDN / 边缘节点 / nginx 按 `s-maxage` 缓存 1 小时，
+   * 进而把某个访问者的已点赞状态发给其他人 —— 正是「共享层 + 个人层」两层拆分要避免的结果。
+   *
+   * 因此显式降级为不可共享缓存。`etag` / `last-modified` 保留：它们独立于存储策略，
+   * 仍可让浏览器做条件请求（304）省流量；304 分支已在上面提前返回，不会走到这里。
+   *
+   * The inner cached handler copies its own `cache-control` (`s-maxage=3600`) onto this very event,
+   * but this response carries per-IP `liked` state — downgrade it so shared caches never store it.
+   */
+  setResponseHeader(event, 'cache-control', 'private, no-store')
+
   const ip = getClientIp(event)
   const likedIds = await fetchLikedConcertIds(getTursoClient(), ip)
 

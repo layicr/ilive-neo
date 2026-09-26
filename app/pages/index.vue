@@ -20,6 +20,7 @@ import { useAlbumShowcase } from '~/composables/useAlbumShowcase'
 import { useTicketModal } from '~/composables/useTicketModal'
 import { useFriendLink } from '~/composables/useFriendLink'
 import { useAppError } from '~/composables/useAppError'
+import { useCountUp } from '~/composables/useCountUp'
 import { useGuestbook } from '~/composables/useGuestbook'
 import { safeHtml, formatWishDate, pickLocale, pickHotConcertIds } from '~/utils'
 import { CONFIG } from '~/utils/config'
@@ -67,7 +68,19 @@ onUnmounted(() => {
   document.removeEventListener('click', onLangDocClick)
   document.removeEventListener('keydown', onLangKeydown)
 })
-const { stats, dataReady, dataError, localizedConcerts, localizedCities, localizedWishes, counts, seo, toggleLike } = useData()
+const { stats, dataReady, dataError, error: dataFetchError, localizedConcerts, localizedCities, localizedWishes, counts, seo, toggleLike } = useData()
+
+// ==================== 统计卡片数字滚动 · Stats count-up ====================
+/**
+ * 三张卡片（城市 / 艺人 / 场次）从 0 平滑计数到真实值。
+ * 挂载后首播一次，之后每隔 STAT_COUNTUP_REPEAT 毫秒从 0 重播一次。
+ * Stats count-up: first play on mount, then replay from 0 every STAT_COUNTUP_REPEAT ms.
+ */
+const STAT_COUNTUP_DURATION = 5000
+const STAT_COUNTUP_REPEAT = 120_000
+const citiesCount = useCountUp(() => stats.value.totalCities, STAT_COUNTUP_DURATION, STAT_COUNTUP_REPEAT)
+const artistsCount = useCountUp(() => stats.value.totalArtists, STAT_COUNTUP_DURATION, STAT_COUNTUP_REPEAT)
+const concertsCount = useCountUp(() => stats.value.totalConcerts, STAT_COUNTUP_DURATION, STAT_COUNTUP_REPEAT)
 const { isPlaying, initBgMusic, toggleMusic } = useMusic()
 const { galleryOpen, currentImage, openGallery, closeGallery, prevImage, nextImage } = useGallery()
 const { songlistOpen, activeConcert, filteredSonglist, songlistSearch, openSonglistModal, closeSonglistModal } = useSonglist()
@@ -463,8 +476,19 @@ watch(dataReady, (ready) => {
 
 // 数据拉取失败时给出用户可见提示（loader 已隐藏，避免页面静默空白）
 // On fetch failure show a user-visible message (loader is hidden, so avoid a silent blank page).
-watch(dataError, (err) => {
-  if (err) handleError(err, 'DataFetch', true, 'loadFailed')
+watch(dataError, (failed) => {
+  if (!failed) return
+  // 说明：watch 回调没有组件实例，但 handleError 的错误文案已由 useAppError 在 setup 阶段
+  // 注册好解析器（见 app/composables/useAppError.ts），故此处可以安全地传 messageKey。
+  // Note: watch callbacks have no component instance, but the copy resolver is registered during
+  // setup inside useAppError, so passing a messageKey here is safe.
+  const failure = dataFetchError.value
+  handleError(
+    failure instanceof Error || typeof failure === 'string' ? failure : new Error('data fetch failed'),
+    'DataFetch',
+    true,
+    'loadFailed'
+  )
 })
 
 // 数据真正变化时（SSR 水合、语言切换、异步数据就绪）重新观察时间轴条目，
@@ -617,11 +641,11 @@ async function onToggleLike(concert: { id: number }): Promise<void> {
   try {
     await toggleLike(concert.id)
   } catch (err: any) {
-    // 注意：事件回调中不能调用 handleError —— 其内部 getErrorMessage 会调用 useAppI18n（需 setup 上下文），
-    // 在回调里会抛「Must be called at the top of a setup function」。故此处直接取文案并弹 Toast。
-    // Note: handleError must NOT be called inside an event callback — its getErrorMessage uses useAppI18n
-    // (needs a setup context) and would throw "Must be called at the top of a setup function".
-    // So read the copy directly and show the toast here.
+    // 注：useAppError 已在 setup 阶段注册文案解析器，事件回调里调用 handleError 是安全的；
+    // 但此处需按错误类型分别提示，且限流不打 console.error（避免惊吓用户），故直接弹 Toast 而非走 handleError。
+    // Note: useAppError registers its copy resolver during setup, so calling handleError in an event
+    // callback is safe now; here we still branch on the error type (and avoid console.error on
+    // rate-limit), hence the direct showUserMessage instead of handleError.
     // 限流：友好提示，不打 console.error（避免惊吓用户）· rate-limited: friendly toast, no scary log
     if (err?.code === 'rate_limited') {
       showUserMessage(String(currentData.value.errorMessages.rateLimited ?? ''))
@@ -670,13 +694,39 @@ async function onToggleLike(concert: { id: number }): Promise<void> {
       </transition>
     </div>
     <div class="music-player">
-      <button class="music-btn" id="musicToggle" :class="{ playing: isPlaying }" aria-label="播放/暂停背景音乐" @click="onToggleMusic">
-        <i :class="isPlaying ? 'fas fa-pause' : 'fas fa-music'" id="musicIcon" aria-hidden="true"></i>
-        <span class="tooltip-text">{{ currentData.tooltips.musicToggle }}</span>
-      </button>
-      <span class="music-wave" :class="{ active: isPlaying }" id="musicWave" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
-      </span>
+      <div class="music-main">
+        <button class="music-btn" id="musicToggle" :class="{ playing: isPlaying }" aria-label="播放/暂停背景音乐" @click="onToggleMusic">
+          <i :class="isPlaying ? 'fas fa-pause' : 'fas fa-music'" id="musicIcon" aria-hidden="true"></i>
+          <span class="tooltip-text">{{ currentData.tooltips.musicToggle }}</span>
+        </button>
+        <span class="music-wave" :class="{ active: isPlaying }" id="musicWave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </span>
+      </div>
+      <a
+        class="music-btn xy-btn"
+        href="http://iliveworld.lyc.la"
+        target="_blank"
+        rel="noopener noreferrer"
+        :aria-label="currentData.tooltips.universe"
+      >
+        <svg class="xy-icon" viewBox="0 0 24 24" role="img" aria-hidden="true">
+          <defs>
+            <!-- 背景渐变取自设计稿图片（横向 紫粉渐变） -->
+            <linearGradient id="xyGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#C896B2" />
+              <stop offset="1" stop-color="#D993A7" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#xyGrad)" />
+          <!-- 星球 + 星环（宇宙主题）· planet with ring -->
+          <ellipse cx="11" cy="12" rx="8.6" ry="3.2" fill="none" stroke="#fff" stroke-width="1.8" transform="rotate(-22 11 12)" />
+          <circle cx="11" cy="12" r="4.4" fill="#fff" />
+          <circle cx="18.6" cy="6.4" r="1" fill="#fff" />
+          <circle cx="5.4" cy="6" r="0.8" fill="#fff" />
+        </svg>
+        <span class="tooltip-text">{{ currentData.tooltips.universe }}</span>
+      </a>
     </div>
     <audio id="bgMusic" loop>
       <source id="bgMusicSource" :src="currentData.bgMusic" type="audio/mpeg">
@@ -737,15 +787,15 @@ async function onToggleLike(concert: { id: number }): Promise<void> {
     <section class="social-stats" id="influencer">
       <div class="stats-grid">
         <div class="stat-card cities" id="city-card" @click="onShowCityModal">
-          <div class="stat-number" id="total-cities">{{ stats.totalCities }}</div>
+          <div class="stat-number" id="total-cities">{{ citiesCount }}</div>
           <div class="stat-label" id="cities-label">{{ currentData.citiesLabel }}</div>
         </div>
         <div class="stat-card artists">
-          <div class="stat-number" id="total-artists">{{ stats.totalArtists }}</div>
+          <div class="stat-number" id="total-artists">{{ artistsCount }}</div>
           <div class="stat-label" id="artists-label">{{ currentData.artistsLabel }}</div>
         </div>
         <div class="stat-card total" @click="onShowTicketModal">
-          <div class="stat-number" id="total-concerts">{{ stats.totalConcerts }}</div>
+          <div class="stat-number" id="total-concerts">{{ concertsCount }}</div>
           <div class="stat-label" id="total-label">{{ currentData.concertsLabel }}</div>
         </div>
       </div>

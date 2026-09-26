@@ -22,6 +22,14 @@ import type { LocalizedWish } from './wish'
 import type { SiteSeoSettings } from './seo'
 import type { LocalizedFriendLink } from './friendLink'
 
+/**
+ * 语言类型 · Locale
+ * @description `export * from './i18n'` 只是「再导出」，并不会在本文件产生可用的本地绑定，
+ *              直接写 `Locale` 会解析失败（TS2304）。故需显式按需引入。
+ *              Note: `export *` re-exports without creating local bindings, so `Locale` must be imported.
+ */
+import type { Locale } from './i18n'
+
 export interface AppData {
   concerts: LocalizedConcert[]
   cities: LocalizedCity[]

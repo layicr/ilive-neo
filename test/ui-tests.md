@@ -195,4 +195,4 @@
   - [x] UI-051 邮箱校验：主表单 `novalidate` + 前端正则校验，非法邮箱显示站内提示、不发请求（e2e 覆盖）
   - [x] UI-056 UGC 文本安全：留言 / 回复中的脚本与事件载荷以纯文本渲染不执行（e2e 覆盖）
   - [x] fixture 扩展：`seed-e2e-db.mjs` 新增留言板种子（4 条主留言 / 18 条回复，含 15 回复与 XSS 载荷）
-  - 单元测试（vitest run）：20 文件 / 303 用例全部通过（`guestbook.test.ts` 新增可选邮箱与 UGC 原样存储 3 例；`parse.test.ts` 按 `parseTags` 新契约更新「字符串归一化」用例）
+  - 单元测试（vitest run）：24 文件 / 334 用例全部通过（后续新增：`data-get-handler`（`GET /api/data` 304 判空 + 缓存头）、`useCountUp`（数字滚动）、`useTimeline`（observer 生命周期）、`useAppError.context`（回调上下文安全））

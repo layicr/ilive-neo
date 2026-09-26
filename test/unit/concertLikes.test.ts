@@ -50,9 +50,12 @@ function stubClient(initial: { concert_id: number; ip: string }[] = [], initialL
       const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as (number | string)[]
 
       if (sql.startsWith('UPDATE concerts')) {
-        const [sign, cid] = args
-        const cur = likeCount.get(Number(cid)) ?? 0
-        likeCount.set(Number(cid), Math.max(cur + Number(sign), 0))
+        // 新实现：likes = (SELECT COUNT(*) FROM concert_likes WHERE concert_id = ?)
+        // 以真实行为准重算，而非旧的 ±1 增量
+        const cid = Number(args[args.length - 1])
+        let real = 0
+        for (const k of table) if (Number(k.split('::')[0]) === cid) real += 1
+        likeCount.set(cid, real)
         return { rows: [], rowsAffected: 1 }
       }
 
@@ -265,6 +268,167 @@ describe('冗余计数回退 — concerts.likes 列缺失（未迁移库）', ()
     const client = noLikesColumnClient()
     expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 1, liked: true })
     expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 0, liked: false })
+  })
+})
+
+/**
+ * 支持交互式事务的客户端桩 · Transaction-capable client stub
+ * @description 记录语句是跑在事务里还是裸客户端上、以及 commit / rollback 次数，
+ *              用于验证 toggleConcertLike 的原子性保证。
+ *              `concurrentInsert` 模拟「另一个事务抢先插入」：INSERT OR IGNORE 会 no-op，
+ *              但行最终存在 —— 用于验证 liked 以真实行状态为准。
+ */
+function txClient(opts: { failOn?: RegExp; concurrentInsert?: boolean } = {}) {
+  const table = new Set<string>()
+  const likeCount = new Map<number, number>()
+  const key = (c: number, i: string) => `${c}::${i}`
+  const txSql: string[] = []
+  const clientSql: string[] = []
+  let commits = 0
+  let rollbacks = 0
+
+  const executeFn = (sink: string[], inTx: boolean) => async (q: unknown) => {
+    const sql = typeof q === 'string' ? q : String((q as { sql: string }).sql)
+    const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as (number | string)[]
+    sink.push(sql)
+    if (inTx && opts.failOn?.test(sql)) throw new Error('SQLITE_ERROR: simulated failure')
+
+    if (sql.startsWith('UPDATE concerts')) {
+      const cid = Number(args[args.length - 1])
+      let real = 0
+      for (const k of table) if (Number(k.split('::')[0]) === cid) real += 1
+      likeCount.set(cid, real)
+      return { rows: [], rowsAffected: 1 }
+    }
+    if (sql.startsWith('SELECT likes FROM concerts')) {
+      return { rows: [{ likes: likeCount.get(Number(args[0])) ?? 0 }], rowsAffected: 0 }
+    }
+    if (sql.startsWith('DELETE FROM concert_likes')) {
+      const [c, i] = args
+      const had = table.has(key(Number(c), String(i)))
+      if (had) table.delete(key(Number(c), String(i)))
+      return { rows: [], rowsAffected: had ? 1 : 0 }
+    }
+    if (sql.startsWith('INSERT OR IGNORE INTO concert_likes')) {
+      const [c, i] = args
+      const before = table.size
+      table.add(key(Number(c), String(i)))
+      const inserted = !opts.concurrentInsert && table.size > before
+      return { rows: [], rowsAffected: inserted ? 1 : 0 }
+    }
+    if (sql.includes('COUNT(*)') && sql.includes('WHERE concert_id')) {
+      let n = 0
+      for (const k of table) if (Number(k.split('::')[0]) === Number(args[0])) n += 1
+      return { rows: [{ n }], rowsAffected: 0 }
+    }
+    if (sql.includes('SELECT 1 FROM concert_likes')) {
+      const [c, i] = args
+      return { rows: table.has(key(Number(c), String(i))) ? [{ '1': 1 }] : [], rowsAffected: 0 }
+    }
+    return { rows: [], rowsAffected: 0 }
+  }
+
+  const client = {
+    execute: executeFn(clientSql, false),
+    transaction: async () => ({
+      execute: executeFn(txSql, true),
+      executeBatch: async () => [],
+      commit: async () => {
+        commits += 1
+      },
+      rollback: async () => {
+        rollbacks += 1
+      },
+      close: () => {},
+      closed: false
+    })
+  }
+
+  return {
+    client: client as unknown as Client,
+    log: {
+      get commits() {
+        return commits
+      },
+      get rollbacks() {
+        return rollbacks
+      },
+      txSql,
+      clientSql
+    }
+  }
+}
+
+describe('toggleConcertLike — 原子性（交互式事务）', () => {
+  it('语句在事务内执行并提交，未降级到裸客户端', async () => {
+    const { client, log } = txClient()
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+
+    expect(res).toEqual({ likes: 1, liked: true })
+    expect(log.txSql.some((s) => s.startsWith('DELETE FROM concert_likes'))).toBe(true)
+    expect(log.txSql.some((s) => s.startsWith('INSERT OR IGNORE INTO concert_likes'))).toBe(true)
+    expect(log.txSql.some((s) => s.startsWith('UPDATE concerts'))).toBe(true)
+    expect(log.clientSql).toHaveLength(0)
+    expect(log.commits).toBe(1)
+    expect(log.rollbacks).toBe(0)
+  })
+
+  it('取消点赞同样走事务', async () => {
+    const { client, log } = txClient()
+    await toggleConcertLike(client, 1, '1.1.1.1')
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+
+    expect(res).toEqual({ likes: 0, liked: false })
+    expect(log.commits).toBe(2)
+    expect(log.rollbacks).toBe(0)
+  })
+
+  it('事务中语句失败 → 回滚、不提交，并把错误向上抛', async () => {
+    const { client, log } = txClient({ failOn: /UPDATE concerts/ })
+
+    await expect(toggleConcertLike(client, 1, '1.1.1.1')).rejects.toThrow('simulated failure')
+    expect(log.rollbacks).toBe(1)
+    expect(log.commits).toBe(0)
+  })
+
+  it('客户端不支持 transaction() 时降级为顺序执行（行为不变）', async () => {
+    const client = stubClient() // 只有 execute，没有 transaction
+    expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 1, liked: true })
+    expect(await toggleConcertLike(client, 1, '1.1.1.1')).toEqual({ likes: 0, liked: false })
+  })
+})
+
+describe('toggleConcertLike — 计数自愈与并发一致（旧 ±1 写法的痛点）', () => {
+  it('冗余列已被写歪时，本次操作后回到真实 COUNT(*)', async () => {
+    const client = stubClient([], { 1: 99 }) // concerts.likes 列被写歪成 99，实际 0 行点赞
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+    expect(res.likes).toBe(1) // 旧 +1 写法会得到 100
+  })
+
+  it('INSERT OR IGNORE 被并发抢先插入（rowsAffected=0）时，liked 以真实行状态为准', async () => {
+    const { client } = txClient({ concurrentInsert: true })
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+    // 行确实存在（并发插入），不能谎报「未点赞」
+    expect(res.liked).toBe(true)
+    expect(res.likes).toBe(1)
+  })
+})
+
+describe('toggleConcertLike — 非预期写失败不再被静默吞掉', () => {
+  it('UPDATE 因缺列失败仍回退 COUNT(*)；其它错误必须抛出', async () => {
+    // 缺列 → 静默回退（预期）
+    const missing = noLikesColumnClient()
+    expect(await toggleConcertLike(missing, 1, '1.1.1.1')).toEqual({ likes: 1, liked: true })
+
+    // 其它错误 → 抛出，避免冗余列长期不一致而无人察觉
+    const broken = {
+      execute: async (q: unknown) => {
+        const sql = typeof q === 'string' ? q : String((q as { sql: string }).sql)
+        if (sql.startsWith('UPDATE concerts')) throw new Error('database is locked')
+        return { rows: [], rowsAffected: 0 }
+      }
+    } as unknown as Client
+    await expect(toggleConcertLike(broken, 1, '1.1.1.1')).rejects.toThrow('database is locked')
   })
 })
 

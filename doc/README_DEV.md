@@ -40,7 +40,7 @@
 | 动画 | GSAP 3.12.2（CDN）|
 | 样式 | `public/css/main.css`（含从 Tailwind CDN 迁移的手写工具类）、Font Awesome 6.4.0（CDN） |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**20 文件 / 303 用例**）+ Playwright（E2E，**6 套件 / 54 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**24 文件 / 334 用例**）+ Playwright（E2E，**6 套件 / 54 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -73,6 +73,7 @@ ilive_neo/
 │   │   ├── useMusic.ts        # 背景音乐播放/暂停
 │   │   ├── useKeyboard.ts     # 键盘手势
 │   │   ├── useSharedState.ts  # 跨组件共享状态（useState 封装）
+│   │   ├── useCountUp.ts      # 统计数字滚动（0 → 目标值，easeOutCubic 5s，每 120s 重播；SSR 透传真值、水合安全）
 │   │   ├── useFriendLink.ts   # 友情链接
 │   │   ├── useGuestbook.ts    # 留言板（分页列表 / 发布留言 / 发布回复 / 卡片·列表视图）
 │   │   └── useAppError.ts     # 全局错误处理 + Toast
@@ -111,7 +112,7 @@ ilive_neo/
 │   │   ├── concerts.ts        # 演唱会行类型 + mapConcert / fetchConcert / fetchAllConcerts
 │   │   ├── seo.ts             # SEO_I18N_KEYS / SEO_FALLBACK / fetchSiteSeo（DB 优先 + 代码回退）
 │   │   ├── friendLinks.ts     # 友情链接映射（含 href 协议白名单 sanitizeHref）
-│   │   ├── concertLikes.ts    # 点赞读写 + getClientIp（按 IP 去重、可取消）
+│   │   ├── concertLikes.ts    # 点赞读写（事务内切换 + COUNT(*) 自愈重算冗余列）+ getClientIp（按 IP 去重、可取消）
 │   │   ├── guestbook.ts       # 留言/回复读写（仅读已通过；回复父留言校验；IN 批量取回复无 N+1）
 │   │   ├── ua.ts              # 服务端 UA 解析（浏览器 / 系统）
 │   │   ├── rateLimit.ts       # 每 IP 内存限流（点赞与留言写接口共用）
@@ -123,7 +124,7 @@ ilive_neo/
 │       └── seed.mjs           # 建空库脚本（DROP + CREATE，不含业务数据）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（20 文件 / 303 用例）
+│   ├── unit/                  # Vitest 单元测试（24 文件 / 334 用例）
 │   ├── e2e/                   # Playwright 端到端测试（6 套件 / 54 用例，桌面/移动双 project + fixture 库种子）
 │   ├── ui-tests.md            # UI 验收清单（手动 + 自动化）
 │   └── unit-tests.md / README.md
@@ -149,6 +150,7 @@ app/pages/index.vue (setup)
   ├─ useMusic()           → 背景音乐（onMounted 初始化，跟随语言切换音轨）
   ├─ useGallery()         → 画廊（懒取一次 localizedConcerts，避免重复 useData）
   ├─ useAlbumShowcase()   → 专辑轮播（GSAP）
+  ├─ useCountUp()         → 统计卡片数字滚动（城市/艺人/场次，挂载后从 0 播放，每 120s 重播）
   ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()/useGuestbook()
   ├─ useSeoMeta()         → 页面级动态 title/description/og/twitter（随 locale 切换 + 数据库艺人）
   └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
@@ -163,10 +165,16 @@ app/app.vue (setup)
 - **所有 composable 内的 `useState`/`useAsyncData` 必须懒初始化**（在 composable 函数体内调用，不可在模块顶层），否则 SSR 阶段报 `instance unavailable`。
 - 语言切换**不重新请求 API**：`localizedConcerts` 等 computed 依赖 `currentLanguage`，切换只重算前端派生值，零网络请求。
 - `app/pages/index.vue` 的 `<script setup>` 承载全部交互逻辑 + 页面级 SEO 动态 meta；全站语言 SEO（`<html lang>` / hreflang / `og:locale`）由 `app/app.vue` 输出，两侧用同名 `key` 合并去重，避免 head 中出现重复 meta。
+- **统计数字滚动（`app/composables/useCountUp.ts`）**：展示值是 `computed`——未播放时**惰性透传**目标值（不能在 setup 期取快照：SSR 阶段 `useAsyncData` 尚未 resolve 会取到 0，导致 SSR HTML 输出 0 且水合文本不一致）；客户端 `onMounted` 后下一帧归零并播放（默认 5s，easeOutCubic），可传 `repeatMs` 周期重播（首页为 120s）；命中 `prefers-reduced-motion` 时直接显示终值。
+- **错误提示的上下文安全（`app/composables/useAppError.ts`）**：vue-i18n 的 `useI18n()` 在无组件实例时会**直接抛** `Must be called at the top of a 'setup' function`。因此错误文案解析器**只在 setup 阶段注册**，之后 watch / 事件回调 / 全局监听复用它——`handleError(err, ctx, showUser=true, messageKey)` 在回调里可安全调用；新增回调时请勿在其中直接解析 i18n。
+- **时间轴 observer 生命周期（`app/composables/useTimeline.ts`）**：`IntersectionObserver` 会**强引用**被 observe 的节点。宿主卸载（`onScopeDispose`）时 `disconnect` 并置空单例，且每次 `initTimelineReveal()` 都先 `disconnect` 再按当前 DOM 重新 observe，避免语言切换重建页面后旧 DOM / 图片节点无法回收。
 
 ### 4.2 服务端数据层
 
 - `GET /api/data`（`server/api/data.get.ts`）：**单端点聚合**，一次返回 `{ concerts, cities, wishes, stats }`。城市场次数复用同一份 concerts 计算（`computeCityConcertCounts`），消除原多端点重复全量查询。
+- **两层缓存 + 响应缓存策略**：内层 `defineCachedEventHandler`（生产 1h SWR）只产出与请求者无关的共享数据；外层非缓存，按当前 IP 合并 `liked` 后返回。两点必须注意：
+  1. 内层会把缓存条目自带的 `cache-control`（`s-maxage=3600`）写到同一个 event 的响应上，**外层必须显式覆盖为 `private, no-store`**，否则 CDN / 边缘 / nginx 会把「某个 IP 的点赞态」缓存 1 小时并发给其他人；`etag` / `last-modified` 保留以维持条件请求。
+  2. 命中条件请求（`If-None-Match` / `If-Modified-Since`）时，Nitro 会自行写入 304 并结束响应、向调用方返回 **`undefined`**，外层须先判空再解引用（否则生产环境抛 `TypeError`；dev 走未缓存分支不会复现）。
 - `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist: { zh, en, 'zh-Hant' }`、`location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析）；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
 - 前端 `useData.ts` 的 `pickLocale` / `localizeConcert` 根据 `currentLanguage` 把多语言结构**选为单语言字段**（如 `artist: "五月天"`）；目标语言缺失时按 `请求语言 → zh → en` 回退链兜底（`app/utils/index.ts`，纯函数可直接单测）。
 
@@ -195,6 +203,16 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 - **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
 - `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）+ **hreflang**（3 语言 + `x-default`，与 `app.vue` 用同名 key 合并去重）。
 - JSON-LD 用 `JSON.parse(JSON.stringify(toRaw(...)))` 剥离 Vue 响应式 Proxy，用 `computed` 保证在数据就绪后输出完整演唱会列表。
+
+### 4.4 首页悬浮按钮：背景音乐 & universe 外链
+
+首页右下角悬浮区有两个圆形按钮，均由 `app/pages/index.vue` 渲染：
+
+- **背景音乐按钮**：由 `useMusic` 驱动（见 4.1），Font Awesome 音符图标，点击循环切换播放/暂停。
+- **universe 外链按钮（宇宙主题）**：紧邻音乐按钮，是一个静态外链 `<a class="music-btn xy-btn" target="_blank" rel="noopener noreferrer" href="http://iliveworld.lyc.la">`，点击在新标签页打开 `http://iliveworld.lyc.la`。
+  - 图标为**内联 SVG**（`.xy-icon`，写在 `index.vue` 内）：渐变圆角方块背景（横向紫粉渐变 `#C896B2 → #D993A7`，取自设计稿图片采样色值）+ 白色「星球 + 星环 + 小星星」图形（贴合「universe / 宇宙」主题）。
+  - 悬浮提示文案取自 i18n `tooltips.universe`，三语言（zh-CN / en / zh-Hant）均需维护该 key。
+  - 基础样式在 `public/css/main.css` 的 `.xy-btn` / `.xy-icon`（复用 `.music-btn` 的圆形容器与悬浮脉冲动画）。
 
 ---
 
@@ -280,7 +298,7 @@ npm run build      # 生产构建（Nitro，可部署到 Vercel）
 npm run preview    # 预览生产构建
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，20 文件 / 303 用例）
+npm run test       # 运行单元测试（vitest run，24 文件 / 334 用例）
 npm run test:watch # 监听模式运行测试
 npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed fixture 库并启动隔离 dev server）
 ```
@@ -300,7 +318,13 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 
 > 前端调用 `/api/data`、`/api/concerts/:id`、`POST /api/like` 与留言板三接口（`GET /api/guestbook`、`POST /api/guestbook`、`POST /api/guestbook/reply`）。
 > 点赞计数并入 `/api/data`（不新增 GET 请求）；为避免共享缓存把「按 IP 的 liked」串给其他访问者，
-> `/api/data` 拆为「内层缓存共享数据 + 外层按 IP 合并 liked」。
+> `/api/data` 拆为「内层缓存共享数据 + 外层按 IP 合并 liked」，并覆盖响应头为 `private, no-store`；
+> 命中条件请求时内层返回 `undefined`（Nitro 已响应 304），外层判空后提前返回。
+>
+> **`POST /api/like` 的写入在交互式事务内完成**（`client.transaction('write')`，等价 `BEGIN IMMEDIATE`）：
+> `DELETE → INSERT → 重算冗余列` 存在「先读后写」依赖，任一语句失败即整体回滚。
+> 冗余计数 `concerts.likes` 以 `UPDATE ... likes = (SELECT COUNT(*) ...)` **重算**（自愈），而非旧的 `±1`（并发下会永久漂移）；
+> 未迁移库缺少该列时回退实时 `COUNT(*)`，**其它写失败会向上抛**（由前端乐观回滚 + Toast 兜底）。
 
 ---
 
@@ -375,6 +399,10 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 - **留言板为写接口**：`POST /api/guestbook` 与 `POST /api/guestbook/reply` 会写库（提交即 `is_approved=1`），本地 `file:` 模式需保证库文件可写；线上 Turso 需写权限。
 - 前端 `useData` 现按当前语言请求 `/api/data?lang=<locale>`（key 含 locale 分语言缓存），`localizedConcerts/Cities/Wishes` 在「服务端已本地化」时直接透传、否则前端 `localizeConcert`；`counts` 单语言时读服务端预置的 `city.concertCount`（不再前端跨语言重算）。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
+- **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/pages/index.vue`；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。
+- **`handleError` 可在 watch / 事件回调中安全调用**（错误文案解析器已在 setup 阶段注册）；但切勿在回调里直接调用 `useAppI18n()` / `useI18n()` —— 无组件实例时会抛错。
+- **`useTimeline` 的 observer 必须显式释放**：语言切换会重建页面组件，卸载时由 `onScopeDispose` 接管 `disconnect`；新增观察逻辑请走 `initTimelineReveal()`，不要另建 `IntersectionObserver`。
+- **已知取舍**：`/api/data` 的点赞数受内层 1 小时共享缓存影响，写入后不会主动失效，他人看到的计数需等缓存/SWR 刷新才更新（不影响当前用户的 `liked` 判定，该值由外层实时合并）。
 - **token 安全**：`.env` 已加入 `.gitignore`。若 token 曾提交进 git 历史，应立即到 Turso 控制台**更换新 token**。
 
 ---
