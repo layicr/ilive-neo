@@ -29,8 +29,12 @@ CREATE TABLE IF NOT EXISTS concerts (
 -- 演唱会点赞 · Concert likes（按 IP 去重，可取消）
 -- 说明：点赞去重与「是否点过」仍以本表为准；同时 concerts 表冗余一个 likes 总数（见 concerts.likes），
 --      由 toggleConcertLike 在确认分支 ±1 维护，避免每次 /api/data 做 GROUP BY 统计。
+--      注意：该冗余值是**独立的历史基数**，不必等于本表的真实行数，因此不得用 COUNT(*) 重算它
+--      （否则一次点击就会把几千的基数清零为极小行数，表现为「点赞数突变」）。
 -- Note: dedup & "liked" still live here; concerts also stores a denormalized total `likes` (maintained ±1 by
 --       toggleConcertLike) so /api/data avoids a per-request GROUP BY. One row per IP per concert; unlike deletes it.
+--       That counter is an independent historical baseline and is NOT required to match this table's row count —
+--       never recompute it with COUNT(*) (a single click would reset it to the tiny real row count).
 CREATE TABLE IF NOT EXISTS concert_likes (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,   -- 自增主键 · auto-increment primary key
   concert_id  INTEGER NOT NULL REFERENCES concerts(id) ON DELETE CASCADE,  -- 演唱会编号 · concert id

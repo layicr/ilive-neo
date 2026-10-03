@@ -323,11 +323,14 @@ npm run test:e2e   # Run end-to-end tests (Playwright, 6 suites; seeds the fixtu
 > `undefined` (Nitro already answered 304) and the outer layer returns early after a null check.
 >
 > **`POST /api/like` writes inside an interactive transaction** (`client.transaction('write')`, i.e. `BEGIN IMMEDIATE`):
-> `DELETE → INSERT → recompute` has a read-modify-write dependency, so any failing statement rolls the whole thing back.
-> The denormalized `concerts.likes` counter is **recomputed** via `UPDATE ... likes = (SELECT COUNT(*) ...)` (self-healing)
-> instead of the old `±1` (which drifted permanently under concurrency); a pre-migration database without that column
-> falls back to a live `COUNT(*)`, and **any other write failure is rethrown** (the frontend rolls back optimistically
-> and shows a toast).
+> `DELETE → INSERT → ±1 counter update` has a read-modify-write dependency, so any failing statement rolls the whole thing back.
+> The denormalized `concerts.likes` counter is an **independent historical baseline** (maintained manually, reflecting
+> offline / historical totals — it is not required to equal the number of rows in `concert_likes`), so it is
+> **incremented/decremented** via `UPDATE concerts SET likes = MAX(0, COALESCE(likes,0) + ?)` (+1 when liked, −1 when
+> unliked, floored at 0). **Never recompute it from `(SELECT COUNT(*) …)`** — that resets a multi-thousand baseline down
+> to the tiny real row count on any single click (showing up as "the like count suddenly jumps").
+> A pre-migration database without that column falls back to a live `COUNT(*)`, and **any other write failure is rethrown**
+> (the frontend rolls back optimistically and shows a toast).
 
 ---
 

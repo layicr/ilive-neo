@@ -8,8 +8,8 @@
  *                    避免 N+1；
  *              · 写：`toggleConcertLike` —— 存在则取消（DELETE），不存在则点赞（INSERT OR IGNORE），
  *                    天然幂等、支持反复切换，返回最新 `{ likes, liked }`。
- *                    **这四步必须原子完成**：已迁移到交互式事务（BEGIN IMMEDIATE）内执行，
- *                    并以 COUNT(*) 重算冗余计数而非 ±1（详见该函数注释）。
+ *                    **这些步骤必须原子完成**：在交互式事务（BEGIN IMMEDIATE）内串行执行，
+ *                    计数以「既有基数 ±1」增量维护 —— **不**重算 `concert_likes` 行数（详见该函数注释）。
  *
  *              容错：`concert_likes` 表缺失（未迁移）时读操作视为「无点赞」，绝不阻断页面；
  *              写操作会抛错，由接口层转为 5xx。
@@ -177,19 +177,27 @@ async function likeRowExists(exec: LikeExecutor, concertId: number, ip: string):
 }
 
 /**
- * 以真实点赞行为准「重算」concerts.likes 冗余列 · Recompute the denormalized counter from truth
- * @description 旧实现是在确认分支上 `likes ± 1`：四条语句非原子，并发（双击 / 重试 / 多实例）下
- *              会**永久漂移**（如 `INSERT OR IGNORE` 因并发冲突被忽略却仍 +1）。
- *              这里改成**单条 UPDATE 内用 COUNT(*) 赋值** —— 计数不再依赖「上一次是否准」，天然自愈。
+ * 在既有基数上增量维护 concerts.likes 冗余列 · Adjust the denormalized counter by ±1
+ * @description `concerts.likes` 是**独立的历史基数**（人工维护、反映线下 / 历史累计等来源），
+ *              其值**不必**等于 `concert_likes` 表的真实行数；因此这里只在当前值上做 ±1 增量：
+ *                · 新增点赞 → +1；取消点赞 → −1（以 `MAX(0, …)` 兜底，不会为负）；
+ *                · 同一 IP 重复点击由事务 + `UNIQUE(concert_id, ip)` 保证只记一次，
+ *                  同一事务内「先删后插」的判定以 `existed` 为准，不会出现重复累加。
+ *              ——若改为 `likes = (SELECT COUNT(*) …)` 重算，基数会在任意一次点击时被清零为极小的真实行数
+ *              （表现为「点赞数时不时突变」），这是刻意避免的行为。
  *
  *              未迁移库没有 `concerts.likes` 列，属预期回退，退用实时 COUNT(*)；
- *              **其它失败必须向上抛**，否则冗余列会长期不一致且无人察觉（旧实现一律静默吞掉）。
+ *              **其它失败必须向上抛**，否则冗余列会长期不一致且无人察觉。
  */
-async function syncLikesColumn(exec: LikeExecutor, concertId: number): Promise<number> {
+async function bumpLikesColumn(
+  exec: LikeExecutor,
+  concertId: number,
+  delta: number
+): Promise<number> {
   try {
     await exec.execute({
-      sql: 'UPDATE concerts SET likes = (SELECT COUNT(*) FROM concert_likes WHERE concert_id = ?) WHERE id = ?',
-      args: [concertId, concertId]
+      sql: 'UPDATE concerts SET likes = MAX(0, COALESCE(likes, 0) + ?) WHERE id = ?',
+      args: [delta, concertId]
     });
     const r = await exec.execute({
       sql: 'SELECT likes FROM concerts WHERE id = ?',
@@ -207,6 +215,8 @@ async function syncLikesColumn(exec: LikeExecutor, concertId: number): Promise<n
  * 切换点赞的步骤实现（事务内外共用）· Toggle steps (shared by the transactional and sequential paths)
  * @description 返回的 `liked` 一律以**库中真实行状态**为准：INSERT OR IGNORE 在并发抢先插入时会静默
  *              no-op，此时补一次 EXISTS 判断，杜绝「返回 liked=true 但库中无行」这类不一致。
+ *
+ *              计数以「本 IPC 这一次到底是新增还是删除」为准做 ±1（见 `bumpLikesColumn`）。
  */
 async function runToggle(exec: LikeExecutor, concertId: number, ip: string): Promise<LikeToggleResult> {
   const del = await exec.execute({
@@ -228,18 +238,18 @@ async function runToggle(exec: LikeExecutor, concertId: number, ip: string): Pro
     liked = Number(ins.rowsAffected ?? 0) > 0 || (await likeRowExists(exec, concertId, ip));
   }
 
-  return { likes: await syncLikesColumn(exec, concertId), liked };
+  return { likes: await bumpLikesColumn(exec, concertId, existed ? -1 : 1), liked };
 }
 
 /**
  * 切换点赞（已点赞则取消）· Toggle a like (like when absent, unlike when present)
  * @description 依赖 `UNIQUE(concert_id, ip)` 保证同一 IP 对同一场仅一条记录，天然幂等、可反复切换。
  *
- *              **原子性**：`DELETE → INSERT → 重算冗余列` 三步存在「先读后写」依赖，若中间被穿插，
+ *              **原子性**：`DELETE → INSERT → 计数 ±1` 三步存在「先读后写」依赖，若中间被穿插，
  *              轻则计数漂移，重则返回与库中不一致的 `liked`。因此在交互式事务（`"write"` 模式，
  *              等价于 BEGIN IMMEDIATE）内串行化执行，任一语句失败即整体回滚。
  *
- *              Atomicity: DELETE → INSERT → recompute has a read-modify-write dependency. Interleaving
+ *              Atomicity: DELETE → INSERT → ±1 counter update has a read-modify-write dependency. Interleaving
  *              drifts the counter or yields a `liked` that disagrees with the table, so the whole sequence
  *              runs inside an interactive transaction (`"write"` = BEGIN IMMEDIATE) and rolls back on any error.
  *

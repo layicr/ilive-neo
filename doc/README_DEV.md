@@ -322,8 +322,10 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 > 命中条件请求时内层返回 `undefined`（Nitro 已响应 304），外层判空后提前返回。
 >
 > **`POST /api/like` 的写入在交互式事务内完成**（`client.transaction('write')`，等价 `BEGIN IMMEDIATE`）：
-> `DELETE → INSERT → 重算冗余列` 存在「先读后写」依赖，任一语句失败即整体回滚。
-> 冗余计数 `concerts.likes` 以 `UPDATE ... likes = (SELECT COUNT(*) ...)` **重算**（自愈），而非旧的 `±1`（并发下会永久漂移）；
+> `DELETE → INSERT → 计数 ±1` 存在「先读后写」依赖，任一语句失败即整体回滚。
+> 冗余计数 `concerts.likes` 是**独立的历史基数**（人工维护，反映线下 / 历史累计等来源，其值不必等于 `concert_likes` 行数），
+> 因此以 `UPDATE concerts SET likes = MAX(0, COALESCE(likes,0) + ?)` **在做增减**（新增 +1、取消 −1，`MAX(0,…)` 兜底不为负）；
+> **切勿改成按 `(SELECT COUNT(*) …)` 重算**——那会在任意一次点击时把几千的基数清零为极小的真实行数（表现为「点赞数时不时突变」）。
 > 未迁移库缺少该列时回退实时 `COUNT(*)`，**其它写失败会向上抛**（由前端乐观回滚 + Toast 兜底）。
 
 ---

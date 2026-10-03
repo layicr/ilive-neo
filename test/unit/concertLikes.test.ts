@@ -50,12 +50,10 @@ function stubClient(initial: { concert_id: number; ip: string }[] = [], initialL
       const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as (number | string)[]
 
       if (sql.startsWith('UPDATE concerts')) {
-        // 新实现：likes = (SELECT COUNT(*) FROM concert_likes WHERE concert_id = ?)
-        // 以真实行为准重算，而非旧的 ±1 增量
-        const cid = Number(args[args.length - 1])
-        let real = 0
-        for (const k of table) if (Number(k.split('::')[0]) === cid) real += 1
-        likeCount.set(cid, real)
+        // 新实现：likes = MAX(0, COALESCE(likes,0) + ?) —— 在既有基数上 ±1 增量（不重算真实行数）
+        const [delta, cid] = args
+        const next = Math.max(0, (likeCount.get(Number(cid)) ?? 0) + Number(delta))
+        likeCount.set(Number(cid), next)
         return { rows: [], rowsAffected: 1 }
       }
 
@@ -184,6 +182,45 @@ describe('toggleConcertLike — 点赞 / 取消切换', () => {
   })
 })
 
+describe('toggleConcertLike — 保留既有点赞基数（不按真实行数重算）', () => {
+  it('已有历史基数时，点赞为基数 +1（不被真实行数清零）', async () => {
+    // 场上已有 3 条真实点赞行，但 concerts.likes 基数为 1532（历史累计，二者本就不必相等）
+    const client = stubClient(
+      [{ concert_id: 1, ip: 'a' }, { concert_id: 1, ip: 'b' }, { concert_id: 1, ip: 'c' }],
+      { 1: 1532 }
+    )
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+    expect(res).toEqual({ likes: 1533, liked: true })
+  })
+
+  it('取消点赞为基数 −1，可回到原基数（不被真实行数清零）', async () => {
+    const client = stubClient([{ concert_id: 1, ip: '1.1.1.1' }], { 1: 1532 })
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+    expect(res).toEqual({ likes: 1531, liked: false })
+  })
+
+  it('反复切换后仍稳定在基数附近（+1 / 回到基数）', async () => {
+    const client = stubClient([], { 2: 8373 })
+    await toggleConcertLike(client, 2, '1.1.1.1')
+    await toggleConcertLike(client, 2, '1.1.1.1')
+    const res = await toggleConcertLike(client, 2, '1.1.1.1')
+    expect(res).toEqual({ likes: 8374, liked: true })
+  })
+
+  it('基数为 0 时取消点赞不会变成负数（MAX(0, …) 兜底）', async () => {
+    const client = stubClient([{ concert_id: 1, ip: '1.1.1.1' }], { 1: 0 })
+    const res = await toggleConcertLike(client, 1, '1.1.1.1')
+    expect(res).toEqual({ likes: 0, liked: false })
+  })
+
+  it('不同 IP 各自叠加，互不影响基数', async () => {
+    const client = stubClient([], { 3: 4621 })
+    await toggleConcertLike(client, 3, '1.1.1.1')
+    const res = await toggleConcertLike(client, 3, '2.2.2.2')
+    expect(res).toEqual({ likes: 4623, liked: true })
+  })
+})
+
 describe('fetchLikeCounts / fetchLikedConcertIds — 聚合查询', () => {
   it('GROUP BY 返回每场点赞数（无点赞的场次不出现，由调用方兜底 0）', async () => {
     const client = stubClient([
@@ -294,10 +331,10 @@ function txClient(opts: { failOn?: RegExp; concurrentInsert?: boolean } = {}) {
     if (inTx && opts.failOn?.test(sql)) throw new Error('SQLITE_ERROR: simulated failure')
 
     if (sql.startsWith('UPDATE concerts')) {
-      const cid = Number(args[args.length - 1])
-      let real = 0
-      for (const k of table) if (Number(k.split('::')[0]) === cid) real += 1
-      likeCount.set(cid, real)
+      // 增量语义：MAX(0, 既有基数 + delta) —— 不按 concert_likes 真实行数重算
+      const [delta, cid] = args
+      const next = Math.max(0, (likeCount.get(Number(cid)) ?? 0) + Number(delta))
+      likeCount.set(Number(cid), next)
       return { rows: [], rowsAffected: 1 }
     }
     if (sql.startsWith('SELECT likes FROM concerts')) {
@@ -398,11 +435,11 @@ describe('toggleConcertLike — 原子性（交互式事务）', () => {
   })
 })
 
-describe('toggleConcertLike — 计数自愈与并发一致（旧 ±1 写法的痛点）', () => {
-  it('冗余列已被写歪时，本次操作后回到真实 COUNT(*)', async () => {
-    const client = stubClient([], { 1: 99 }) // concerts.likes 列被写歪成 99，实际 0 行点赞
+describe('toggleConcertLike — 计数增量与并发一致', () => {
+  it('冗余列是独立历史基数：即使真实行数为 0，也在基数上 +1（不被 COUNT(*) 清零）', async () => {
+    const client = stubClient([], { 1: 99 }) // concerts.likes 基数 99，实际 0 行点赞
     const res = await toggleConcertLike(client, 1, '1.1.1.1')
-    expect(res.likes).toBe(1) // 旧 +1 写法会得到 100
+    expect(res.likes).toBe(100) // 若按 COUNT(*) 重算会被清零为 1（历史 bug：点赞数突变）
   })
 
   it('INSERT OR IGNORE 被并发抢先插入（rowsAffected=0）时，liked 以真实行状态为准', async () => {
