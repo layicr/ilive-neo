@@ -6,6 +6,7 @@
 
 | 🎉 Artist | 🎤 Concert | 🌍 Country | 📍 Province | 🏙️ City | 📌 Venue | 📅 Year | 📅 Month | 📅 Day | 🎬 Video |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Wilber Pan | Chaoyin Storm Super | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 10 | 03 | - |
 | Power Station | All the Way Forward | China | Guangdong | Shenzhen | Shenzhen Sports Center Gymnasium | 2026 | 07 | 04 | [Watch](https://space.bilibili.com/29825132/lists/8505134)  |
 | Justin Lo | COME TOGETHER | China | Guangdong | Dongguan | Dongguan Basketball Center | 2026 | 06 | 27 | [Watch](https://space.bilibili.com/29825132/lists/8454643) |
 | Li Ronghao | Dark Horse | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 05 | 24 | [Watch](https://space.bilibili.com/29825132/lists/8201616) |
