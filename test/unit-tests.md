@@ -266,3 +266,4 @@ npm run test:watch # 监听模式
 - **UT-13 友情链接**：已自动化 → `test/unit/friend-links.test.ts`（17 例，DB 优先 + 空库/查询失败回退 + 多语言取值 + 字段级兜底）。
 - **UT-14 演唱会点赞**：已自动化 → `test/unit/concertLikes.test.ts`（11 例，IP 归一化 + 点赞/取消切换 + 计数聚合 + 表缺失容错）。端到端对应见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
 - **UT-15 留言板**：已自动化 → `test/unit/guestbook.test.ts`（17 例，主留言自动通过 + UGC 原样落库 + 回复父留言校验 + 可选邮箱 + `IN (...)` 批量取回复 + UA 解析）。端到端对应见 `test/e2e/guestbook.spec.ts` 与 `test/ui-tests.md` 的 UI-049 ~ UI-056。
+- **UT-16 艺人去重统计（多歌手拆分）**：已自动化 → `test/unit/artistStats.test.ts`（10 例，覆盖 `server/lib/concerts.ts` 的 `countUniqueArtists`：`artist_i18n` 内以「、」分隔多歌手时拆分、trim、去空、跨场次去重计数；单歌手、空数组、空值/null/undefined 跳过、顿号带空格、末尾多余顿号不计入空串、不同写法视为不同歌手）。对应 `server/api/data.get.ts` 的 `stats.totalArtists` 计算。

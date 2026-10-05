@@ -25,6 +25,7 @@ import {
   fetchLikedConcertIds,
   getClientIp,
   parseI18n,
+  countUniqueArtists,
   LOCALES
 } from '../lib/mappers'
 import type { CityRow } from '../lib/mappers'
@@ -66,7 +67,9 @@ const buildShared = defineEventHandler(async (event) => {
 
   const stats = {
     totalConcerts: concertRows.length,
-    totalArtists: new Set(concertRows.map((c) => c.artist['zh-CN'])).size,
+    // 一个 artist_i18n 内可能含多个歌手，以「、」分隔，统计时拆分后去重计数
+    // A single artist_i18n may list multiple artists separated by "、"; split before counting unique
+    totalArtists: countUniqueArtists(concertRows),
     totalCities: cities.length,
     totalWishes: wishes.length
   }

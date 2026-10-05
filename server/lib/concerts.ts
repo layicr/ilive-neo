@@ -57,6 +57,30 @@ function joinLocation(row: ConcertRow): LocalizedText {
   return out;
 }
 
+/**
+ * 统计去重艺人数量（按 zh-CN 维度）
+ *
+ * @description `artist_i18n` 内可能包含多个歌手，以中文顿号「、」分隔（如「五月天、任贤齐」）。
+ *              统计「艺人总数」时，需先按「、」拆分、trim、去空，再对全部场次的歌手做去重计数。
+ *              `artist` 为已解析的多语言对象（由 `parseI18n` 产出）。
+ *
+ *              Count unique artists (zh-CN). A single `artist_i18n` may list several artists separated
+ *              by the Chinese enumeration comma "、"; split on it (trim + drop empties) and de-duplicate
+ *              across all concerts before counting. `artist` is the parsed i18n object from `parseI18n`.
+ */
+export function countUniqueArtists(concerts: { artist: { 'zh-CN'?: string } }[]): number {
+  const set = new Set<string>()
+  for (const c of concerts) {
+    const raw = c.artist?.['zh-CN']
+    if (!raw) continue
+    for (const name of String(raw).split('、')) {
+      const trimmed = name.trim()
+      if (trimmed) set.add(trimmed)
+    }
+  }
+  return set.size
+}
+
 /** 拆分地点为按语言的明细（国/省/市/场馆）· Split location into per-locale detail fields */
 function mapLocationDetail(row: ConcertRow) {
   return {

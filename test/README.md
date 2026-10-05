@@ -78,7 +78,7 @@ E2E_PORT=3000 npx playwright test                # Bash
 
 ## 五、覆盖范围
 
-**单元 / 功能 / 安全（`unit/`，24 文件 334 用例）**：`safeHtml`（含 XSS 绕过专项：实体编码混淆、`expression()` / `behavior:`、事件属性丢弃、幂等性）、`localize`、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`（含事务原子性与 `COUNT(*)` 自愈重算）、`guestbook`（留言 / 回复读写、父留言校验、IN 批量取回复、可选邮箱与 UGC 原样存储、UA 解析）、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、`seo-utils`、`seo-settings`、`i18n`、`config`、`formatWishDate` / `formatWishTime`、`data-get-handler`（`GET /api/data` 外层 handler：304 判空提前返回、`cache-control` 覆盖为 `private, no-store`）、`composables`（useSharedState / useAppError / useNavigation / useFriendLink / useMusic）、`useAppError.context`（回调上下文安全，防 i18n 抛错回归）、`useCountUp`（数字滚动：SSR 透传真值 / 缓动 / 周期重播 / reduced-motion）、`useTimeline`（observer 生命周期：卸载释放 + init 前 disconnect）、`useData`、`useAppI18n`。
+**单元 / 功能 / 安全（`unit/`，24 文件 334 用例）**：`safeHtml`（含 XSS 绕过专项：实体编码混淆、`expression()` / `behavior:`、事件属性丢弃、幂等性）、`localize`、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`（含事务原子性与 `COUNT(*)` 自愈重算）、`guestbook`（留言 / 回复读写、父留言校验、IN 批量取回复、可选邮箱与 UGC 原样存储、UA 解析）、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、`seo-utils`、`seo-settings`、`i18n`、`config`、`formatWishDate` / `formatWishTime`、`data-get-handler`（`GET /api/data` 外层 handler：304 判空提前返回、`cache-control` 覆盖为 `private, no-store`）、`artistStats`（`countUniqueArtists`：按 zh-CN 维度、以「、」拆分多歌手后跨场次去重计数，覆盖顿号 trim、空值跳过、跨场去重）、`composables`（useSharedState / useAppError / useNavigation / useFriendLink / useMusic）、`useAppError.context`（回调上下文安全，防 i18n 抛错回归）、`useCountUp`（数字滚动：SSR 透传真值 / 缓动 / 周期重播 / reduced-motion）、`useTimeline`（observer 生命周期：卸载释放 + init 前 disconnect）、`useData`、`useAppI18n`。
 
 **端到端（`e2e/`，6 套件 54 用例）**：
 
