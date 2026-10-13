@@ -374,11 +374,18 @@ The site ships 300+ static jpgs (posters + gallery). Already in place:
 
 - **3D album covers** (`app/pages/index.vue`): the selected cover (the first-screen LCP candidate) uses `loading="eager"` + `fetchpriority="high"`; off-screen covers use `loading="lazy"` + `fetchpriority="low"`; all keep `decoding="async"`.
 - **Gallery thumbnails**: `loading="lazy"` + `decoding="async"`; `.gallery-item` has fixed `width/height` (120×80, 100×67 on mobile) to prevent CLS.
-- **Ticket poster**: CSS `background-image` on `.ticket-modal` (default `display:none`), loaded only when the modal opens, so it never blocks first-screen loading.
+- **Ticket poster** (`app/pages/index.vue`): an `<img class="ticket-poster">` plus a thumbnail (`thumbSrc()` rewrites `.jpg` → `_thumb.jpg`, falling back to the full image via `@error` when missing); `loading="lazy"` is **not** used — the virtual scroller already bounds the DOM, and lazy-loading can fail to trigger under the `.ticket-modal` `display:none` → open toggle (images judged off-screen). `decoding="async"` is kept.
 
 > Optional follow-ups (asset-level rework, not yet implemented): transcode jpgs to **WebP/AVIF** and use `<picture>` + `srcset` for resolution adaptation; or adopt `@nuxt/image` to unify responsive images and transcoding. Benefits depend on the build/deploy pipeline; larger change, evaluate on demand.
 
+### 10.2 Ticket Virtual Scroll
 
+The ticket modal originally rendered all cards at once in a multi-column Grid, so DOM and image cost grew with the dataset. It now uses row-windowed rendering via `@tanstack/vue-virtual`: only the card rows near the viewport (plus `overscan`) are rendered, preserving the multi-column grid look.
+
+- **`count` must be a number**: passing a function to `useVirtualizer`'s `count` option (e.g. `() => rowCount.value`) makes the library do `new Array(count)` / `count - 1` on it, yielding `NaN` and throwing `RangeError: Invalid array length`, which blanks the whole list. Use `count: rowCount.value` (evaluated inside the `computed` options, so it stays reactive).
+- **Dynamic row measurement**: card height varies with content (~660–720px); a fixed `estimateSize` causes row overlap. `measureElement` + `:data-index` and `:ref="setTicketRowRef"` on each row let the virtualizer read the real row height; `estimateSize` is only a first-paint estimate.
+- **Fixed row gap**: the `gap` option (`ROW_GAP`) inserts a uniform gap between rows, more reliable than just inflating `estimateSize`, eliminating overlap.
+- **`useVirtualizer` returns a `shallowRef`**: access instance methods in `<script>` via `virtualizer.value?.<method>()` (templates auto-unwrap, so `virtualizer.getVirtualItems()` works directly); when the modal opens the container grows from zero size, so in the `watch(ticketModalOpen)` `nextTick` run `computeColumns()` / `computeRowHeight()` and `virtualizer.value.measure()` to recompute.
 
 ---
 

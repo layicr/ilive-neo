@@ -370,11 +370,18 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 
 - **3D 专辑封面**（`app/pages/index.vue`）：选中项（首屏 LCP 候选）`loading="eager"` + `fetchpriority="high"`，其余离屏封面 `loading="lazy"` + `fetchpriority="low"`，并统一 `decoding="async"`。
 - **画廊缩略图**：`loading="lazy"` + `decoding="async"`，`.gallery-item` 固定 `width/height`（120×80，移动端 100×67）防 CLS。
-- **票根海报**：CSS `background-image` 且 `.ticket-modal` 默认 `display:none`，仅在模态框打开时加载，不会首屏急加载。
+- **票根海报**（`app/pages/index.vue`）：`<img class="ticket-poster">` + 缩略图（`thumbSrc()` 把 `.jpg` 替换为 `_thumb.jpg`，缺失时 `@error` 回退原图）；**不使用** `loading="lazy"`——虚拟滚动已限制 DOM 数量，且懒加载在「`.ticket-modal` 默认 `display:none` → 打开切换」下可能不触发实际加载（图片被判定为离屏）。`decoding="async"` 保留。
 
 > 可选后续（资产级改造，未落地）：将 jpg 转码为 **WebP/AVIF** 并使用 `<picture>` + `srcset` 适配分辨率；或引入 `@nuxt/image` 统一处理响应式图与转码。收益取决于构建/部署管线，改动较大，按需评估。
 
+### 10.2 票根列表虚拟滚动（Ticket virtual scroll）
 
+票根模态框原多列 Grid 一次性渲染全部卡片，数据增长会持续放大 DOM 与图片开销。改为基于 `@tanstack/vue-virtual` 的**按行窗口化渲染**：仅渲染视口附近卡片行（含 `overscan`），保留多列网格视觉。
+
+- **`count` 必须是数字**：`useVirtualizer` 的 `count` 选项传函数（如 `() => rowCount.value`）会让库内部对 `count` 做 `new Array(count)` / `count - 1`，得到 `NaN` 并抛 `RangeError: Invalid array length`，导致整个列表渲染空白。正确写法：`count: rowCount.value`（在 `computed` 化的 options 内求值，仍具响应性）。
+- **动态行高测量**：卡片高度随内容浮动（约 660–720px），固定 `estimateSize` 会导致行重叠。通过 `measureElement` + 行元素上的 `:data-index` 与 `:ref="setTicketRowRef"`，让虚拟器取真实行高；`estimateSize` 仅作首屏估算。
+- **固定行间距**：用虚拟器 `gap` 选项（`ROW_GAP`）在行间插入统一间距，比单纯调大 `estimateSize` 更稳，杜绝行重叠。
+- **`useVirtualizer` 返回 `shallowRef`**：`<script>` 中访问实例方法需 `virtualizer.value?.<method>()`（模板会自动解包，可直接写 `virtualizer.getVirtualItems()`）；打开模态框时容器尺寸从 0 变化，在 `watch(ticketModalOpen)` 的 `nextTick` 里 `computeColumns()` / `computeRowHeight()` 并 `virtualizer.value.measure()` 重算。
 
 ---
 

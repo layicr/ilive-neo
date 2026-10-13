@@ -241,10 +241,9 @@ npm run test:watch # 监听模式
 ```
 
 > 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishDate` / `formatWishTime` / `CONFIG` / `mappers` /
-> `localize` / `i18n + SEO` / `SEO 回退链` / 友情链接 / `concertLikes`，共 **10 文件 / 143 条**
-> （2026-09-13：126 通过 / 15 失败，失败为既有 `zh` vs `zh-CN` 键名与 `app.vue` 源码回归，与点赞改动无关）：
-> `safeHtml 11` / `formatWishDate 4` / `formatWishTime 5` / `config 4` / `mappers 19` / `localize 29` / `i18n 25` /
-> `seo-settings 15` / `friend-links 17` / `concertLikes 13`。
+> `localize` / `i18n + SEO` / `SEO 回退链` / 友情链接 / `concertLikes` / `data-get-handler` / `artistStats` 等，
+> 共 **25 文件 / 349 条**（2026-10-05：349 通过 / 0 失败）。下方「既有用例索引」（UT-01 ~ UT-16）为各文件落点清单，
+> 旧版「10 文件 / 143 条」为 2026-09-13 历史快照，已废弃。
 > 配置见根目录 `vitest.config.ts`（node 环境，包含 `test/unit`，`~`/`@` 别名指向 `app/`）。
 > 依赖 Nuxt `useState/useAsyncData` 的 composables（UT-08 等）需 Nuxt 测试环境，暂未纳入；如需可后续引入 `@nuxt/test-utils`。
 > SSR head（`<html lang>` / hreflang / og:locale）的可测部分已在 `test/unit/i18n.test.ts` 覆盖，

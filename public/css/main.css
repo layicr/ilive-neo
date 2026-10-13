@@ -3469,13 +3469,24 @@ body {
 
 /* 票根容器 - 网格布局 */
 .ticket-container {
-    /* 鸿蒙浏览器兼容性前缀（支持HarmonyOS 2.0-3.0 WebKit内核） */
-    display: -webkit-grid;
+    position: relative;
+    padding: 10px;
+}
+
+/* 虚拟滚动：sizer 撑开滚动高度，行绝对定位 */
+.ticket-virtual-sizer {
+    position: relative;
+    width: 100%;
+}
+
+.ticket-virtual-row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
     display: grid;
-    -webkit-grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 30px;
-    padding: 10px;
 }
 
 /* 单张票根样式 */
@@ -3499,9 +3510,10 @@ body {
 .ticket-poster {
     width: 100%;
     height: 60%;
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    background: #1a1a2e;
     position: relative;
 }
 
@@ -3648,37 +3660,20 @@ body {
     font-size: 14px;
 }
 
-/* 不同颜色的票根 */
-.ticket-card:nth-child(6n+1) {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
+/* 不同颜色的票根（按全局序号的 hue class，兼容虚拟滚动行渲染） */
+.ticket-hue-0 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.ticket-hue-1 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.ticket-hue-2 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.ticket-hue-3 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.ticket-hue-4 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+.ticket-hue-5 { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
 
-.ticket-card:nth-child(6n+2) {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-}
-
-.ticket-card:nth-child(6n+3) {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.ticket-card:nth-child(6n+4) {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-
-.ticket-card:nth-child(6n+5) {
-    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-
-.ticket-card:nth-child(6n+6) {
-    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-}
-
-/* 深色背景票根使用白色文字 */
-.ticket-card:nth-child(6n+1) .ticket-content,
-.ticket-card:nth-child(6n+2) .ticket-content,
-.ticket-card:nth-child(6n+3) .ticket-content,
-.ticket-card:nth-child(6n+4) .ticket-content,
-.ticket-card:nth-child(6n+5) .ticket-content {
+/* 深色背景票根使用白色文字（hue-5 浅色保留深色默认） */
+.ticket-hue-0 .ticket-content,
+.ticket-hue-1 .ticket-content,
+.ticket-hue-2 .ticket-content,
+.ticket-hue-3 .ticket-content,
+.ticket-hue-4 .ticket-content {
     color: #fff;
 }
 
@@ -3698,7 +3693,7 @@ body {
         font-size: 24px;
     }
 
-    .ticket-container {
+    .ticket-virtual-row {
         grid-template-columns: 1fr;
         gap: 20px;
     }

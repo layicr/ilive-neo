@@ -43,8 +43,11 @@
 
 | 用例 | 步骤 | 预期结果 |
 |------|------|----------|
-| UI-013 打开票根 | 点击某场演唱会「票根」入口 | 模态框展示日期、场馆、座位、票价等多语言信息 |
-| UI-014 票根标题 | 切换语言后重开 | 票根标题随语言更新 |
+| UI-013 打开票根 | 点击页头统计区的「场次」卡片（`.stat-card.total`） | 模态框出现 `.ticket-modal.active`；标题为「演唱会票根展示」；以多列网格（**虚拟滚动**）展示全部演唱会的票根卡片（海报缩略图 + 艺人 / 场次名 / 日期 / 场馆 / 座位票价），内容为真实数据 |
+| UI-014 票根标题 | 切换语言后重新打开 | 票根标题随语言更新 |
+| UI-057 票根虚拟滚动渲染 | 打开票根模态框 | `.ticket-card` 正常渲染且内容非空（艺人文字不为空）；防止 `count` 误传函数导致 `RangeError`、列表空白的回归（已由 e2e `ticket-modal.spec.ts` 守护） |
+| UI-058 海报缩略图加载 | 打开票根模态框 | 卡片海报 `<img>` 真实加载（`naturalWidth>0`，非破图），URL 使用 `_thumb.jpg` 缩略图、缺失时回退原图；**不使用** `loading="lazy"`（避免 `.ticket-modal` 默认 `display:none` → 打开切换下不触发加载） |
+| UI-059 行间距无重叠 | 打开票根模态框 | 相邻 `.ticket-virtual-row` 之间为正的上下间距（无重叠）；防止固定 `estimateSize` 行重叠的回归；间距由虚拟器 `gap` 选项（`ROW_GAP`）统一控制 |
 
 ## 7. 歌单模态框
 
@@ -196,3 +199,10 @@
   - [x] UI-056 UGC 文本安全：留言 / 回复中的脚本与事件载荷以纯文本渲染不执行（e2e 覆盖）
   - [x] fixture 扩展：`seed-e2e-db.mjs` 新增留言板种子（4 条主留言 / 18 条回复，含 15 回复与 XSS 载荷）
   - 单元测试（vitest run）：24 文件 / 334 用例全部通过（后续新增：`data-get-handler`（`GET /api/data` 304 判空 + 缓存头）、`useCountUp`（数字滚动）、`useTimeline`（observer 生命周期）、`useAppError.context`（回调上下文安全））
+- 2026-10-13：票根模态框虚拟滚动改造 ——
+  - [x] UI-013 打开票根：打开入口修正为页头统计区「场次」卡片（`.stat-card.total`），原文档「某场演唱会票根入口」描述不准确；模态框以多列网格（虚拟滚动）展示全部演唱会票根卡片
+  - [x] UI-057 虚拟滚动渲染：`.ticket-card` 渲染且内容非空；`count` 必须传数字（误传函数会 `new Array(count)` 得 `NaN` → `RangeError` 列表空白），已修复并由 e2e `ticket-modal.spec.ts` 守护
+  - [x] UI-058 海报缩略图加载：`<img>` 真实加载（`naturalWidth>0`），使用 `_thumb.jpg` 缩略图、缺失回退原图；移除 `loading="lazy"`（虚拟滚动已限 DOM，且 `display:none` → 打开切换下懒加载可能不触发），已修复并 e2e 守护
+  - [x] UI-059 行间距无重叠：`measureElement` 动态测行高 + 虚拟器 `gap`（`ROW_GAP`）统一行间距，杜绝固定 `estimateSize` 行重叠；e2e 守护
+  - [x] 新增 e2e `test/e2e/ticket-modal.spec.ts`（3 例，chromium-desktop）：打开渲染非空 / 海报加载非 lazy / 行间距无重叠，均已通过
+  - 文档同步：`doc/README_DEV.md` / `README_DEV_EN.md` 新增「10.2 票根列表虚拟滚动」
