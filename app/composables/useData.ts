@@ -5,11 +5,19 @@
  * @description 在客户端组合式函数中获取聚合数据（/api/data），并按当前 locale 本地化为单语言。
  *              多语言文案与数据均经 @nuxtjs/i18n 的 locale（URL 前缀驱动）确定，SSR 安全。
  */
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useAsyncData, useState } from '#app'
 import { useAppI18n } from './useI18n'
 import type { Concert, City, Wish, LocalizedConcert, LocalizedCity, LocalizedWish, LocalizedFriendLink, Locale, ApiResponse, SiteSeoSettings } from '../types'
 import { localizeConcert, localizeCity, localizeWish, computeCityConcertCounts } from '../utils'
+
+/** 本地化派生快照 · Localized derived snapshot shared across useData instances */
+interface LocalizedSnapshot {
+  concerts: Concert[]
+  cities: City[]
+  wishes: Wish[]
+  counts: Record<number, number>
+}
 
 /** 点赞在途标记（按演唱会 id）：防止连点并发重复请求 · in-flight guard per concert id */
 const likeInFlight = new Set<number>()
@@ -19,15 +27,11 @@ const likeCooldown = new Map<number, number>()
 const LIKE_COOLDOWN_MS = 700
 
 interface UseDataReturn {
-  loading: globalThis.Ref<boolean>
-  /** 数据是否已就绪（!loading && !error）· data ready flag */
+  /** 数据是否已就绪（!pending && !error）· data ready flag */
   dataReady: globalThis.Ref<boolean>
   /** 数据是否出错 · data error flag */
   dataError: globalThis.Ref<boolean>
   error: globalThis.Ref<unknown>
-  concerts: globalThis.Ref<LocalizedConcert[]>
-  cities: globalThis.Ref<LocalizedCity[]>
-  wishes: globalThis.Ref<LocalizedWish[]>
   localizedConcerts: globalThis.Ref<Concert[]>
   localizedCities: globalThis.Ref<City[]>
   localizedWishes: globalThis.Ref<Wish[]>
@@ -37,8 +41,6 @@ interface UseDataReturn {
   seo: globalThis.Ref<SiteSeoSettings | null>
   /** 页脚友情链接（DB 优先；为空时由前端回退代码列表）· footer friend links */
   friendLinks: globalThis.Ref<LocalizedFriendLink[]>
-  generatedAt: globalThis.Ref<string>
-  refresh: () => Promise<void>
   /** 点赞切换（乐观更新 + 失败回滚）· toggle a like with optimistic update */
   toggleLike: (id: number) => Promise<void>
 }
@@ -61,14 +63,14 @@ export function useData(): UseDataReturn {
     : undefined
 
   // 按当前语言请求单语言本地化结果（服务端返回更小 payload，且仅按该语言本地化）· single-locale request
-  const { data, pending, error, refresh } = useAsyncData<ApiResponse>(
+  const { data, pending, error } = useAsyncData<ApiResponse>(
     `app-data-${currentLanguage.value}`,
     () => $fetch(`/api/data?lang=${encodeURIComponent(currentLanguage.value)}`, { headers: ipHeaders })
   )
 
-  const loading = computed(() => pending.value)
   const dataReady = computed(() => !pending.value && !error.value)
   const dataError = computed(() => !!error.value)
+  // 原始多语言数据仅内部消费（toggleLike / computeLocalizedSnapshot），不再对外导出
   const concerts = computed<LocalizedConcert[]>(() => data.value?.data.concerts ?? [])
   const cities = computed<LocalizedCity[]>(() => data.value?.data.cities ?? [])
   const wishes = computed<LocalizedWish[]>(() => data.value?.data.wishes ?? [])
@@ -77,7 +79,6 @@ export function useData(): UseDataReturn {
   const seo = computed<SiteSeoSettings | null>(() => data.value?.data.seo ?? null)
   /** 页脚友情链接（DB 优先；为空时由展示层回退内置列表）· footer friend links */
   const friendLinks = computed<LocalizedFriendLink[]>(() => data.value?.data.friendLinks ?? [])
-  const generatedAt = computed(() => data.value?.generatedAt ?? '')
 
   /** 当前语言（AppLocale 即 Locale）· current locale */
   const lang = computed<Locale>(() => currentLanguage.value as Locale)
@@ -95,44 +96,51 @@ export function useData(): UseDataReturn {
    */
   const likeOverrides = useState<Record<number, boolean>>('app:like-overrides', () => ({}))
 
-  /** 按当前语言本地化，并叠加本用户点赞覆盖 · localized by current locale + per-user like override */
-  const localizedConcerts = computed<Concert[]>(() => {
-    if (serverLocalized.value) {
-      // 服务端已按当前语言本地化：直接采用，避免对单语言对象二次 localize（会丢失文案）· server-localized: pass through
-      return (concerts.value as unknown as Concert[]).map((c) => {
-        const liked = (likeOverrides.value[c.id] ?? c.liked) as boolean
-        const likes = c.likes + (liked ? 1 : 0) - (c.liked ? 1 : 0)
-        return { ...c, likes, liked }
-      })
-    }
-    return concerts.value.map((c) => {
-      const base = localizeConcert(c, lang.value)
-      const liked = (likeOverrides.value[c.id] ?? c.liked) as boolean
-      const likes = c.likes + (liked ? 1 : 0) - (c.liked ? 1 : 0)
-      return { ...base, likes, liked }
-    })
-  })
-  const localizedCities = computed<City[]>(() =>
-    serverLocalized.value
-      ? (cities.value as unknown as City[]).map((city) => ({ ...city }))
-      : cities.value.map((city) => localizeCity(city, lang.value))
-  )
-  const localizedWishes = computed<Wish[]>(() =>
-    serverLocalized.value
-      ? (wishes.value as unknown as Wish[]).map((w) => ({ ...w }))
-      : wishes.value.map((wish) => localizeWish(wish, lang.value))
-  )
+  /**
+   * 本地化派生共享（请求级）· Shared localized snapshot (request-scoped)
+   * @description 原实现把 localizedConcerts/Cities/Wishes/counts 作为每个 useData 实例独立 computed，
+   *              语言切换会触发「实例数 × N」次重复本地化。改为写入请求级共享态（useState），
+   *              仅由第一个进入 useData 的实例注册一次同步器（watch）重算并写入，
+   *              其余实例只读共享态，使本地化计算只执行一次。useState 天然按请求隔离，SSR 无跨用户泄漏。
+   */
+  const localizedSnapshot = useState<LocalizedSnapshot>('app:localized', () => ({
+    concerts: [],
+    cities: [],
+    wishes: [],
+    counts: {}
+  }))
+  /**
+   * 注册一次共享同步器（watch）：本地化只计算一次、结果写入共享快照，下游多实例只读。
+   * 去重标记挂在 ref 对象上（而非 `.value`）· dedup flag on the ref object (not `.value`)
+   *  - 不会被 SSR 水合序列化，避免「客户端水合后误判已注册」导致本地化快照永不填充（回归点）。
+   *    Not serialized by SSR hydration — otherwise the client would think it is already registered
+   *    and skip, leaving the localized snapshot empty after hydration.
+   *  - useState 在每次请求 / 每次测试重置时换新 ref，标记自然失效、可重新注册，无跨请求 / 跨用例泄漏。
+   *    useState swaps in a fresh ref on every request / test reset, so the flag resets and no leak occurs.
+   */
+  const snapshotRef = localizedSnapshot as globalThis.Ref<LocalizedSnapshot> & { __syncStarted?: boolean }
+  if (!snapshotRef.__syncStarted) {
+    snapshotRef.__syncStarted = true
+    watch(
+      [data, likeOverrides, currentLanguage, serverLocalized],
+      () => {
+        snapshotRef.value = computeLocalizedSnapshot(
+          serverLocalized.value,
+          concerts.value,
+          cities.value,
+          wishes.value,
+          lang.value,
+          likeOverrides.value
+        )
+      },
+      { immediate: true }
+    )
+  }
 
-  /** 各城市演唱会数（多语言匹配）· concert count per city */
-  const counts = computed<Record<number, number>>(() => {
-    if (serverLocalized.value) {
-      // 服务端已本地化：直接读预置的 concertCount（对单语言 city 重算会命中为 0）· use server precomputed count
-      const out: Record<number, number> = {}
-      for (const city of cities.value) out[city.id] = (city as unknown as City).concertCount ?? 0
-      return out
-    }
-    return computeCityConcertCounts(concerts.value, cities.value)
-  })
+  const localizedConcerts = computed<Concert[]>(() => localizedSnapshot.value.concerts)
+  const localizedCities = computed<City[]>(() => localizedSnapshot.value.cities)
+  const localizedWishes = computed<Wish[]>(() => localizedSnapshot.value.wishes)
+  const counts = computed<Record<number, number>>(() => localizedSnapshot.value.counts)
 
   /**
    * 点赞切换（乐观更新 + 失败回滚）· Toggle like (optimistic + rollback)
@@ -182,13 +190,9 @@ export function useData(): UseDataReturn {
   }
 
   return {
-    loading,
     dataReady,
     dataError,
     error,
-    concerts,
-    cities,
-    wishes,
     localizedConcerts,
     localizedCities,
     localizedWishes,
@@ -196,9 +200,50 @@ export function useData(): UseDataReturn {
     stats,
     seo,
     friendLinks,
-    generatedAt,
-    refresh,
     toggleLike
   }
+}
+
+// ==================== 本地化快照（模块级纯函数）· Localized snapshot (module-level pure fn) ====================
+/**
+ * 计算本地化派生快照（纯函数）· Compute the localized derived snapshot (pure)
+ * @description 抽出自原 localizedConcerts/Cities/Wishes/counts 的映射逻辑，
+ *              供共享同步器（首个 useData 实例的 watch）调用，使本地化只计算一次。
+ *              函数声明提升（hoisted），可在 useData 内被调用；导出以便单测。
+ */
+export function computeLocalizedSnapshot(
+  serverLocalized: boolean,
+  concerts: LocalizedConcert[],
+  cities: LocalizedCity[],
+  wishes: LocalizedWish[],
+  lang: Locale,
+  likeOverrides: Record<number, boolean>
+): LocalizedSnapshot {
+  const localizedConcerts = serverLocalized
+    ? (concerts as unknown as Concert[]).map((c) => {
+        const liked = (likeOverrides[c.id] ?? c.liked) as boolean
+        const likes = c.likes + (liked ? 1 : 0) - (c.liked ? 1 : 0)
+        return { ...c, likes, liked }
+      })
+    : concerts.map((c) => {
+        const base = localizeConcert(c, lang)
+        const liked = (likeOverrides[c.id] ?? c.liked) as boolean
+        const likes = c.likes + (liked ? 1 : 0) - (c.liked ? 1 : 0)
+        return { ...base, likes, liked }
+      })
+  const localizedCities = serverLocalized
+    ? (cities as unknown as City[]).map((city) => ({ ...city }))
+    : cities.map((city) => localizeCity(city, lang))
+  const localizedWishes = serverLocalized
+    ? (wishes as unknown as Wish[]).map((w) => ({ ...w }))
+    : wishes.map((wish) => localizeWish(wish, lang))
+  const counts = serverLocalized
+    ? (() => {
+        const out: Record<number, number> = {}
+        for (const city of cities) out[city.id] = (city as unknown as City).concertCount ?? 0
+        return out
+      })()
+    : computeCityConcertCounts(concerts, cities)
+  return { concerts: localizedConcerts, cities: localizedCities, wishes: localizedWishes, counts }
 }
 

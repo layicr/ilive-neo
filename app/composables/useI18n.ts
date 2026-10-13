@@ -1,9 +1,8 @@
 /**
  * i18n 应用层 composable · App i18n wrapper over @nuxtjs/i18n
  *
- * @description 包装官方 @nuxtjs/i18n（vue-i18n），向业务层暴露既有的
- *              { currentLanguage, currentData, currentStoriesText, initLanguage, switchLanguage }
- *              形状，避免一次性大改模板与众多 composable。
+ * @description 包装官方 @nuxtjs/i18n（vue-i18n），向业务层暴露
+ *              { currentLanguage, currentData, currentStoriesText, switchLanguage } 形状。
  *              底层 locale 由 URL 前缀驱动（SSR 安全、无 localStorage 自管）。
  *
  *              关键：UI 文案经 vue-i18n 的 `t()` 在 SSR 下保证可用；currentData 用深层代理把
@@ -105,9 +104,6 @@ export function useAppI18n() {
     }
   })
 
-  /** 初始化语言（已由 @nuxtjs/i18n 接管，保留空实现以兼容调用方）· init language (no-op; kept for API compatibility) */
-  function initLanguage(): void {}
-
   /**
    * 切换语言 · Switch language
    * @description 通过 URL 前缀导航（prefix_except_default 策略），触发 SSR 重新渲染对应语言页。
@@ -123,7 +119,6 @@ export function useAppI18n() {
     currentLanguage,
     currentData,
     currentStoriesText,
-    initLanguage,
     switchLanguage
   }
 }

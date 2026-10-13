@@ -12,6 +12,7 @@
  *      在事件回调里调用属于未定义行为。
  */
 import { CONFIG } from '~/utils/config'
+import { thumbSrc } from '~/utils/thumb'
 import { useData } from './useData'
 import { useSharedState } from './useSharedState'
 
@@ -85,7 +86,12 @@ export function useAlbumShowcase() {
       date: c.date ?? '',
       time: c.time ?? '',
       intro: c.theme ?? '',
-      image: c.poster ?? ''
+      // 3D 轮播会渲染全部专辑卡，用 600px 缩略图避免一次性拉全分辨率原图（188KB–1.4MB）。
+      // Use 600px thumbnail instead of the full-resolution poster to avoid downloading
+      // all full-size images at once in the 3D carousel.
+      image: thumbSrc(c.poster ?? ''),
+      // 缩略图缺失时回退原图（见 index.vue 封面 <img> 的 @error）· fallback to full poster
+      rawPoster: c.poster ?? ''
     }))
   )
 

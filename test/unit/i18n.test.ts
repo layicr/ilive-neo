@@ -5,7 +5,7 @@
  *  · 从 nuxt.config.ts 断言 locale 配置（3 语言、BCP-47 lang、默认语言与路由策略）
  *  · 断言全站 head 已完成「语言相关元信息」清理，且 PWA / 构建相关改动未被回退
  *  · 断言 ~/utils/seo 的 hreflang / og:locale / 多语言描述构造逻辑（纯函数，真实执行）
- *  · 源码级回归：app.vue 输出 htmlAttrs.lang 与 og:locale，index.vue 复用 buildHreflangLinks
+ *  · 源码级回归：app.vue 输出 htmlAttrs.lang / hreflang / og:locale，index.vue 仅输出 JSON-LD
  *
  *  说明：Nuxt 运行时（useHead / useI18n）无法在 node 环境直接单测，
  *        故把 SSR head 的「可验证部分」下沉为 ~/utils/seo 纯函数后在此断言；
@@ -15,8 +15,8 @@
  *              nuxt.config.ts (3 locales, BCP-47 lang, default locale & routing strategy); that the site
  *              head's locale-aware meta cleanup is in place (PWA/build changes not reverted); the hreflang /
  *              og:locale / localized-description logic in ~/utils/seo (pure functions, actually executed);
- *              and source-level regressions (app.vue emits htmlAttrs.lang & og:locale, index.vue reuses
- *              buildHreflangLinks). Nuxt runtime (useHead/useI18n) can't run in node, so the verifiable
+ *              and source-level regressions (app.vue emits htmlAttrs.lang / hreflang / og:locale;
+ *              index.vue emits only page-level JSON-LD). Nuxt runtime (useHead/useI18n) can't run in node, so the verifiable
  *              parts are extracted into ~/utils/seo pure functions; real SSR output is checked by verify-seo.mjs.
  */
 
@@ -268,10 +268,13 @@ describe('SSR head 组装（P1-3 / P1-5 源码回归）', () => {
     expect(source).toContain('useHead')
   })
 
-  it('index.vue 复用 buildHreflangLinks，不再只输出单条 zh-CN hreflang', () => {
+  it('index.vue 仅输出页面级 JSON-LD，不重复发射 hreflang（已由 app.vue 统一发射）', () => {
     const source = read('../../app/pages/index.vue')
-    expect(source).toContain('buildHreflangLinks')
+    // 页面级 SEO 元信息仍复用 ~/utils/seo 纯函数构造
     expect(source).toContain('buildSiteDescription')
+    expect(source).toContain('application/ld+json')
+    // hreflang 由根组件 app.vue 统一发射（覆盖所有页面），页面不再重复，避免同 key 重复输出
+    expect(source).not.toContain('buildHreflangLinks')
     expect(source).not.toMatch(/hreflang:\s*'zh-CN'/)
   })
 

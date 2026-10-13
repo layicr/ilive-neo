@@ -11,7 +11,6 @@
  *              Validates non-empty/length/email; 400 on invalid; rate-limited 10/IP/60s → 429.
  *              browser/os parsed server-side from UA; IP from getClientIp; is_approved=1 on submit.
  */
-import { getRequestHeader } from 'h3'
 import { getTursoClient } from '../lib/turso'
 import { createGuestbookMessage, getClientIp } from '../lib/mappers'
 import { parseUserAgent } from '../lib/ua'

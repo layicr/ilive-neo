@@ -41,7 +41,7 @@ Key principles:
 | Animation | GSAP 3.12.2 (CDN) |
 | Styling | `public/css/main.css` (includes hand-written utilities migrated from Tailwind CDN), Font Awesome 6.4.0 (CDN) |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **24 files / 334 cases**) + Playwright (E2E, **6 suites / 54 cases**) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **26 files / 356 cases**) + Playwright (E2E, **8 suites / 59 cases**) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -59,11 +59,18 @@ Key principles:
 ilive_neo/
 ├── nuxt.config.ts             # Nuxt master config (SSR/runtimeConfig/head/PWA/SEO)
 ├── app/                       # [Nuxt 4 srcDir] Application layer
-│   ├── app.vue                # Root component (NuxtPage + global error handling + site-wide language SEO: html lang/hreflang/og:locale)
+│   ├── app.vue                # Root component (NuxtPage + global error handling + site-wide language SEO: html lang/canonical/hreflang/og:locale)
 │   ├── pages/
-│   │   └── index.vue          # Homepage (Vue component, composables-driven + dynamic meta per locale)
+│   │   └── index.vue          # Homepage "composition root": only SEO/JSON-LD, init orchestration and body scroll lock — blocks delegate to child components (363 lines)
+│   ├── components/            # Homepage blocks extracted from index.vue (18 components; each calls shared composables directly)
+│   │   ├── AlbumShowcase.vue      # 3D album carousel (cover thumbnails + @error fallback)
+│   │   ├── TicketModal.vue        # Ticket modal (@tanstack/vue-virtual row-based virtual scroll)
+│   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
+│   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
+│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue / SiteLoader.vue
+│   │   └── LanguageSwitcher.vue / MusicPlayer.vue / FeedbackButton.vue / BackToTopButton.vue
 │   ├── composables/           # [Core] All interaction logic (Vue composables)
-│   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override
+│   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override; localized derivation is written to a request-scoped shared snapshot (app:localized), computed once
 │   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
 │   │   ├── useSonglist.ts     # Song list modal
@@ -86,6 +93,7 @@ ilive_neo/
 │   └── utils/
 │       ├── config.ts          # Global configuration constants CONFIG
 │       ├── index.ts           # Utility functions (safeHtml / time formatting / pickLocale / localize* / computeCityConcertCounts)
+│       ├── thumb.ts           # Thumbnail helpers (thumbSrc: .jpg → _thumb.jpg; onThumbError: fall back to the full image)
 │       └── seo.ts             # SEO pure functions (hreflang links / og:locale / multilingual description templates and artist separators)
 ├── i18n/                      # [Root] Locale messages (@nuxtjs/i18n v10 layout, langDir resolves relative to this dir)
 │   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts (per-language messages)
@@ -123,10 +131,12 @@ ilive_neo/
 │   └── db/
 │       ├── schema.sql         # Table structure (12 tables, translatable fields are *_i18n JSON columns)
 │       └── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
+├── scripts/                   # Build-time scripts
+│   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (24 files / 334 cases)
-│   ├── e2e/                   # Playwright end-to-end tests (6 suites / 54 cases, desktop/mobile projects + fixture DB seed)
+│   ├── unit/                  # Vitest unit tests (26 files / 356 cases)
+│   ├── e2e/                   # Playwright end-to-end tests (8 suites / 59 cases, desktop/mobile projects + fixture DB seed)
 │   ├── ui-tests.md            # UI acceptance checklist (manual + automated)
 │   └── unit-tests.md / README.md
 └── doc/
@@ -140,24 +150,25 @@ ilive_neo/
 
 ### 4.1 Frontend Bootstrap Chain (Vue-based)
 
-No more classic script injectors. The page is driven directly by `app/pages/index.vue`'s `<script setup>`:
+No more classic script injectors. `app/pages/index.vue` has been slimmed from a monolith into a **composition root** (363 lines, was 1374): every presentation block lives in one of **18 components** under `app/components/`. Shared state comes from composables' `useState`, so **components call them directly — no props plumbing**:
 
 ```
-app/pages/index.vue (setup)
-  ├─ useData()           → useAsyncData('app-data') prefetches GET /api/data during SSR
-  │                       → useState caches concerts/cities/wishes/stats
-  │                       → localizedConcerts and other computed values derive single-language structures by currentLanguage
-  ├─ useI18n()            → currentLanguage (useState lazy initialization), switching only recalculates derived values
-  ├─ useMusic()           → Background music (initialized in onMounted, follows language track switching)
-  ├─ useGallery()         → Gallery (lazy-fetches localizedConcerts once, avoids duplicating useData)
-  ├─ useAlbumShowcase()   → Album carousel (GSAP)
-  ├─ useCountUp()         → Statistic card count-up (cities/artists/concerts; plays from 0 after mount, replays every 120s)
-  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()/useGuestbook()
-  ├─ useSeoMeta()         → Dynamic title/description/og/twitter (switches with locale + database artists)
-  └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
+app/pages/index.vue (composition root: coordination only)
+  ├─ useData()             → useAsyncData('app-data') prefetches GET /api/data?lang=<locale> during SSR
+  ├─ useSeoMeta()/useHead() → page-level title/description/og/twitter + SSR-only JSON-LD
+  ├─ watch(currentLanguage) → update document.title + re-apply the album layout
+  ├─ onMounted             → initBgMusic / initDataLayout (timeline reveal)
+  ├─ watch([5 modal open flags]) → lock body scroll whenever any modal opens (must stay in the coordinator)
+  └─ <template>            → composes the 18 components + the static background circles
+
+app/components/*.vue (each block owns its state & lifecycle)
+  ├─ AlbumShowcase / TicketModal / CityModal / GalleryModal / VideoModal / SonglistModal
+  ├─ HeroSection / StoriesSection / StatsCards / TimelineSection / GuestbookSection / WishWall
+  └─ SiteFooter / SiteLoader / LanguageSwitcher / MusicPlayer / FeedbackButton / BackToTopButton
+       each calls useData / useAlbumShowcase / useGallery / useTimeline / useGuestbook … as needed
 
 app/app.vue (setup)
-  └─ useHead + useI18n    → Site-wide language SEO: <html lang>, 3-language hreflang (incl. x-default),
+  └─ useHead + useI18n    → Site-wide language SEO: <html lang>, canonical, 3-language hreflang (incl. x-default),
                             og:locale / og:locale:alternate; language-independent static meta stays in nuxt.config.ts
 ```
 
@@ -165,7 +176,9 @@ Key points:
 
 - **All `useState`/`useAsyncData` inside composables must be lazy-initialized** (called within the composable function body, never at module level), otherwise SSR throws `instance unavailable`.
 - **Language switching does NOT re-request the API**: `localizedConcerts` and other computed values depend on `currentLanguage`; switching only recalculates frontend-derived values with zero network requests.
-- `app/pages/index.vue`'s `<script setup>` carries all interaction logic + dynamic SEO meta; site-wide language SEO (`<html lang>` / hreflang / `og:locale`) is emitted by `app/app.vue`, and both sides merge by the same `key` to avoid duplicate meta in the head.
+- `app/pages/index.vue` is now a **composition root**: it keeps only page-level SEO / JSON-LD, init orchestration and the body-scroll-lock. Interaction and presentation live in the 18 components under `app/components/`, each calling shared composables **directly** — do **not** pass `open` flags down as props (that creates reactive copies and desyncs from the coordinator's watchers).
+- Site-wide language SEO (`<html lang>` / canonical / 3-language hreflang / `og:locale`) is emitted **once** by `app/app.vue` (it covers every page); `index.vue` no longer re-emits hreflang — its SSR `useHead` only outputs this page's own JSON-LD.
+- **Localized derivation is shared per request (`app:localized` snapshot in `useData`)**: `localizedConcerts/Cities/Wishes/counts` are written into request-scoped shared state; the first `useData()` instance registers the sync `watch` once, so a locale switch computes **once** instead of "instances × N" times. ⚠️ The dedup flag must live on the **snapshot ref object** (not on `.value`) — if it is stored in a serialized `useState`, the client mis-reads it after hydration as "already registered", never registers the watch, and the localized snapshot stays empty (album area blank / page 500).
 - **Statistic count-up (`app/composables/useCountUp.ts`)**: the displayed value is a `computed` — while not playing it **lazily passes through** the target. Never snapshot the target during setup: `useAsyncData` has not resolved yet at SSR time, so a snapshot yields 0, making the SSR HTML emit 0 and mismatching on hydration. After `onMounted` the next frame resets to 0 and plays (default 5s, easeOutCubic); pass `repeatMs` for periodic replay (120s on the homepage); `prefers-reduced-motion` skips the animation and shows the final value.
 - **Context-safe error toasts (`app/composables/useAppError.ts`)**: vue-i18n's `useI18n()` **throws** `Must be called at the top of a 'setup' function` when there is no component instance. The error-copy resolver is therefore **registered during setup only** and reused afterwards, so `handleError(err, ctx, showUser=true, messageKey)` is safe from watch / event callbacks / global listeners — never resolve i18n directly inside a callback.
 - **Timeline observer lifecycle (`app/composables/useTimeline.ts`)**: an `IntersectionObserver` holds **strong references** to observed nodes. It is disconnected and nulled when the owner unmounts (`onScopeDispose`), and every `initTimelineReveal()` disconnects before re-observing the current DOM — otherwise old DOM / image nodes survive a locale-switch page rebuild.
@@ -202,16 +215,17 @@ In `app/pages/index.vue`:
 
 - `useSeoMeta` dynamically outputs title/description/og/twitter following `currentLanguage`.
 - **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts deduplicated `artist`, auto-updates as concerts are added or removed.
-- `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent) + **hreflang** (3 languages + `x-default`, merged by the same key as `app.vue` to dedupe).
+- `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent). Note: hreflang / canonical / `og:locale` are emitted by `app/app.vue` and are **not repeated here** (the old implementation deduped two identical sources by key — pure redundancy).
 - JSON-LD uses `JSON.parse(JSON.stringify(toRaw(...)))` to strip Vue reactive Proxy, and uses `computed` to ensure the complete concert list is output after data is ready.
 
 ### 4.4 Homepage Floating Buttons: Background Music & universe Link
 
-The bottom-right floating area of the homepage has two round buttons, both rendered in `app/pages/index.vue`:
+The bottom-right floating area of the homepage has two round buttons, both rendered in `app/components/MusicPlayer.vue` (extracted from `index.vue`):
 
 - **Background music button**: Driven by `useMusic` (see 4.1); Font Awesome note icon; click toggles play/pause in a loop.
 - **universe link button (cosmos / universe theme)**: Sits right next to the music button. It is a static external link `<a class="music-btn xy-btn" target="_blank" rel="noopener noreferrer" href="http://iliveworld.lyc.la">` that opens `http://iliveworld.lyc.la` in a new tab.
-  - The icon is an **inline SVG** (`.xy-icon`, written inside `index.vue`): a gradient rounded-square background (horizontal purple→pink gradient `#C896B2 → #D993A7`, sampled from the design image) plus a white "planet + ring + small stars" graphic (matching the "universe / 宇宙" theme).
+  - The icon is an **inline SVG** (`.xy-icon`, written inside `MusicPlayer.vue`): a gradient rounded-square background (horizontal purple→pink gradient `#C896B2 → #D993A7`, sampled from the design image) plus a white "planet + ring + small stars" graphic (matching the "universe / 宇宙" theme).
+  - ⚠️ The `<audio id="bgMusic">` / `<source id="bgMusicSource">` **ids must be kept**: `useMusic`'s `initBgMusic` and the locale-switch source swap both resolve the elements by id.
   - The hover tooltip text comes from the i18n key `tooltips.universe`, which must be maintained across all three languages (zh-CN / en / zh-Hant).
   - Base styles live in `public/css/main.css` under `.xy-btn` / `.xy-icon` (reusing the `.music-btn` round container and the hover pulse animation).
 
@@ -299,9 +313,10 @@ npm run build      # Production build (Nitro, deployable to Vercel)
 npm run preview    # Preview production build
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 24 files / 334 cases)
+npm run test       # Run unit tests (vitest run, 26 files / 356 cases)
 npm run test:watch # Run tests in watch mode
-npm run test:e2e   # Run end-to-end tests (Playwright, 6 suites; seeds the fixture DB and boots an isolated dev server)
+npm run test:e2e   # Run end-to-end tests (Playwright, 8 suites; seeds the fixture DB and boots an isolated dev server)
+npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.jpg, idempotent; run after adding images)
 ```
 
 ---
@@ -346,14 +361,14 @@ npm run test:e2e   # Run end-to-end tests (Playwright, 6 suites; seeds the fixtu
 ### 9.2 Static Files
 
 - `public/robots.txt`: Allows all crawlers, `Disallow: /api/`, references sitemap.
-- `public/sitemap.xml`: Currently only the default-language homepage (`https://ilive.lyc.la/`, with one `zh-CN` `xhtml:link` alternate). 3-language hreflang is emitted by `app/app.vue` and `app/pages/index.vue` in the page head, and does not depend on the sitemap.
+- `public/sitemap.xml`: Currently only the default-language homepage (`https://ilive.lyc.la/`, with one `zh-CN` `xhtml:link` alternate). 3-language hreflang is emitted **once** by `app/app.vue` in the page head (it covers every page) and does not depend on the sitemap.
 
 ### 9.3 Dynamic Meta Information (`app/pages/index.vue`)
 
 - `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from database artists (3-language description templates in `app/utils/seo.ts`).
 - JSON-LD: WebSite + Person + ItemList + MusicEvent (per concert).
-- hreflang: `zh-CN` / `en` / `zh-Hant` + `x-default` (default language `zh` href is `https://ilive.lyc.la/`, no `/zh` prefix).
-- `<html lang>` and `og:locale` / `og:locale:alternate`: emitted uniformly by `app/app.vue` (`app/utils/seo.ts`'s `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` pure functions).
+- hreflang / canonical: `zh-CN` / `en` / `zh-Hant` + `x-default` (default language `zh` href is `https://ilive.lyc.la/`, no `/zh` prefix) — emitted by `app/app.vue` only; pages do not repeat it.
+- `<html lang>` and `og:locale` / `og:locale:alternate`: emitted uniformly by `app/app.vue` (`app/utils/seo.ts`'s `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` / `toLocaleUrl` pure functions).
 
 ---
 
@@ -372,9 +387,10 @@ Configuratively generated by `@vite-pwa/nuxt` in the `pwa` field of `nuxt.config
 
 The site ships 300+ static jpgs (posters + gallery). Already in place:
 
-- **3D album covers** (`app/pages/index.vue`): the selected cover (the first-screen LCP candidate) uses `loading="eager"` + `fetchpriority="high"`; off-screen covers use `loading="lazy"` + `fetchpriority="low"`; all keep `decoding="async"`.
+- **3D album covers** (`app/components/AlbumShowcase.vue`): the 3D carousel renders **all** covers at once, so they now use **600px thumbnails** (`thumbSrc()`: `xxx.jpg` → `xxx_thumb.jpg`) instead of full-resolution posters (188KB–1.4MB each); a missing thumbnail falls back to the full image via `@error`. The selected cover (first-screen LCP candidate) uses `loading="eager"` + `fetchpriority="high"`; the rest use `loading="lazy"` + `fetchpriority="low"`; all keep `decoding="async"`.
 - **Gallery thumbnails**: `loading="lazy"` + `decoding="async"`; `.gallery-item` has fixed `width/height` (120×80, 100×67 on mobile) to prevent CLS.
-- **Ticket poster** (`app/pages/index.vue`): an `<img class="ticket-poster">` plus a thumbnail (`thumbSrc()` rewrites `.jpg` → `_thumb.jpg`, falling back to the full image via `@error` when missing); `loading="lazy"` is **not** used — the virtual scroller already bounds the DOM, and lazy-loading can fail to trigger under the `.ticket-modal` `display:none` → open toggle (images judged off-screen). `decoding="async"` is kept.
+- **Ticket poster** (`app/components/TicketModal.vue`): an `<img class="ticket-poster">` plus a thumbnail (same `thumbSrc()`, falling back via `@error` when missing); `loading="lazy"` is **not** used — the virtual scroller already bounds the DOM, and lazy-loading can fail to trigger under the `.ticket-modal` `display:none` → open toggle (images judged off-screen). `decoding="async"` is kept.
+- **Thumbnail generation** (companion to `app/utils/thumb.ts`): `scripts/gen-thumbs.mjs` (`npm run thumbs`) walks **every subdirectory** of `public/concert/` (poster + each `<date>` gallery) and generates 600px / q72 `_thumb` variants for originals that lack one; it is **idempotent** (existing variants are skipped), so newly added images are covered by one command. The `thumbSrc()` naming convention (`_thumb.jpg`) must stay in sync with the script.
 
 > Optional follow-ups (asset-level rework, not yet implemented): transcode jpgs to **WebP/AVIF** and use `<picture>` + `srcset` for resolution adaptation; or adopt `@nuxt/image` to unify responsive images and transcoding. Benefits depend on the build/deploy pipeline; larger change, evaluate on demand.
 
@@ -382,7 +398,10 @@ The site ships 300+ static jpgs (posters + gallery). Already in place:
 
 The ticket modal originally rendered all cards at once in a multi-column Grid, so DOM and image cost grew with the dataset. It now uses row-windowed rendering via `@tanstack/vue-virtual`: only the card rows near the viewport (plus `overscan`) are rendered, preserving the multi-column grid look.
 
-- **`count` must be a number**: passing a function to `useVirtualizer`'s `count` option (e.g. `() => rowCount.value`) makes the library do `new Array(count)` / `count - 1` on it, yielding `NaN` and throwing `RangeError: Invalid array length`, which blanks the whole list. Use `count: rowCount.value` (evaluated inside the `computed` options, so it stays reactive).
+- **`count` must be a number, AND the whole options object must be wrapped in a `computed`** (both traps matter):
+  1. Passing a **function** as `count` (e.g. `() => rowCount.value`) makes the library do `new Array(count)` / `count - 1` on it, yielding `NaN` and throwing `RangeError: Invalid array length`, blanking the whole list.
+  2. But writing merely `count: rowCount.value` while passing a **plain object** fails too: the library is implemented as `computed(() => ({ ...defaults, ...unref(options) }))`, so a plain object is evaluated **during setup** and `count` is frozen at that static number — later `rowCount` changes never trigger `setOptions`. A locale switch rebuilds the page component and the new locale's data only arrives *after* setup, so `count` latches onto 0 forever — showing up as "**the ticket modal is empty after switching language**".
+  - Correct usage: `useVirtualizer(computed(() => ({ count: rowCount.value, getScrollElement: …, estimateSize: …, overscan, gap })))` — `count` stays a **number**; reactivity comes from the outer `computed` (the signature is `MaybeRef<Options>`, so a `Ref` is accepted).
 - **Dynamic row measurement**: card height varies with content (~660–720px); a fixed `estimateSize` causes row overlap. `measureElement` + `:data-index` and `:ref="setTicketRowRef"` on each row let the virtualizer read the real row height; `estimateSize` is only a first-paint estimate.
 - **Fixed row gap**: the `gap` option (`ROW_GAP`) inserts a uniform gap between rows, more reliable than just inflating `estimateSize`, eliminating overlap.
 - **`useVirtualizer` returns a `shallowRef`**: access instance methods in `<script>` via `virtualizer.value?.<method>()` (templates auto-unwrap, so `virtualizer.getVirtualItems()` works directly); when the modal opens the container grows from zero size, so in the `watch(ticketModalOpen)` `nextTick` run `computeColumns()` / `computeRowHeight()` and `virtualizer.value.measure()` to recompute.
@@ -412,7 +431,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 - **The guestbook has write endpoints**: `POST /api/guestbook` and `POST /api/guestbook/reply` write to the database (auto-approved on submit). In local `file:` mode the database file must be writable; on Turso it requires write access.
 - The client `useData` now requests `/api/data?lang=<locale>` per current locale (key carries the locale for per-language caching). `localizedConcerts/Cities/Wishes` pass through when the server already localized, otherwise `localizeConcert` runs client-side; `counts` reads the server-precomputed `city.concertCount` in single-locale mode (no cross-locale recompute).
 - After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
-- **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/pages/index.vue`; the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0).
+- **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/components/StatsCards.vue` (extracted from `index.vue`); the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0). The three `useCountUp` calls must **stay in place** in that component (they own SSR pass-through and timer lifecycle).
 - **`handleError` is safe from watch / event callbacks** (the error-copy resolver is registered during setup), but never call `useAppI18n()` / `useI18n()` directly inside a callback — it throws without a component instance.
 - **`useTimeline`'s observer must be released explicitly**: a locale switch rebuilds the page component, and `onScopeDispose` takes care of `disconnect` on unmount. Add new observe logic through `initTimelineReveal()`; do not create another `IntersectionObserver`.
 - **Known trade-off**: like counts in `/api/data` are still subject to the inner 1-hour shared cache and are not actively invalidated on write, so other visitors see the update only after the cache/SWR refresh (the current visitor's `liked` flag is unaffected — it is merged per request in the outer layer).

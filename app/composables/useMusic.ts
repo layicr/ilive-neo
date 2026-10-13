@@ -101,7 +101,6 @@ export function useMusic() {
   return {
     isPlaying,
     initBgMusic,
-    toggleMusic,
-    switchMusicSrc
+    toggleMusic
   }
 }

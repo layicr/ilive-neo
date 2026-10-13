@@ -3,7 +3,7 @@
  *
  * @module utils
  * @description 从 public/js/utils.js 迁移而来的纯函数（TypeScript 版，无全局变量依赖，SSR 两端一致）。
- *              包含：safeHtml / formatWishDate / formatWishTime / 多语言取词与本地化（pickLocale / localize*）。
+ *              包含：safeHtml / formatWishDate / 多语言取词与本地化（pickLocale / localize*）。
  *              纯函数、无服务端依赖，客户端与服务端（API）均可安全引用。
  */
 
@@ -18,7 +18,7 @@ import type {
   LocalizedText,
   LocalizedTags
 } from '../types'
-import { DEFAULT_LOCALE, LOCALES as CONFIG_LOCALES, LOCALE_DATE } from '../../server/lib/locales'
+import { DEFAULT_LOCALE, LOCALES as CONFIG_LOCALES } from '../../server/lib/locales'
 
 // ==================== HTML 安全 · HTML safety ====================
 
@@ -99,9 +99,8 @@ export function safeHtml(html: unknown): unknown {
  * @description 用于 SSR 首屏与水合阶段：输出 `YYYY.MM.DD`，不依赖 `Date.now()`，
  *              也不使用 `toLocaleDateString`（Node 与浏览器的 ICU 输出可能不同），
  *              从而保证服务端与客户端渲染结果完全一致，避免 hydration mismatch。
- *              水合完成后再由 `formatWishTime` 切换为相对时间（如「3 天前」）。
  *
- *              Stable absolute date for SSR + hydration; switches to relative time after mount.
+ *              Stable absolute date for SSR + hydration.
  * @returns `YYYY.MM.DD`；无法解析时返回空串 · empty string when unparsable
  */
 export function formatWishDate(timeString: string): string {
@@ -109,29 +108,6 @@ export function formatWishDate(timeString: string): string {
   if (Number.isNaN(date.getTime())) return ''
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
-}
-
-/** 格式化许愿时间 · Format wish time（相对时间，水合后使用） */
-export function formatWishTime(timeString: string, lang: Locale = 'zh-CN'): string {
-  const date = new Date(timeString);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-
-  const fallback = {
-    'zh-CN': { justNow: '刚刚', minutesAgo: '分钟前', hoursAgo: '小时前', daysAgo: '天前' },
-    en: { justNow: 'Just now', minutesAgo: ' min ago', hoursAgo: ' hours ago', daysAgo: ' days ago' },
-    'zh-Hant': { justNow: '剛剛', minutesAgo: '分鐘前', hoursAgo: '小時前', daysAgo: '天前' }
-  } as const;
-
-  const texts = fallback[lang];
-
-  if (diff < 60000) return texts.justNow;
-  if (diff < 3600000) return Math.floor(diff / 60000) + texts.minutesAgo;
-  if (diff < 86400000) return Math.floor(diff / 3600000) + texts.hoursAgo;
-  if (diff < 604800000) return Math.floor(diff / 86400000) + texts.daysAgo;
-
-  const bcp47 = LOCALE_DATE[lang];
-  return date.toLocaleDateString(bcp47);
 }
 
 // ==================== 多语言取词与本地化 · Localization ====================

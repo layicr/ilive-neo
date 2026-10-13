@@ -62,6 +62,8 @@ export default defineEventHandler(async (event) => {
   if (shared && typeof shared === 'object' && 'id' in shared) {
     const ip = getClientIp(event)
     const liked = await isConcertLiked(getTursoClient(), Number(shared.id), ip)
+    // 响应含按 IP 的 liked：禁止被共享缓存（与 GET /api/data 外层一致）· per-IP state must not be shared-cached
+    setResponseHeader(event, 'cache-control', 'private, no-store')
     return { ...shared, liked }
   }
 

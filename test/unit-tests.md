@@ -49,17 +49,9 @@
 | UT-04c | `'javascript:alert(1)'` | `false` |
 | UT-04d | `'ftp://x'`、`''`、数字/null | `false` |
 
-## UT-05 formatWishTime — 许愿时间格式化
+## UT-05 formatWishTime — 许愿时间格式化（作废）
 
-> 相对时间基于 `now` 计算；超 7 天返回本地日期字符串（zh 用 `zh-CN`）。
-
-| 用例 | 输入时间 | 预期 |
-|------|----------|------|
-| UT-05a | `now - 30s` | `刚刚` / `Just now` |
-| UT-05b | `now - 5min` | `5分钟前` / `5 min ago` |
-| UT-05c | `now - 3h` | `3小时前` / `3 hours ago` |
-| UT-05d | `now - 2d` | `2天前` / `2 days ago` |
-| UT-05e | `now - 30d` | `toLocaleDateString('zh-CN')` |
+> `formatWishTime` 导出已在「死代码清理」时从 `app/utils/index.ts` 移除（项目无生产引用，仅测试自证），相应用例随之作废。
 
 ## UT-05b formatWishDate — 固定绝对日期（水合安全）
 
@@ -253,7 +245,7 @@ npm run test:watch # 监听模式
 
 - **UT-01 escapeHtml / sanitizeInput / isValidUrl / safeSetUrl / safeCreateElement / handleImageError**：这些导出已在「死代码清理」时从 `app/utils/index.ts` 移除（项目无引用），相应用例随之作废。
 - **UT-02 safeHtml**：已自动化 → `test/unit/safeHtml.test.ts`（11 例）。
-- **UT-05 formatWishTime**：已自动化 → `test/unit/formatWishTime.test.ts`（5 例）。
+- **UT-05 formatWishTime**：导出已移除（无生产引用），故作废。
 - **UT-05b formatWishDate**：已自动化 → `test/unit/formatWishDate.test.ts`（4 例）。
 - **UT-07 config**：已自动化 → `test/unit/config.test.ts`（4 例）。
 - **UT-06 debounce / throttle**：导出已移除（无引用），故作废。

@@ -7,6 +7,8 @@
  *  - 海报缩略图：`<img class="ticket-poster">` 真实加载（`naturalWidth>0`）且使用 `_thumb.jpg`、未用 `loading="lazy"`
  *    （`.ticket-modal` 默认 `display:none` → 打开切换下，lazy 可能不触发加载）
  *  - 行间距：相邻 `.ticket-virtual-row` 之间为正的上下间距、无重叠（防止固定 `estimateSize` 行重叠的回归）
+ *  - 切换语言后重新打开票根模态仍有内容（防止 `count` 在 setup 期被静态取值、语言切换重建页面后
+ *    新语言数据未就绪导致 count=0 且永不更新的回归 —— 表现为「切换语言后弹框空白」）
  *  - 全流程无站点自身未捕获异常（pageerror）
  */
 import { expect, test } from '@playwright/test'
@@ -60,9 +62,13 @@ test.describe('票根模态框 · 虚拟滚动', () => {
     await page.locator('.stat-card.total').click()
     await expect(page.locator('#ticketModal')).toHaveClass(/active/)
 
-    // 首屏即渲染多行（4 场 / 桌面约 3 列 ⇒ 2 行）
-    const rowCount = await page.locator('.ticket-virtual-row').count()
-    expect(rowCount).toBeGreaterThanOrEqual(2)
+    // 首屏即渲染多行（4 场 / 桌面约 3 列 ⇒ 2 行）。
+    // 虚拟滚动在模态由 display:none 变为可见后才测量视口并渲染行，故轮询等待行数到位，
+    // 避免「打开即计数」的时序竞争（measure 前可能为 0 行，曾偶发 flaky）。
+    // The virtualizer measures the viewport only after the modal becomes visible — poll for rows.
+    await expect
+      .poll(() => page.locator('.ticket-virtual-row').count(), { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(2)
 
     const gaps = await page.evaluate(() => {
       const rows = Array.from(document.querySelectorAll('.ticket-virtual-row'))
@@ -75,5 +81,25 @@ test.describe('票根模态框 · 虚拟滚动', () => {
     })
     expect(gaps.length).toBeGreaterThanOrEqual(1) // 确有相邻行可测
     for (const g of gaps) expect(g).toBeGreaterThan(0) // 正间距、无重叠
+  })
+
+  test('切换语言后打开票根模态仍有票根内容（count 静态取值回归）', async ({ page }) => {
+    await gotoHome(page, '/')
+
+    // 切到 English（客户端 SPA 导航 → 页面组件重建，新语言数据在 setup 后才会到达）
+    await page.locator('.lang-trigger').click()
+    await expect(page.locator('.lang-menu')).toBeVisible()
+    await page.locator('.lang-option[data-lang="en"]').click()
+    await expect(page).toHaveURL(/\/en\/?$/)
+
+    await page.locator('.stat-card.total').click()
+    await expect(page.locator('#ticketModal')).toHaveClass(/active/)
+
+    // 核心断言：语言切换重建后，虚拟器 count 必须随数据就绪而更新，不能停留在 setup 期的 0
+    await expect
+      .poll(() => page.locator('.ticket-virtual-row').count(), { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(1)
+    await expect(page.locator('.ticket-card').first()).toBeVisible()
+    await expect(page.locator('.ticket-card .ticket-artist').first()).not.toBeEmpty()
   })
 })

@@ -189,3 +189,25 @@ test.describe('API 非法参数响应', () => {
     expect(plainData.data.concerts.length).toBe(zhData.data.concerts.length)
   })
 })
+
+test.describe('点赞限流（F-18）', () => {
+  test('POST /api/like 连续超阈值 → 429 + Retry-After', async ({ request }) => {
+    // 内存固定窗口限流（默认每 IP 每 60s 最多 10 次）。连续发送直到命中 429，
+    // 断言返回 429 且携带 Retry-After 头。
+    // 用「循环到 429」而非硬等第 11 次：前面非法参数用例可能已消耗部分额度，
+    // 但无论起点如何，连续点赞必然触发限流 → 429 + Retry-After。
+    // In-memory fixed-window rate limit (default 10/IP/60s). Send until 429 and assert.
+    let lastStatus = 200
+    let retryAfter: string | null = null
+    for (let i = 0; i < 30; i++) {
+      const res = await request.post('/api/like', { data: { id: 1 } })
+      lastStatus = res.status()
+      if (lastStatus === 429) {
+        retryAfter = res.headers()['retry-after'] ?? null
+        break
+      }
+    }
+    expect(lastStatus, '连续点赞应触发限流').toBe(429)
+    expect(retryAfter, '429 响应应携带 Retry-After 头').toBeTruthy()
+  })
+})

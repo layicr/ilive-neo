@@ -11,7 +11,7 @@
  *              full optimistic-like lifecycle (override, rollback, 429, in-flight guard, cooldown).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useData } from '../../app/composables/useData'
+import { useData, computeLocalizedSnapshot } from '../../app/composables/useData'
 import { __setFetch, __flushAsyncData, __resetNuxtState } from '#app'
 
 vi.mock('../../app/composables/useI18n', async () => {
@@ -115,7 +115,6 @@ describe('useData — 请求与字段映射', () => {
 
     expect(calls[0].url).toBe('/api/data?lang=zh-CN')
     expect(d.stats.value.totalConcerts).toBe(1)
-    expect(d.generatedAt.value).toBe('2026-09-13T00:00:00.000Z')
     expect(d.seo.value?.siteUrl).toBe('https://ilive.lyc.la')
     expect(d.friendLinks.value).toHaveLength(1)
     expect(d.dataReady.value).toBe(true)
@@ -224,4 +223,35 @@ describe('useData — 点赞乐观更新与失败回滚', () => {
     await d.toggleLike(1)
     expect(calls.filter((c) => c.url === '/api/like')).toHaveLength(2)
   })
+})
+
+describe('useData — 本地化派生共享（P0-2 回归）', () => {
+  it('多实例共享同一本地化快照引用（仅重算一次）', async () => {
+    installFetch(() => apiPayload({ localized: false }))
+    const a = useData()
+    const b = useData()
+    await __flushAsyncData()
+
+    // 两实例读取同一个共享数组引用，证明本地化只计算一次、结果在实例间共享
+    // Both instances read the SAME shared array reference — localization computed once, shared.
+    expect(a.localizedConcerts.value).toBe(b.localizedConcerts.value)
+    expect(a.counts.value).toBe(b.counts.value)
+    expect(a.localizedCities.value).toBe(b.localizedCities.value)
+    expect(a.localizedConcerts.value[0].artist).toBe('歌手1')
+  })
+
+  it('computeLocalizedSnapshot 纯函数：服务端已本地化直通 + 叠加 likeOverride', () => {
+    const snap = computeLocalizedSnapshot(
+      true,
+      [{ id: 1, likes: 3, liked: false }] as never,
+      [] as never,
+      [] as never,
+      'zh-CN' as never,
+      { 1: true }
+    )
+    expect(snap.concerts[0].liked).toBe(true)
+    // likes = 3 + 1 (override=true) - 0 (orig liked=false) = 4
+    expect(snap.concerts[0].likes).toBe(4)
+  })
+
 })

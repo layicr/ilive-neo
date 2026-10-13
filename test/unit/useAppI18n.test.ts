@@ -5,7 +5,7 @@
  *              · currentLanguage 由 URL locale 驱动，locale 未就绪（undefined）时回退默认语言；
  *              · currentData 深层代理：`a.b.c` 经 t() 解析（SSR 安全），JSON.stringify / 数组迭代不误触发；
  *              · currentStoriesText 使用 tm() + rt() 解析数组型消息（含非字符串 AST 节点）；
- *              · switchLanguage 通过 useSwitchLocalePath + navigateTo 做前缀导航；initLanguage 为兼容空实现。
+ *              · switchLanguage 通过 useSwitchLocalePath + navigateTo 做前缀导航。
  *
  *              Mocks `#app` to control vue-i18n. Covers locale fallback, the deep t()-proxy (SSR-safe,
  *              no accidental t() on JSON.stringify/iteration), stories resolution via tm()+rt(), and
@@ -108,10 +108,5 @@ describe('useAppI18n — 语言切换', () => {
     switchLanguage('zh-Hant')
     switchLanguage('zh-CN')
     expect(navigations).toEqual(['/zh-Hant', '/'])
-  })
-
-  it('initLanguage 保留为空实现（兼容旧调用方）', () => {
-    const { initLanguage } = useAppI18n()
-    expect(() => initLanguage()).not.toThrow()
   })
 })

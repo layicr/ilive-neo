@@ -21,12 +21,8 @@ interface UseGuestbookReturn {
   messages: globalThis.Ref<GuestbookMessage[]>
   /** 当前页码（1-based）· current page */
   page: globalThis.Ref<number>
-  /** 每页条数 · page size */
-  pageSize: globalThis.Ref<number>
   /** 总页数 · total pages */
   totalPages: globalThis.Ref<number>
-  /** 已通过留言总数 · total approved messages */
-  total: globalThis.Ref<number>
   /** 加载中 · loading */
   loading: globalThis.Ref<boolean>
   /** 错误 · error */
@@ -45,8 +41,6 @@ interface UseGuestbookReturn {
   prevPage: () => void
   /** 下一页 · next page */
   nextPage: () => void
-  /** 跳到指定页 · go to a page */
-  goPage: (p: number) => void
 }
 
 export function useGuestbook(): UseGuestbookReturn {
@@ -113,16 +107,11 @@ export function useGuestbook(): UseGuestbookReturn {
   function nextPage(): void {
     if (page.value < totalPages.value) void fetchMessages(page.value + 1)
   }
-  function goPage(p: number): void {
-    if (p >= 1 && p <= totalPages.value) void fetchMessages(p)
-  }
 
   return {
     messages,
     page,
-    pageSize,
     totalPages,
-    total,
     loading,
     error,
     view,
@@ -131,7 +120,6 @@ export function useGuestbook(): UseGuestbookReturn {
     postReply,
     setView,
     prevPage,
-    nextPage,
-    goPage
+    nextPage
   }
 }

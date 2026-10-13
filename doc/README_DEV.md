@@ -40,7 +40,7 @@
 | 动画 | GSAP 3.12.2（CDN）|
 | 样式 | `public/css/main.css`（含从 Tailwind CDN 迁移的手写工具类）、Font Awesome 6.4.0（CDN） |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**24 文件 / 334 用例**）+ Playwright（E2E，**6 套件 / 54 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**26 文件 / 356 用例**）+ Playwright（E2E，**8 套件 / 59 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -60,9 +60,16 @@ ilive_neo/
 ├── app/                       # [Nuxt 4 srcDir] 应用层
 │   ├── app.vue                # 根组件（NuxtPage + 全局错误处理 + 全站语言 SEO：html lang/hreflang/og:locale）
 │   ├── pages/
-│   │   └── index.vue          # 首页（Vue 组件，composables 驱动 + 按 locale 输出动态 meta）
+│   │   └── index.vue          # 首页「组合根」：仅保留 SEO / JSON-LD、初始化编排、body 滚动锁，其余区块委托子组件（363 行）
+│   ├── components/            # 首页拆分出的展示组件（18 个，自 index.vue 抽出，各自直连共享 composable）
+│   │   ├── AlbumShowcase.vue      # 3D 专辑轮播（含封面缩略图 + @error 回退）
+│   │   ├── TicketModal.vue        # 票根模态（@tanstack/vue-virtual 按行虚拟滚动）
+│   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
+│   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
+│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue / SiteLoader.vue
+│   │   └── LanguageSwitcher.vue / MusicPlayer.vue / FeedbackButton.vue / BackToTopButton.vue
 │   ├── composables/           # [核心] 全部交互逻辑（Vue composables）
-│   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖
+│   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖；本地化派生写入请求级共享快照（app:localized，只计算一次）
 │   │   ├── useI18n.ts         # 多语言切换（zh / en / zh-Hant，useState 懒初始化）
 │   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
 │   │   ├── useSonglist.ts     # 歌单弹层
@@ -85,6 +92,7 @@ ilive_neo/
 │   └── utils/
 │       ├── config.ts          # 全局配置常量 CONFIG
 │       ├── index.ts           # 工具函数（safeHtml / 时间格式化 / pickLocale / localize* / computeCityConcertCounts）
+│       ├── thumb.ts           # 缩略图工具（thumbSrc：.jpg → _thumb.jpg；onThumbError：缺失回退原图）
 │       └── seo.ts             # SEO 纯函数（hreflang 链接 / og:locale / 多语言描述模板与艺人分隔符）
 ├── i18n/                      # [根目录] 多语言文案（@nuxtjs/i18n v10 布局，langDir 相对此目录）
 │   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts（各语言 message）
@@ -122,10 +130,12 @@ ilive_neo/
 │   └── db/
 │       ├── schema.sql         # 表结构（12 张表，可翻译字段为 *_i18n JSON 列）
 │       └── seed.mjs           # 建空库脚本（DROP + CREATE，不含业务数据）
+├── scripts/                   # 构建期脚本
+│   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（24 文件 / 334 用例）
-│   ├── e2e/                   # Playwright 端到端测试（6 套件 / 54 用例，桌面/移动双 project + fixture 库种子）
+│   ├── unit/                  # Vitest 单元测试（26 文件 / 356 用例）
+│   ├── e2e/                   # Playwright 端到端测试（8 套件 / 59 用例，桌面/移动双 project + fixture 库种子）
 │   ├── ui-tests.md            # UI 验收清单（手动 + 自动化）
 │   └── unit-tests.md / README.md
 └── doc/
@@ -139,24 +149,27 @@ ilive_neo/
 
 ### 4.1 前端启动链路（Vue 化）
 
-不再有经典脚本注入器。页面由 `app/pages/index.vue` 的 `<script setup>` 直接驱动：
+不再有经典脚本注入器。`app/pages/index.vue` 已由「巨型单文件」收敛为**组合根**（363 行，原 1374 行），
+各展示区块拆为 `app/components/` 下的 **18 个子组件**；共享状态由 composable 的 `useState` 提供，
+**子组件直接调用即可，无需 props 透传**：
 
 ```
-app/pages/index.vue (setup)
-  ├─ useData()           → useAsyncData('app-data') 在 SSR 阶段预取 GET /api/data
-  │                       → useState 缓存 concerts/cities/wishes/stats
-  │                       → localizedConcerts 等 computed 按 currentLanguage 派生单语言结构
-  ├─ useI18n()            → currentLanguage（useState 懒初始化），切换仅重算派生值
-  ├─ useMusic()           → 背景音乐（onMounted 初始化，跟随语言切换音轨）
-  ├─ useGallery()         → 画廊（懒取一次 localizedConcerts，避免重复 useData）
-  ├─ useAlbumShowcase()   → 专辑轮播（GSAP）
-  ├─ useCountUp()         → 统计卡片数字滚动（城市/艺人/场次，挂载后从 0 播放，每 120s 重播）
-  ├─ useNavigation()/useKeyboard()/useSonglist()/useTicketModal()/useTimeline()/useFriendLink()/useGuestbook()
-  ├─ useSeoMeta()         → 页面级动态 title/description/og/twitter（随 locale 切换 + 数据库艺人）
-  └─ onMounted            → initLanguage/initBgMusic/startDynamicTextTimers/initDataLayout
+app/pages/index.vue（组合根：只做协调）
+  ├─ useData()             → useAsyncData('app-data') SSR 预取 GET /api/data?lang=<locale>
+  ├─ useSeoMeta()/useHead() → 页面级 title/description/og/twitter + 仅 SSR 的 JSON-LD
+  ├─ watch(currentLanguage) → 更新 document.title + 重新应用专辑布局
+  ├─ onMounted             → initBgMusic / initDataLayout（时间轴渐显）
+  ├─ watch([5 个模态 open 态]) → 任意弹窗打开时锁定 body 滚动（须留在协调层，不可下放到子模态）
+  └─ <template>            → 仅组合 18 个子组件 + 静态背景圈
+
+app/components/*.vue（各区块自管状态与生命周期）
+  ├─ AlbumShowcase / TicketModal / CityModal / GalleryModal / VideoModal / SonglistModal
+  ├─ HeroSection / StoriesSection / StatsCards / TimelineSection / GuestbookSection / WishWall
+  └─ SiteFooter / SiteLoader / LanguageSwitcher / MusicPlayer / FeedbackButton / BackToTopButton
+      各自按需调用 useData / useAlbumShowcase / useGallery / useTimeline / useGuestbook …
 
 app/app.vue (setup)
-  └─ useHead + useI18n    → 全站语言相关 SEO：<html lang>、3 语言 hreflang（含 x-default）、
+  └─ useHead + useI18n    → 全站语言相关 SEO：<html lang>、canonical、3 语言 hreflang（含 x-default）、
                             og:locale / og:locale:alternate；与语言无关的静态 meta 留在 nuxt.config.ts
 ```
 
@@ -164,7 +177,9 @@ app/app.vue (setup)
 
 - **所有 composable 内的 `useState`/`useAsyncData` 必须懒初始化**（在 composable 函数体内调用，不可在模块顶层），否则 SSR 阶段报 `instance unavailable`。
 - 语言切换**不重新请求 API**：`localizedConcerts` 等 computed 依赖 `currentLanguage`，切换只重算前端派生值，零网络请求。
-- `app/pages/index.vue` 的 `<script setup>` 承载全部交互逻辑 + 页面级 SEO 动态 meta；全站语言 SEO（`<html lang>` / hreflang / `og:locale`）由 `app/app.vue` 输出，两侧用同名 `key` 合并去重，避免 head 中出现重复 meta。
+- `app/pages/index.vue` 现为**组合根**：只保留页面级 SEO / JSON-LD、初始化编排与 body 滚动锁；交互与展示已拆到 `app/components/` 的 18 个子组件（各自直连共享 composable，**不用 props 透传** open 态，否则会产生响应式副本并与协调层的 watch 失联）。
+- 全站语言 SEO（`<html lang>` / canonical / 3 语言 hreflang / `og:locale`）由 `app/app.vue` **单一发射**（覆盖所有页面）；`index.vue` **不再重复发射 hreflang**，其 SSR `useHead` 只输出本页独有的 JSON-LD。
+- **本地化派生请求级共享（`useData` 的 `app:localized` 快照）**：`localizedConcerts/Cities/Wishes/counts` 写入请求级共享态，首个 `useData()` 实例注册一次同步 `watch`，语言切换**只计算一次**（而非「实例数 × N」次）。⚠️ 同步器的去重标记必须挂在**快照 ref 对象**上（而非 `.value`）—— 若放进会被 SSR 序列化的 `useState`，客户端水合后会误判「已注册」而不再注册 watch，本地化快照永不填充（表现为专辑区空白 / 页面 500）。
 - **统计数字滚动（`app/composables/useCountUp.ts`）**：展示值是 `computed`——未播放时**惰性透传**目标值（不能在 setup 期取快照：SSR 阶段 `useAsyncData` 尚未 resolve 会取到 0，导致 SSR HTML 输出 0 且水合文本不一致）；客户端 `onMounted` 后下一帧归零并播放（默认 5s，easeOutCubic），可传 `repeatMs` 周期重播（首页为 120s）；命中 `prefers-reduced-motion` 时直接显示终值。
 - **错误提示的上下文安全（`app/composables/useAppError.ts`）**：vue-i18n 的 `useI18n()` 在无组件实例时会**直接抛** `Must be called at the top of a 'setup' function`。因此错误文案解析器**只在 setup 阶段注册**，之后 watch / 事件回调 / 全局监听复用它——`handleError(err, ctx, showUser=true, messageKey)` 在回调里可安全调用；新增回调时请勿在其中直接解析 i18n。
 - **时间轴 observer 生命周期（`app/composables/useTimeline.ts`）**：`IntersectionObserver` 会**强引用**被 observe 的节点。宿主卸载（`onScopeDispose`）时 `disconnect` 并置空单例，且每次 `initTimelineReveal()` 都先 `disconnect` 再按当前 DOM 重新 observe，避免语言切换重建页面后旧 DOM / 图片节点无法回收。
@@ -201,16 +216,17 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 
 - `useSeoMeta` 随 `currentLanguage` 动态输出 title/description/og/twitter。
 - **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
-- `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）+ **hreflang**（3 语言 + `x-default`，与 `app.vue` 用同名 key 合并去重）。
+- `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）。注意：hreflang / canonical / `og:locale` 已由 `app/app.vue` 统一发射，**此处不再重复**（旧实现两侧同 key 去重，实为冗余）。
 - JSON-LD 用 `JSON.parse(JSON.stringify(toRaw(...)))` 剥离 Vue 响应式 Proxy，用 `computed` 保证在数据就绪后输出完整演唱会列表。
 
 ### 4.4 首页悬浮按钮：背景音乐 & universe 外链
 
-首页右下角悬浮区有两个圆形按钮，均由 `app/pages/index.vue` 渲染：
+首页右下角悬浮区有两个圆形按钮，均由 `app/components/MusicPlayer.vue` 渲染（自 `index.vue` 抽出）：
 
 - **背景音乐按钮**：由 `useMusic` 驱动（见 4.1），Font Awesome 音符图标，点击循环切换播放/暂停。
 - **universe 外链按钮（宇宙主题）**：紧邻音乐按钮，是一个静态外链 `<a class="music-btn xy-btn" target="_blank" rel="noopener noreferrer" href="http://iliveworld.lyc.la">`，点击在新标签页打开 `http://iliveworld.lyc.la`。
-  - 图标为**内联 SVG**（`.xy-icon`，写在 `index.vue` 内）：渐变圆角方块背景（横向紫粉渐变 `#C896B2 → #D993A7`，取自设计稿图片采样色值）+ 白色「星球 + 星环 + 小星星」图形（贴合「universe / 宇宙」主题）。
+  - 图标为**内联 SVG**（`.xy-icon`，写在 `MusicPlayer.vue` 内）：渐变圆角方块背景（横向紫粉渐变 `#C896B2 → #D993A7`，取自设计稿图片采样色值）+ 白色「星球 + 星环 + 小星星」图形（贴合「universe / 宇宙」主题）。
+  - ⚠️ `<audio id="bgMusic">` / `<source id="bgMusicSource">` 的 **id 必须保留**：`useMusic` 的 `initBgMusic` 与语言切换换源均按 id 取元素。
   - 悬浮提示文案取自 i18n `tooltips.universe`，三语言（zh-CN / en / zh-Hant）均需维护该 key。
   - 基础样式在 `public/css/main.css` 的 `.xy-btn` / `.xy-icon`（复用 `.music-btn` 的圆形容器与悬浮脉冲动画）。
 
@@ -298,9 +314,10 @@ npm run build      # 生产构建（Nitro，可部署到 Vercel）
 npm run preview    # 预览生产构建
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，24 文件 / 334 用例）
+npm run test       # 运行单元测试（vitest run，26 文件 / 356 用例）
 npm run test:watch # 监听模式运行测试
-npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed fixture 库并启动隔离 dev server）
+npm run test:e2e   # 运行端到端测试（Playwright，8 套件；自动 seed fixture 库并启动隔离 dev server）
+npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb.jpg，幂等；新增图片后一键补齐）
 ```
 
 ---
@@ -342,14 +359,14 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 ### 9.2 静态文件
 
 - `public/robots.txt`：允许所有爬虫，`Disallow: /api/`，引用 sitemap。
-- `public/sitemap.xml`：当前仅收录默认语言首页（`https://ilive.lyc.la/`，含 `zh-CN` 一条 `xhtml:link` 备用链接）。3 语言 hreflang 由 `app/app.vue` 与 `app/pages/index.vue` 在页面 head 中输出，不依赖 sitemap。
+- `public/sitemap.xml`：当前仅收录默认语言首页（`https://ilive.lyc.la/`，含 `zh-CN` 一条 `xhtml:link` 备用链接）。3 语言 hreflang 由 `app/app.vue` 在页面 head 中**统一输出**（覆盖所有页面），不依赖 sitemap。
 
 ### 9.3 动态元信息（`app/pages/index.vue`）
 
 - `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库艺人动态生成（3 种语言的描述模板见 `app/utils/seo.ts`）。
 - JSON-LD：WebSite + Person + ItemList + MusicEvent（每场演唱会）。
-- hreflang：`zh-CN` / `en` / `zh-Hant` + `x-default`（默认语言 `zh` 的 href 为 `https://ilive.lyc.la/`，无 `/zh` 前缀）。
-- `<html lang>` 与 `og:locale` / `og:locale:alternate`：由 `app/app.vue` 统一输出（`app/utils/seo.ts` 的 `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` 纯函数）。
+- hreflang / canonical：`zh-CN` / `en` / `zh-Hant` + `x-default`（默认语言 `zh` 的 href 为 `https://ilive.lyc.la/`，无 `/zh` 前缀）—— 由 `app/app.vue` 统一发射，页面不再重复。
+- `<html lang>` 与 `og:locale` / `og:locale:alternate`：由 `app/app.vue` 统一输出（`app/utils/seo.ts` 的 `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` / `toLocaleUrl` 纯函数）。
 
 ---
 
@@ -368,9 +385,10 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 
 站点含 300+ 张静态 jpg（海报 + 画廊）。当前已实现：
 
-- **3D 专辑封面**（`app/pages/index.vue`）：选中项（首屏 LCP 候选）`loading="eager"` + `fetchpriority="high"`，其余离屏封面 `loading="lazy"` + `fetchpriority="low"`，并统一 `decoding="async"`。
+- **3D 专辑封面**（`app/components/AlbumShowcase.vue`）：3D 轮播会一次性渲染**全部**封面，故统一改用 **600px 缩略图**（`thumbSrc()`：`xxx.jpg` → `xxx_thumb.jpg`），避免下载全分辨率原图（188KB–1.4MB/张）；缩略图缺失时由 `@error` 回退原图。选中项（首屏 LCP 候选）`loading="eager"` + `fetchpriority="high"`，其余 `loading="lazy"` + `fetchpriority="low"`，统一 `decoding="async"`。
 - **画廊缩略图**：`loading="lazy"` + `decoding="async"`，`.gallery-item` 固定 `width/height`（120×80，移动端 100×67）防 CLS。
-- **票根海报**（`app/pages/index.vue`）：`<img class="ticket-poster">` + 缩略图（`thumbSrc()` 把 `.jpg` 替换为 `_thumb.jpg`，缺失时 `@error` 回退原图）；**不使用** `loading="lazy"`——虚拟滚动已限制 DOM 数量，且懒加载在「`.ticket-modal` 默认 `display:none` → 打开切换」下可能不触发实际加载（图片被判定为离屏）。`decoding="async"` 保留。
+- **票根海报**（`app/components/TicketModal.vue`）：`<img class="ticket-poster">` + 缩略图（同样走 `thumbSrc()`，缺失 `@error` 回退原图）；**不使用** `loading="lazy"`——虚拟滚动已限制 DOM 数量，且懒加载在「`.ticket-modal` 默认 `display:none` → 打开切换」下可能不触发实际加载（图片被判定为离屏）。`decoding="async"` 保留。
+- **缩略图生成**（`app/utils/thumb.ts` 配套）：`scripts/gen-thumbs.mjs`（`npm run thumbs`）递归遍历 `public/concert/` 的**全部子目录**（poster + 各 `<date>` 画廊），为缺 `_thumb` 变体的原图生成 600px / q72 缩略图，**幂等**（已存在则跳过）；新增图片后一键补齐。前端 `thumbSrc()` 与脚本命名约定严格对应（`_thumb.jpg`）。
 
 > 可选后续（资产级改造，未落地）：将 jpg 转码为 **WebP/AVIF** 并使用 `<picture>` + `srcset` 适配分辨率；或引入 `@nuxt/image` 统一处理响应式图与转码。收益取决于构建/部署管线，改动较大，按需评估。
 
@@ -378,7 +396,10 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 
 票根模态框原多列 Grid 一次性渲染全部卡片，数据增长会持续放大 DOM 与图片开销。改为基于 `@tanstack/vue-virtual` 的**按行窗口化渲染**：仅渲染视口附近卡片行（含 `overscan`），保留多列网格视觉。
 
-- **`count` 必须是数字**：`useVirtualizer` 的 `count` 选项传函数（如 `() => rowCount.value`）会让库内部对 `count` 做 `new Array(count)` / `count - 1`，得到 `NaN` 并抛 `RangeError: Invalid array length`，导致整个列表渲染空白。正确写法：`count: rowCount.value`（在 `computed` 化的 options 内求值，仍具响应性）。
+- **`count` 必须是数字，且 options 必须整体包成 `computed`**（两个坑，缺一不可）：
+  1. `count` **传函数**（如 `() => rowCount.value`）会让库内部对 `count` 做 `new Array(count)` / `count - 1`，得到 `NaN` 并抛 `RangeError: Invalid array length`，列表整体空白。
+  2. 但**只写 `count: rowCount.value` 且 options 传普通对象同样会出错**：库内部是 `computed(() => ({ ...defaults, ...unref(options) }))`，普通对象在 **setup 期**即被求值，`count` 被钉死为静态数字，之后 `rowCount` 变化**不会**触发 `setOptions`。语言切换会重建页面组件、而新语言数据在 setup 之后才到达，此时 `count` 取到 0 且永不更新 —— 表现为「**切换语言后打开票根模态空白**」。
+  - 正确写法：`useVirtualizer(computed(() => ({ count: rowCount.value, getScrollElement: …, estimateSize: …, overscan, gap })))` —— `count` 仍是**数字**，响应式由外层 `computed` 提供（库签名是 `MaybeRef<Options>`，支持传 `Ref`）。
 - **动态行高测量**：卡片高度随内容浮动（约 660–720px），固定 `estimateSize` 会导致行重叠。通过 `measureElement` + 行元素上的 `:data-index` 与 `:ref="setTicketRowRef"`，让虚拟器取真实行高；`estimateSize` 仅作首屏估算。
 - **固定行间距**：用虚拟器 `gap` 选项（`ROW_GAP`）在行间插入统一间距，比单纯调大 `estimateSize` 更稳，杜绝行重叠。
 - **`useVirtualizer` 返回 `shallowRef`**：`<script>` 中访问实例方法需 `virtualizer.value?.<method>()`（模板会自动解包，可直接写 `virtualizer.getVirtualItems()`）；打开模态框时容器尺寸从 0 变化，在 `watch(ticketModalOpen)` 的 `nextTick` 里 `computeColumns()` / `computeRowHeight()` 并 `virtualizer.value.measure()` 重算。
@@ -408,7 +429,7 @@ npm run test:e2e   # 运行端到端测试（Playwright，6 套件；自动 seed
 - **留言板为写接口**：`POST /api/guestbook` 与 `POST /api/guestbook/reply` 会写库（提交即 `is_approved=1`），本地 `file:` 模式需保证库文件可写；线上 Turso 需写权限。
 - 前端 `useData` 现按当前语言请求 `/api/data?lang=<locale>`（key 含 locale 分语言缓存），`localizedConcerts/Cities/Wishes` 在「服务端已本地化」时直接透传、否则前端 `localizeConcert`；`counts` 单语言时读服务端预置的 `city.concertCount`（不再前端跨语言重算）。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
-- **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/pages/index.vue`；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。
+- **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/components/StatsCards.vue`（自 `index.vue` 抽出）；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。三次 `useCountUp` 调用须**原地保留**在该组件内（自带 SSR 透传与定时器生命周期）。
 - **`handleError` 可在 watch / 事件回调中安全调用**（错误文案解析器已在 setup 阶段注册）；但切勿在回调里直接调用 `useAppI18n()` / `useI18n()` —— 无组件实例时会抛错。
 - **`useTimeline` 的 observer 必须显式释放**：语言切换会重建页面组件，卸载时由 `onScopeDispose` 接管 `disconnect`；新增观察逻辑请走 `initTimelineReveal()`，不要另建 `IntersectionObserver`。
 - **已知取舍**：`/api/data` 的点赞数受内层 1 小时共享缓存影响，写入后不会主动失效，他人看到的计数需等缓存/SWR 刷新才更新（不影响当前用户的 `liked` 判定，该值由外层实时合并）。
