@@ -6,6 +6,7 @@
 
 | 🔢 # | 🎉 Artist | 🎤 Concert | 🌍 Country | 📍 Province | 🏙️ City | 📌 Venue | 📅 Year | 📅 Month | 📅 Day | 🎬 Video |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 18 | Vae | Anbo Conjecture | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 10 | 30 | - |
 | 17 | F✦FOREVER | F✦FOREVER Stellar City | China | Guangdong | Guangzhou | Guangdong Olympic Sports Center | 2026 | 10 | 17 | [Watch](https://space.bilibili.com/29825132/lists/9358158) |
 | 16 | Jordan Chan | BIG MAN One Man | China | Guangdong | Shenzhen | Shenzhen Bay Sports Center | 2026 | 10 | 06 | [Watch](https://space.bilibili.com/29825132/lists/9311365) |
 | 15 | Ele Yan、Pakho Chau、Wilber Pan、Li Ronghao | Chaoyin Storm Super | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 10 | 03 | - |
