@@ -13,6 +13,16 @@
 import { defineConfig, devices } from '@playwright/test'
 import { E2E_BASE_URL, E2E_DB_FILE, E2E_DB_URL, E2E_PORT } from './test/e2e/fixtures/e2e-env'
 
+/**
+ * 零下载模式 · Zero-download mode
+ * @description 本机未安装（或不想下载）Playwright 自带 Chromium / ffmpeg 时，设
+ *              `PLAYWRIGHT_USE_EDGE=1` 复用系统 Edge，无需任何浏览器下载；
+ *              同时关闭依赖 ffmpeg 的录屏 / trace / 失败截图产物。
+ *              默认不启用：CI 与已装好浏览器的环境行为完全不变。
+ *              Set PLAYWRIGHT_USE_EDGE=1 to reuse the system Edge (no downloads, no ffmpeg needed).
+ */
+const useSystemEdge = process.env.PLAYWRIGHT_USE_EDGE === '1'
+
 export default defineConfig({
   testDir: 'test/e2e',
   fullyParallel: false,
@@ -33,9 +43,10 @@ export default defineConfig({
     locale: 'zh-CN',
     // 关闭 Chromium 自动播放限制：避免背景音乐 play() 被策略拒绝而刷出 console error 噪声
     launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    ...(useSystemEdge ? ({ channel: 'msedge' } as const) : {}),
+    trace: useSystemEdge ? 'off' : 'on-first-retry',
+    screenshot: useSystemEdge ? 'off' : 'only-on-failure',
+    video: useSystemEdge ? 'off' : 'retain-on-failure',
     actionTimeout: 10_000,
     // dev 模式下路由首次编译可能超过 20s（表现为 page.goto 超时），放宽到 45s
     navigationTimeout: 45_000,

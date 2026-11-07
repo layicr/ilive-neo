@@ -2,8 +2,9 @@
  * 单元测试：app/utils/seo.ts — 多语言 SEO 纯函数
  *
  * @description 覆盖站点 URL 解析与兜底、图片绝对化、og:locale 转换、hreflang link 构建与去重 key、
- *              描述模板（含未知语言的兜底），并校验 LOCALE_LANG / ARTIST_DELIMITER 与
- *              server/lib/locales 单一真源一致（i18n.test.ts 只覆盖了一部分）。
+ *              描述模板（含未知语言的兜底）、JSON-LD 安全序列化（`</script>` 逃逸 / 数据保真），
+ *              并校验 LOCALE_LANG / ARTIST_DELIMITER 与 server/lib/locales 单一真源一致
+ *              （i18n.test.ts 只覆盖了一部分）。
  *
  *              Covers resolveSiteUrl / toAbsoluteImageUrl / toOgLocale / toLocaleUrl / hreflang
  *              builders / description templates and their fallbacks.
@@ -18,6 +19,7 @@ import {
   hreflangKey,
   buildHreflangLinks,
   buildSiteDescription,
+  serializeJsonLd,
   DESCRIPTION_TEMPLATES,
   LOCALE_LANG,
   ARTIST_DELIMITER
@@ -141,6 +143,46 @@ describe('buildSiteDescription — 站点描述模板', () => {
 
   it('未知语言回退默认语言模板', () => {
     expect(buildSiteDescription('ja' as never, '')).toBe(DESCRIPTION_TEMPLATES['zh-CN'].withoutArtists)
+  })
+})
+
+describe('serializeJsonLd — JSON-LD 防 </script> 逃逸（SSR 存储型 XSS）', () => {
+  it('合法 JSON 且数据保真（含嵌套结构 / 中文 / null）', () => {
+    const data = {
+      '@context': 'https://schema.org',
+      '@graph': [{ name: '五月天', count: 3, tags: ['摇滚', null] }]
+    }
+    expect(JSON.parse(serializeJsonLd(data))).toEqual(data)
+  })
+
+  it('</script> 载荷不得出现字面 < / >，且 JSON.parse 可还原原文', () => {
+    const payload = '经典演唱会</script><script>window.__xssJsonLd = 1</script>'
+    const json = serializeJsonLd({ name: payload })
+    expect(json).not.toContain('<')
+    expect(json).not.toContain('>')
+    expect(json).toContain('\\u003c/script\\u003e')
+    expect(JSON.parse(json).name).toBe(payload)
+  })
+
+  it('HTML 注释开头、实体符号与大小写混合一律转义', () => {
+    const raw = '<!-- <SCRIPT> & </SCRIPT> -->'
+    const json = serializeJsonLd({ s: raw })
+    expect(json).not.toMatch(/[<>&]/)
+    expect(JSON.parse(json).s).toBe(raw)
+  })
+
+  it('U+2028 / U+2029 转义后仍是合法 JSON 且可逆', () => {
+    const raw = 'line\u2028sep\u2029end'
+    const json = serializeJsonLd({ s: raw })
+    expect(json).toContain('\\u2028')
+    expect(json).toContain('\\u2029')
+    expect(JSON.parse(json).s).toBe(raw)
+  })
+
+  it('undefined / 函数等不可序列化输入退化为 null，不写坏 innerHTML', () => {
+    expect(serializeJsonLd(undefined)).toBe('null')
+    expect(serializeJsonLd(() => 1)).toBe('null')
+    expect(serializeJsonLd(null)).toBe('null')
   })
 })
 

@@ -3,6 +3,8 @@
 > Nuxt4 + Turso(LibSQL) Migration Version · Recording the emotion and memories of every concert
 >
 > [中文文档](./README_DEV.md) | English Version
+>
+> Last updated: **2026-11-07** — book-style loader, 20 KB/s slow-network first paint, SSR HTML compression, test suite & security review (sections 11 / 14).
 
 ---
 
@@ -26,6 +28,7 @@ Key principles:
 - **Zero-request language switching**: Frontend `useI18n` + `pickLocale` derives from already-fetched **multilingual data** (zh / en / zh-Hant), no additional requests.
 - **Multilingual SEO**: `app/app.vue` uniformly outputs `<html lang>`, 3-language `hreflang` (with `x-default`) and `og:locale` / `og:locale:alternate`; per-page `title` / `description` are emitted by `app/pages/index.vue` per locale.
 - **Remote Turso as the authoritative database**: Online (Vercel) connects to the remote database via `NUXT_TURSO_DATABASE_URL=libsql://...`; local development can fall back to `file:` SQLite.
+- **First paint does not depend on external CDNs**: the book-style loader is SSR-emitted with inlined critical CSS, font / icon stylesheets are deferred to `bodyClose`, and dynamic SSR HTML is compressed by a Nitro plugin (see section 11).
 
 ---
 
@@ -38,10 +41,11 @@ Key principles:
 | PWA | `@vite-pwa/nuxt` (config-driven Service Worker, `/api/*` NetworkFirst) |
 | Multilingual | `@nuxtjs/i18n` v10 (3 languages: zh / en / zh-Hant, `strategy: prefix_except_default`, default zh has no prefix) |
 | Language | TypeScript (`strict` enabled, `typeCheck: false` at build time) |
-| Animation | GSAP 3.12.2 (CDN) |
-| Styling | `public/css/main.css` (includes hand-written utilities migrated from Tailwind CDN), Font Awesome 6.4.0 (CDN) |
+| Animation | GSAP 3.12.2 (CDN, with SRI) |
+| Styling | `public/css/main.css` (hand-written utilities; Google Fonts `@import` and the legacy spinner removed), Font Awesome 6.4.0 (CDN, loaded at `bodyClose`) |
+| First paint | Full-screen book-style loader (SSR-emitted + inlined critical CSS), Nitro `render:response` dynamic HTML brotli / gzip compression, system font-stack fallback |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **26 files / 356 cases**) + Playwright (E2E, **8 suites / 59 cases**) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **28 files / 401 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -57,19 +61,22 @@ Key principles:
 
 ```
 ilive_neo/
-├── nuxt.config.ts             # Nuxt master config (SSR/runtimeConfig/head/PWA/SEO)
+├── nuxt.config.ts             # Nuxt master config (SSR/runtimeConfig/head/PWA/SEO; critical CSS / deferred bodyClose CSS / noscript fallback)
+├── playwright.config.ts       # E2E config (two projects, fixture DB seed, PLAYWRIGHT_USE_EDGE zero-download mode)
 ├── app/                       # [Nuxt 4 srcDir] Application layer
 │   ├── app.vue                # Root component (NuxtPage + global error handling + site-wide language SEO: html lang/canonical/hreflang/og:locale)
 │   ├── pages/
-│   │   └── index.vue          # Homepage "composition root": only SEO/JSON-LD, init orchestration and body scroll lock — blocks delegate to child components (363 lines)
+│   │   └── index.vue          # Homepage "composition root": SEO / JSON-LD, init orchestration, body scroll lock + <SiteLoader /> as a sibling of the content (363 lines)
 │   ├── components/            # Homepage blocks extracted from index.vue (18 components; each calls shared composables directly)
 │   │   ├── AlbumShowcase.vue      # 3D album carousel (cover thumbnails + @error fallback)
 │   │   ├── TicketModal.vue        # Ticket modal (@tanstack/vue-virtual row-based virtual scroll)
 │   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
 │   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
-│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue / SiteLoader.vue
+│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue
+│   │   ├── SiteLoader.vue        # Full-screen book-style loader (SSR-emitted #loader, inlined critical CSS, 15s failsafe armed only after hydration)
 │   │   └── LanguageSwitcher.vue / MusicPlayer.vue / FeedbackButton.vue / BackToTopButton.vue
 │   ├── composables/           # [Core] All interaction logic (Vue composables)
+│   │   ├── useBookLoader.ts   # Book loader timing + poster prefetch (pure TS, fake-timer unit tests)
 │   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override; localized derivation is written to a request-scoped shared snapshot (app:localized), computed once
 │   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
@@ -92,13 +99,13 @@ ilive_neo/
 │   │   └── guestbook.ts       # Guestbook domain models (GuestbookMessage / GuestbookReply / GuestbookPage)
 │   └── utils/
 │       ├── config.ts          # Global configuration constants CONFIG
-│       ├── index.ts           # Utility functions (safeHtml / time formatting / pickLocale / localize* / computeCityConcertCounts)
+│       ├── index.ts           # Utility functions (safeHtml / time formatting / pickLocale / localize* / computeCityConcertCounts / firstSentence)
 │       ├── thumb.ts           # Thumbnail helpers (thumbSrc: .jpg → _thumb.jpg; onThumbError: fall back to the full image)
-│       └── seo.ts             # SEO pure functions (hreflang links / og:locale / multilingual description templates and artist separators)
+│       └── seo.ts             # SEO pure functions (hreflang / og:locale / description templates / serializeJsonLd for XSS-safe JSON-LD)
 ├── i18n/                      # [Root] Locale messages (@nuxtjs/i18n v10 layout, langDir resolves relative to this dir)
-│   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts (per-language messages)
+│   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts (per-language messages, incl. loadingBook three-language loader copy)
 ├── public/                    # Static assets
-│   ├── css/  main.css
+│   ├── css/  main.css         # Global styles (Google Fonts @import and legacy spinner removed; first-paint critical CSS parses standalone)
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  Posters and live photos
@@ -125,9 +132,11 @@ ilive_neo/
 │   │   ├── guestbook.ts       # Message/reply read/write (approved only; parent validation; batched IN replies, no N+1)
 │   │   ├── ua.ts              # Server-side UA parsing (browser / OS)
 │   │   ├── rateLimit.ts       # Per-IP in-memory rate limiter (shared by likes and guestbook writes)
-│   │   └── locales.ts         # Locale definitions (LOCALES)
+│   │   ├── locales.ts         # Locale definitions (LOCALES)
+│   │   └── htmlCompression.ts # Compression pure logic (encoding negotiation / should-compress / Vary & headers / error-render detection)
 │   ├── plugins/
-│   │   └── init-db.ts         # Idempotent initialization on Nitro startup (skipped for remote Turso)
+│   │   ├── init-db.ts         # Idempotent initialization on Nitro startup (skipped for remote Turso)
+│   │   └── html-compression.ts # render:response dynamic SSR HTML br/gzip compression (skips error pages, env-switchable)
 │   └── db/
 │       ├── schema.sql         # Table structure (12 tables, translatable fields are *_i18n JSON columns)
 │       └── seed.mjs           # Empty database creation script (DROP + CREATE, no business data)
@@ -135,9 +144,11 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (26 files / 356 cases)
-│   ├── e2e/                   # Playwright end-to-end tests (8 suites / 59 cases, desktop/mobile projects + fixture DB seed)
-│   ├── ui-tests.md            # UI acceptance checklist (manual + automated)
+│   ├── unit/                  # Vitest unit tests (28 files / 401 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
+│   ├── e2e/                   # Playwright end-to-end tests (10 suites / 69 cases, desktop/mobile projects + fixture DB seed)
+│   │   ├── book-loader.spec.ts   # Loader copy / catalog / theme first sentence / fade-out / narrow viewport
+│   │   └── slow-network.spec.ts  # CDP 20 KB/s throttling, critical path, noscript & HTML compression semantics
+│   ├── ui-tests.md            # UI acceptance checklist (manual + automated; section 18 covers loader & slow network)
 │   └── unit-tests.md / README.md
 └── doc/
     ├── README_DEV.md          # This document (Chinese)
@@ -159,7 +170,8 @@ app/pages/index.vue (composition root: coordination only)
   ├─ watch(currentLanguage) → update document.title + re-apply the album layout
   ├─ onMounted             → initBgMusic / initDataLayout (timeline reveal)
   ├─ watch([5 modal open flags]) → lock body scroll whenever any modal opens (must stay in the coordinator)
-  └─ <template>            → composes the 18 components + the static background circles
+  ├─ <template>            → composes the 18 components + the static background circles
+  └─ <SiteLoader />        → sibling of the content (avoids ancestor stacking contexts breaking position: fixed)
 
 app/components/*.vue (each block owns its state & lifecycle)
   ├─ AlbumShowcase / TicketModal / CityModal / GalleryModal / VideoModal / SonglistModal
@@ -182,6 +194,7 @@ Key points:
 - **Statistic count-up (`app/composables/useCountUp.ts`)**: the displayed value is a `computed` — while not playing it **lazily passes through** the target. Never snapshot the target during setup: `useAsyncData` has not resolved yet at SSR time, so a snapshot yields 0, making the SSR HTML emit 0 and mismatching on hydration. After `onMounted` the next frame resets to 0 and plays (default 5s, easeOutCubic); pass `repeatMs` for periodic replay (120s on the homepage); `prefers-reduced-motion` skips the animation and shows the final value.
 - **Context-safe error toasts (`app/composables/useAppError.ts`)**: vue-i18n's `useI18n()` **throws** `Must be called at the top of a 'setup' function` when there is no component instance. The error-copy resolver is therefore **registered during setup only** and reused afterwards, so `handleError(err, ctx, showUser=true, messageKey)` is safe from watch / event callbacks / global listeners — never resolve i18n directly inside a callback.
 - **Timeline observer lifecycle (`app/composables/useTimeline.ts`)**: an `IntersectionObserver` holds **strong references** to observed nodes. It is disconnected and nulled when the owner unmounts (`onScopeDispose`), and every `initTimelineReveal()` disconnects before re-observing the current DOM — otherwise old DOM / image nodes survive a locale-switch page rebuild.
+- **Book loader decoupled from first paint** (section 11): `SiteLoader.vue` is SSR-emitted as `#loader` with inlined critical CSS, so it needs neither hydration nor external CDN stylesheets; the 15s CSS failsafe is armed only after `onMounted` via `html.book-loader-armed`, so slow networks cannot hide the overlay prematurely.
 
 ### 4.2 Server-Side Data Layer
 
@@ -217,6 +230,7 @@ In `app/pages/index.vue`:
 - **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts deduplicated `artist`, auto-updates as concerts are added or removed.
 - `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent). Note: hreflang / canonical / `og:locale` are emitted by `app/app.vue` and are **not repeated here** (the old implementation deduped two identical sources by key — pure redundancy).
 - JSON-LD uses `JSON.parse(JSON.stringify(toRaw(...)))` to strip Vue reactive Proxy, and uses `computed` to ensure the complete concert list is output after data is ready.
+- **XSS-safe JSON-LD serialization**: `innerHTML` always goes through `serializeJsonLd()` (`app/utils/seo.ts`), which writes `< > &` and U+2028 / U+2029 as JSON `\u` escapes — never a bare `JSON.stringify`. Concert names come from the DB; a script-closing tag in the data would terminate the ld+json block early and allow stored XSS in SSR output. unhead's current implicit escaping is **not** treated as a security boundary. Regressions: `test/unit/seo-utils.test.ts` and `test/e2e/security.spec.ts` (section 14.4).
 
 ### 4.4 Homepage Floating Buttons: Background Music & universe Link
 
@@ -274,6 +288,10 @@ Schema changes treat `schema.sql` as the **single source of truth**: all histori
 | `NUXT_TURSO_AUTH_TOKEN` | Remote Turso auth token | Empty |
 | `NUXT_TRUST_PROXY` | Whether to trust `X-Forwarded-For` (set `true` when behind a **self-hosted** reverse proxy / CDN; Vercel handles this automatically, no need to set it) | Empty (disabled) |
 | `VERCEL` | Automatically injected by the Vercel platform (`=1`); used to detect the platform and prefer `x-vercel-forwarded-for` | Platform-injected |
+| `NUXT_DISABLE_HTML_COMPRESSION` | `=1` disables `server/plugins/html-compression.ts` SSR HTML compression (for deployments behind an already-compressing reverse proxy / CDN) | Empty (compression enabled) |
+| `PLAYWRIGHT_USE_EDGE` | `=1` reuses the system Edge for E2E with zero browser downloads; also disables ffmpeg-dependent video / trace / failure screenshots | Empty (bundled Chromium) |
+| `PLAYWRIGHT_DOWNLOAD_HOST` | Playwright browser download mirror (e.g. `https://cdn.npmmirror.com/binaries/playwright`) | Official CDN |
+| `E2E_PORT` / `E2E_DB_FILE` | Isolated E2E dev server port / absolute fixture DB path (the real database stays read-only) | `3000` / `%TEMP%\ilive-e2e\e2e-data.db` |
 
 > **Critical**: Must use the **`NUXT_` prefix**, Nuxt will override `runtimeConfig.turso.*` at **runtime**. If using the `TURSO_` prefix, `process.env` may not be readable during `nuxt.config.ts` evaluation, causing fallback to the local `file:` default.
 
@@ -302,6 +320,23 @@ NUXT_TURSO_AUTH_TOKEN=your-token
 
 `.env` is not uploaded (gitignore ignores it); Vercel build/runtime relies on these dashboard variables to connect to Turso.
 
+### 6.4 Test Environment & Compression Switch
+
+```powershell
+# Zero-download E2E (reuse system Edge when Playwright browsers are not installed)
+$env:PLAYWRIGHT_USE_EDGE = '1'
+npm run test:e2e
+
+# Install the minimal browser components from a domestic mirror
+$env:PLAYWRIGHT_DOWNLOAD_HOST = 'https://cdn.npmmirror.com/binaries/playwright'
+npx playwright install chromium-headless-shell ffmpeg
+
+# Disable SSR HTML compression (when an upstream proxy / CDN already compresses)
+$env:NUXT_DISABLE_HTML_COMPRESSION = '1'
+```
+
+> `NUXT_DISABLE_HTML_COMPRESSION` only affects dynamic SSR HTML; `nitro.compressPublicAssets` static compression is unaffected. E2E points `NUXT_TURSO_DATABASE_URL` at an isolated fixture DB — the real `public/data/data.db` is never written.
+
 ---
 
 ## 7. Development Commands
@@ -311,13 +346,18 @@ npm install        # Install dependencies (includes postinstall: nuxt prepare)
 npm run dev        # Start development server (default http://localhost:3000/)
 npm run build      # Production build (Nitro, deployable to Vercel)
 npm run preview    # Preview production build
+node .output/server/index.mjs  # Start the production build directly (use PORT, e.g. $env:PORT='3100')
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 26 files / 356 cases)
+npm run test       # Run unit tests (vitest run, 28 files / 401 cases)
 npm run test:watch # Run tests in watch mode
-npm run test:e2e   # Run end-to-end tests (Playwright, 8 suites; seeds the fixture DB and boots an isolated dev server)
+npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 69 cases; seeds the fixture DB and boots an isolated dev server)
+npx playwright test --list     # List cases only, to verify suite / case counts
 npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.jpg, idempotent; run after adding images)
 ```
+
+> ⚠️ Once `.output` accumulates hundreds of files, a rebuild's cleanup may trip the IDE bulk-delete guard; remove `.output` first (see `test/README.md` section 6).
+> E2E and vitest **must not run in parallel in one batch**: `playwright.config.ts` runs serially (`workers: 1`), and parallel runs compete for the dev server / fixture DB.
 
 ---
 
@@ -355,6 +395,7 @@ npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.j
 
 - `SITE_URL = 'https://ilive.lyc.la'`, og:url / canonical / og:image / twitter:image unified as **https**.
 - `app.head` keeps only **language-independent** static info: `author` / `robots` / `referrer` / `og:type` / `og:url` / `og:image` / `twitter:card` / `twitter:site` / `twitter:creator` / `twitter:image`, plus favicon / stylesheet / GSAP resource references.
+- **Resource loading strategy (critical path)**: `<head>` keeps only `/css/main.css` as the critical stylesheet (`main.css` has no `@import`); Inter / Font Awesome stylesheets use `tagPosition: 'bodyClose'`, `fonts.googleapis.com` / `fonts.gstatic.com` keep `preconnect`, and fonts fall back to a system font stack with `display=swap`; GSAP keeps SRI. The `noscript` 15s overlay-hide rule **must wrap itself in `<style>`** (`innerHTML` is raw content, otherwise the CSS renders as text) — see section 11.
 - The originally hard-coded Chinese `title` / `keywords` / `description` / `og:title` / `og:description` / `twitter:title` / `twitter:description` have all been **removed** (to avoid duplicating or conflicting with page-level `useSeoMeta`).
 - Language-related meta: `og:locale` / `og:locale:alternate` are emitted by `app/app.vue`; `og:site_name` is emitted by page-level `useSeoMeta`.
 
@@ -408,6 +449,53 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 
 ---
 
+## 11. Book Loader, Critical Path & Slow Networks (2026-11-07)
+
+> Background: under slow-network measurements the homepage SSR HTML was ~248 KB (Nuxt payload ~121 KB) and cross-origin font / icon CSS blocked parsing serially, so the book cover took over ten seconds to paint. The old 15s CSS failsafe also started counting from "page load began", hiding the overlay before JS hydration. This round shipped the three P0 changes as a minimal change set and locked them down with 20 KB/s automated regressions.
+
+### 11.1 Book loader (SiteLoader)
+
+- `app/components/SiteLoader.vue`: the legacy spinner became a full-screen book (cover / left catalog / right concert details / bottom progress bar), two-page desktop layout and a single-page narrow-viewport layout; no buttons or skip hints, `aria-busy="true"`, and `:data-finish` reporting `ready | timeout | error`.
+- `#loader` is SSR-emitted with **inlined critical CSS** (no hydration, no external CDN); `<SiteLoader />` sits alongside the homepage content so no ancestor stacking context can break `position: fixed`.
+- All data comes from `/api/data`: catalog rows / years and right-page concert details; the quote is the **first sentence** of the current-locale `theme` (`firstSentence()` in `app/utils/index.ts` — take the first paragraph, then split on CJK / English sentence punctuation); posters use `_thumb.jpg` via `thumbSrc()`. Three-language copy lives in `loadingBook` inside `i18n/locales/*.ts` (`tocFoot` and the static `quotes` were removed).
+- Timing and prefetch live in `app/composables/useBookLoader.ts` (pure TS + fake-timer unit tests):
+
+| Constant | Value | Purpose |
+|------|------|------|
+| `BOOK_COVER_MS` | 900 ms | Cover dwell |
+| `BOOK_WINDOW_MS` | 12.6 s | Page-turn window, quadratic easing `G_MAX 1.32s → G_MIN 0.32s` |
+| `BOOK_MIN_SHOW_MS` | 2.4 s | Minimum perceptible window; SSR-ready data must not fade instantly |
+| `BOOK_MAX_MS` | 13.5 s | Hard cap, forces `timeout` fade-out |
+| `BOOK_FADE_MS` | 900 ms | Fade then remove the overlay, total < 15 s |
+
+`setReady()` finishes with `ready` after the minimum window, `setFailed()` finishes with `error` immediately, and reaching the end of the book without data ends with `timeout`. `createPosterPrefetcher()` deduplicates, warms the current / next page with `warmAround()`, and fills the rest at low priority via `requestIdleCallback`.
+
+> ⚠️ `clearAll()` uses `timers.forEach(...)` instead of `for...of` over a `Set`: the latter needs `downlevelIteration` under a low TS target and breaks the build.
+
+### 11.2 Critical path (P0)
+
+1. **Move external CSS off the critical path**: removed the first-line Google Fonts `@import` and the legacy `.loader/.spinner` from `main.css`; `nuxt.config.ts` defers Inter / Font Awesome stylesheets with `tagPosition: 'bodyClose'`, keeps `preconnect` and `display=swap` + a system font stack. `<head>` keeps only `/css/main.css`, so the overlay paints immediately from inlined SSR CSS even at 20 KB/s.
+2. **Fix the 15s CSS failsafe start**: `:global(html.book-loader-armed) .bk-loader { animation: bk-failsafe 0s linear 15s forwards }` — the class is added only in `onMounted` (after hydration) and removed on `finish` / unmount; no-JS users are covered by the `noscript > <style>` rule in `nuxt.config.ts`.
+3. **SSR HTML compression**: see 11.3.
+
+> Do not even write the literal `@import` in comments: a static check once mis-detected it as a real import declaration.
+
+### 11.3 SSR HTML compression (`server/plugins/html-compression.ts`)
+
+- `nitro.compressPublicAssets` only covers `public/**`; dynamic SSR HTML was still plain text. The plugin negotiates `Accept-Encoding` in `render:response` and compresses with brotli (preferred, quality 5) / gzip (level 6) **asynchronously**; measured homepage: ~248 KB → **47 KB (br) / 63 KB (gzip)**.
+- Pure logic lives in `server/lib/htmlCompression.ts` (`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / case-insensitive header helpers), covered by 19 cases in `test/unit/htmlCompression.test.ts`.
+- Cache / negotiation semantics: every HTML response declares `Vary: Accept-Encoding`; q-values, `q=0` and `*` are parsed, br wins; only `200 + text/html + string body + ≥ 1 KB + not already encoded`; compressed responses drop `ETag` / `Last-Modified` / `Content-Length` so a CDN cannot reuse a br representation for gzip-only clients. `NUXT_DISABLE_HTML_COMPRESSION=1` turns it off.
+- ⚠️ **404 / 500 error pages must never be compressed**: Nuxt renders them through the internal `/__nuxt_error?...&statusCode=404` route, where both `response.statusCode` and `event.node.res.statusCode` are **still 200** at `render:response`; the error render path additionally re-encodes the compressed `Buffer` as a UTF-8 string (invalid bytes become U+FFFD), producing `failed to decompress 'br' encoding` on the client. `isNuxtErrorRender()` skips these pages, leaving them uncompressed.
+
+### 11.4 20 KB/s regressions & test isolation
+
+- `test/e2e/slow-network.spec.ts`: CDP `Network.emulateNetworkConditions` simulates **20 KB/s down / 500 ms RTT** and asserts the overlay is immediately fixed / full-screen, is not hidden by the 15s failsafe before hydration, and fades normally after bandwidth is restored; it also checks that `<head>` has no blocking external CSS, `noscript` contains `<style>`, and compression semantics (200 br decodable / 404 plain / `q=0` uncompressed).
+- The dev server splits Vue dependencies into many module requests; full-time throttling cannot hydrate within the 120 s case timeout → **only the first-paint phase is throttled (~8 s)**, then bandwidth is restored for the hydration / fade-out checks.
+- `test/e2e/book-loader.spec.ts` (6 cases) covers three-language copy, catalog rows / years, theme first sentence, no buttons, progress bar, fade-out and the narrow-viewport single-page layout.
+- Write isolation: E2E specs share a fixture DB serially. The like rate-limit case now uses a **nonexistent concert id** (the limiter runs before existence validation, so 429 still triggers with zero DB writes), and `ui-structure.spec.ts` reads the current like count from `/api/data` as a dynamic baseline — no order-dependent false failures.
+
+---
+
 ## 12. Deployment (Vercel)
 
 1. Configure `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN` in Vercel dashboard.
@@ -416,7 +504,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 4. `public/robots.txt` / `sitemap.xml` will be packaged as static files by Nitro.
 5. After first deployment, visit `/api/data` to confirm remote Turso data is returned.
 6. **Real client IP**: At runtime Vercel injects `VERCEL=1`, so `getClientIp()` prefers the platform-overwritten `x-vercel-forwarded-for` (single value, unspoofable). Like dedupe / rate limiting / guestbook IP capture therefore need **no** extra `NUXT_TRUST_PROXY` configuration.
-7. Static asset compression: `nitro.compressPublicAssets: true` is enabled, so `public/**` assets are compressed automatically.
+7. **Compression**: `nitro.compressPublicAssets: true` compresses `public/**` static assets; dynamic SSR HTML is compressed by `server/plugins/html-compression.ts` with br / gzip based on `Accept-Encoding` (~248 KB → 47 KB) and a uniform `Vary: Accept-Encoding`. If Vercel / a CDN already compresses HTML, set `NUXT_DISABLE_HTML_COMPRESSION=1` to avoid double compression; 404 / 500 error pages stay plain text (see 11.3).
 
 ---
 
@@ -436,6 +524,10 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 - **`useTimeline`'s observer must be released explicitly**: a locale switch rebuilds the page component, and `onScopeDispose` takes care of `disconnect` on unmount. Add new observe logic through `initTimelineReveal()`; do not create another `IntersectionObserver`.
 - **Known trade-off**: like counts in `/api/data` are still subject to the inner 1-hour shared cache and are not actively invalidated on write, so other visitors see the update only after the cache/SWR refresh (the current visitor's `liked` flag is unaffected — it is merged per request in the outer layer).
 - **Token security**: `.env` is added to `.gitignore`. If a token was ever committed to git history, immediately **rotate to a new token** in the Turso dashboard.
+- **Book loader 15s failsafe**: the CSS animation is gated by `html.book-loader-armed`, which only `SiteLoader.vue`'s `onMounted` (successful hydration) may add; `finish` / unmount must remove it — otherwise the timer starts at page load and hides the overlay before hydration on slow networks. The no-JS fallback rule must wrap itself in `<style>` (see 11.2).
+- **Compression plugin must not hand binary data to the error render path**: when changing `render:response` or adding HTML responses, `shouldCompress()` must check both the status code and `isNuxtErrorRender(event.path)`; a compressed error page becomes an undecodable br response (see 11.3).
+- **E2E write state**: the fixture DB is shared serially across specs; cases that write should use nonexistent targets / relative assertions or roll back, and static structure assertions should read a dynamic baseline — no order-dependent false failures.
+- **Report artifacts**: once `test/report/e2e-artifacts` / `e2e-html` accumulate hundreds of files, Playwright's startup cleanup may trip the IDE bulk-delete guard; delete both directories before rerunning (see `test/README.md` section 6).
 
 ---
 
@@ -469,4 +561,6 @@ Likes are deduplicated per IP (`UNIQUE(concert_id, ip)`) — one vote per user �
 - **Length & format validation**: nickname ≤ 40 / content ≤ 1000 / email ≤ 120 and format-checked; write endpoints reuse the same rate limiter.
 - **End-to-end regression**: `test/e2e/guestbook.spec.ts` asserts that script / event payloads are "rendered as plain text, not executed".
 
+### 14.4 Read-only security review (2026-11-07) · Security review
 
+**Fixed / hardened in this round**: H2 (JSON-LD now uses `serializeJsonLd()` — explicit `\u` escapes for `< > &` and U+2028 / U+2029 instead of relying on unhead's implicit escaping; see 4.3), H3 (shared ETag / missing uniform `Vary` in SSR compression → cross-encoding CDN cache poisoning), M6 (compression type contract, q-values, synchronous blocking, status-code boundaries and corrupted br on 404), L3 (bare CSS in `noscript` not wrapped in `<style>`). Implementation & regressions: 11.3, `test/unit/htmlCompression.test.ts`, `test/unit/seo-utils.test.ts`, `test/e2e/slow-network.spec.ts`, `test/e2e/security.spec.ts`.

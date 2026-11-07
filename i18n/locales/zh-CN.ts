@@ -45,6 +45,32 @@ export default {
     loading: '加载中...'
   },
 
+  /**
+   * 书册加载页文案 · Book-style loading screen
+   * @description {count} / {cities} / {from} / {to} 由真实演唱会数据注入；{a} / {n} 为当前翻阅的艺人与演出名。
+   */
+  loadingBook: {
+    brand: 'LAYICR',
+    brandTail: '演唱会足迹',
+    cvTop: 'LAYICR PRESENTS',
+    cvTitle: '演唱会足迹',
+    cvEn: 'Live Archive · {from}—{to}',
+    cvHint: '正在翻开第一页',
+    cvCount: '{count} 场演出 / {cities} 座城市',
+    tocKicker: 'Contents',
+    tocTitle: 'Concert Archive',
+    tocSub: '{from} — {to} · 共 {count} 场演出',
+    labelNo: 'No.',
+    labelDate: '日期',
+    labelCity: '城市',
+    labelVenue: '场馆',
+    labelContents: '目录',
+    binding: '正在装订书册…',
+    turning: '正在翻阅 · {a}「{n}」',
+    closed: '书册已合上',
+    enter: '欢迎回来，{count} 场演出已就绪'
+  },
+
   songlist: {
     totalSongs: '共 {count} 首歌曲',
     searchPlaceholder: '搜索歌曲...'

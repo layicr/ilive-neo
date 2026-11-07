@@ -129,3 +129,33 @@ export function buildSiteDescription(locale: Locale, artistList: string): string
   const tpl = DESCRIPTION_TEMPLATES[locale] ?? DESCRIPTION_TEMPLATES[DEFAULT_LOCALE]
   return artistList ? tpl.withArtists.replace('{artists}', artistList) : tpl.withoutArtists
 }
+
+/**
+ * JSON-LD 安全序列化 · XSS-safe JSON-LD serialization
+ *
+ * @description `<script type="application/ld+json">` 的内容由浏览器按脚本原始文本解析：数据里只要出现
+ *              字面的 `</script>` 就会提前闭合标签，其余内容可能被当作新的 `<script>` 执行 ——
+ *              演唱会名 / 描述来自数据库，一旦被污染就是 SSR 存储型 XSS。`JSON.stringify` 不会转义 `<`。
+ *
+ *              当前 unhead 会隐式把 `<` 写成 `\u003C`，但这属于第三方行为，不能作为安全边界；
+ *              此处显式转义 `< > &` 与 U+2028 / U+2029。它们都是 JSON 合法转义，
+ *              `JSON.parse` 与搜索引擎解析后会还原原字符，数据保真且不会闭合标签。
+ *
+ *              JSON.stringify alone is NOT safe for inline JSON-LD: a literal `</script>` in DB-driven
+ *              concert names closes the tag. Escape `< > &` and line separators as JSON \u escapes
+ *              (round-trip safe) instead of relying on unhead's implicit escaping.
+ */
+const JSON_LD_ESCAPES: Record<string, string> = {
+  '<': '\\u003c',
+  '>': '\\u003e',
+  '&': '\\u0026',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029'
+}
+
+export function serializeJsonLd(value: unknown): string {
+  const json = JSON.stringify(value)
+  // undefined / function / symbol 等不可序列化输入退化为合法 JSON，避免 innerHTML 变成 "undefined"
+  if (typeof json !== 'string') return 'null'
+  return json.replace(/[<>&\u2028\u2029]/g, (ch) => JSON_LD_ESCAPES[ch] ?? ch)
+}

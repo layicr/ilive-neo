@@ -12,7 +12,8 @@ import {
   localizeCity,
   localizeWish,
   computeCityConcertCounts,
-  pickHotConcertIds
+  pickHotConcertIds,
+  firstSentence
 } from '../../app/utils'
 import type { LocalizedConcert, LocalizedCity, LocalizedWish, LocalizedText } from '../../app/types'
 
@@ -280,5 +281,42 @@ describe('pickHotConcertIds — 热度标记（点赞前三，并列同显）', 
   it('并列第一名全部入选', () => {
     const ids = pickHotConcertIds([{ id: 1, likes: 2 }, { id: 2, likes: 2 }])
     expect([...ids].sort((a, b) => a - b)).toEqual([1, 2])
+  })
+})
+
+// ==================== firstSentence（书册加载页引文） ====================
+
+describe('firstSentence · 主题首句', () => {
+  it('中文：取第一个句号（含标点），忽略后续句子', () => {
+    expect(firstSentence('灯会熄灭，故事永不落幕。心安即是停泊。')).toBe('灯会熄灭，故事永不落幕。')
+  })
+
+  it('繁体的感叹号 / 问号同样生效', () => {
+    expect(firstSentence('金曲再響，老友重逢；邕城赴約，聲續熱愛！後面還有一句。'))
+      .toBe('金曲再響，老友重逢；邕城赴約，聲續熱愛！')
+    expect(firstSentence('被凝固的，是我，還是那一刻？其他文字'))
+      .toBe('被凝固的，是我，還是那一刻？')
+  })
+
+  it('英文：句点后跟空格或大写字母时才切分', () => {
+    expect(firstSentence('A drop of resin. Longer than history.\nWhat was frozen?'))
+      .toBe('A drop of resin.')
+    expect(firstSentence('Fixed stars.The City of Stars will journey.'))
+      .toBe('Fixed stars.')
+  })
+
+  it('换行优先取第一段，无句末标点时返回整段', () => {
+    expect(firstSentence('第一句没有标点\n第二句。')).toBe('第一句没有标点')
+    expect(firstSentence('  一滴松香，凝为琥珀  ')).toBe('一滴松香，凝为琥珀')
+  })
+
+  it('引号内句点不误判为句末', () => {
+    const text = "The theme revolves around 'LIFE.' Eason Chan selected songs."
+    expect(firstSentence(text)).toBe(text)
+  })
+
+  it('空值与纯空白返回空串', () => {
+    expect(firstSentence('')).toBe('')
+    expect(firstSentence('   \n  ')).toBe('')
   })
 })

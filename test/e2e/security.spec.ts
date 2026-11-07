@@ -60,7 +60,7 @@ test.describe('XSS 载荷真实渲染不执行', () => {
     }
   })
 
-  test('JSON-LD 结构数据注入 </script> 不能逃逸，且 JSON 结构仍可解析', async ({ page }) => {
+  test('JSON-LD 结构数据注入 </script> 不能逃逸，且 JSON 结构仍可解析', async ({ page, request }) => {
     await gotoHome(page, '/')
 
     const jsonLdCheck = await page.evaluate(() => {
@@ -84,6 +84,17 @@ test.describe('XSS 载荷真实渲染不执行', () => {
     expect(jsonLdCheck.executed, 'JSON-LD 内 </script> 逃逸并执行了脚本').toBeNull()
     expect(jsonLdCheck.count).toBeGreaterThan(0)
     expect(jsonLdCheck.parseErrors, 'JSON-LD 被未转义的 </script> 截断').toEqual([])
+
+    // 直接校验 SSR 原始 HTML：载荷必须以 JSON \u 转义形式出现（不依赖 unhead 的隐式行为），
+    // 且转义可逆 —— JSON.parse 后仍拿得到原始文案，没有因转义丢数据。
+    const html = await (await request.get('/')).text()
+    const block = html.match(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
+    expect(block, '应能读出完整的 JSON-LD 块').toBeTruthy()
+    expect(block, 'JSON-LD 块内不得含字面 script 闭合标签').not.toContain('</script')
+    expect(block, '必须以 JSON \\u 转义输出 <（显式安全序列化）').toMatch(/\\[uU]003[cC]/)
+
+    const restored = JSON.stringify(JSON.parse(block))
+    expect(restored, '转义可逆：解析后仍保留原始 script 闭合标签，未被吞掉数据').toContain('</script>')
   })
 })
 
@@ -196,11 +207,15 @@ test.describe('点赞限流（F-18）', () => {
     // 断言返回 429 且携带 Retry-After 头。
     // 用「循环到 429」而非硬等第 11 次：前面非法参数用例可能已消耗部分额度，
     // 但无论起点如何，连续点赞必然触发限流 → 429 + Retry-After。
-    // In-memory fixed-window rate limit (default 10/IP/60s). Send until 429 and assert.
+    // 用不存在的 id：限流判定早于「演唱会是否存在」校验，因此这些请求仍会消耗额度并触发 429，
+    // 但不会 toggle 任何真实场次的点赞数（旧实现用 id=1，会把 fixture 的 likes 从 3 改成 4，
+    // 污染后续 ui-structure.spec.ts 的断言）——测试不再写库。
+    // In-memory fixed-window rate limit (default 10/IP/60s). Send until 429 and assert;
+    // a missing concert id still consumes the quota but never writes to the fixture DB.
     let lastStatus = 200
     let retryAfter: string | null = null
     for (let i = 0; i < 30; i++) {
-      const res = await request.post('/api/like', { data: { id: 1 } })
+      const res = await request.post('/api/like', { data: { id: 999999 } })
       lastStatus = res.status()
       if (lastStatus === 429) {
         retryAfter = res.headers()['retry-after'] ?? null

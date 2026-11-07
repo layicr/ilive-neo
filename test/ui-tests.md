@@ -155,6 +155,23 @@
 
 ---
 
+## 18. 书册加载页与慢网首屏（2026-11-07 新增）
+
+> 可自动化：`test/e2e/book-loader.spec.ts`（6 例）、`test/e2e/slow-network.spec.ts`（3 例），均由 `chromium-desktop` 执行。
+> 生产库 19 场；E2E fixture 库为 4 场，目录行数按 `/api/data` 实际数量断言，不硬编码 19。
+
+| 用例 | 步骤 | 预期结果 |
+|------|------|----------|
+| UI-060 三语加载页 | 分别直达 `/`、`/en`、`/zh-Hant` | 品牌小字随语言显示「演唱会足迹 / Live Archive / 演唱會足跡」；封面与目录同样本地化 |
+| UI-061 目录与年份 | 观察左页目录 | 列出全部演唱会，每行日期含 4 位年份（如 `2026.10.31`）；底部无 `tocFoot` 文字 |
+| UI-062 纯自动 | 观察加载页控件 | 无任何按钮 / 跳过提示；保留顶部品牌小字与底部进度条 |
+| UI-063 主题首句 | 观察右页引文 | 引文为该场演唱会当前语言主题的第一句话（无标点短主题取整段），且不跨段 |
+| UI-064 淡出显示首页 | 等待数据就绪 | 数据就绪且过最短窗口后淡出，`#loader` 从 DOM 移除，首页面与统计卡片可见 |
+| UI-065 移动端书册 | 393×851 视口打开 | 左页目录隐藏、迷你目录显示，书册为单页，进度条与封面正常 |
+| UI-066 20 KB/s 慢网 | CDP 限速 20 KB/s / 500ms 后刷新 | 遮罩随 SSR 内联关键 CSS 立即成为 fixed 全屏；水合成功前不被 15s CSS 兜底提前隐藏；恢复带宽后正常淡出，无站点自身未捕获异常 |
+| UI-067 首屏关键路径 | 查看 SSR HTML head | 字体与图标 CSS 不在 `<head>` 的渲染阻塞样式表中；`noscript` 兜底规则用 `<style>` 包裹 |
+| UI-068 HTML 压缩语义 | 带 `Accept-Encoding: br` 请求首页与不存在的路径 | 首页 200 且 `content-encoding: br`、正文可解压、`Vary` 含 `Accept-Encoding`；404 错误页保持明文（不压缩、可正常读取）；`br;q=0` 时首页不压缩 |
+
 ## 最近回归记录
 
 - 2026-08-22：SSR 修复后全量回归 —— 首屏 200 无 DOMParser 报错、`/api/data` 与详情接口双语正常、404/400 正常。（[ ] 其余用例待逐项勾选）
@@ -204,5 +221,11 @@
   - [x] UI-057 虚拟滚动渲染：`.ticket-card` 渲染且内容非空；`count` 必须传数字（误传函数会 `new Array(count)` 得 `NaN` → `RangeError` 列表空白），已修复并由 e2e `ticket-modal.spec.ts` 守护
   - [x] UI-058 海报缩略图加载：`<img>` 真实加载（`naturalWidth>0`），使用 `_thumb.jpg` 缩略图、缺失回退原图；移除 `loading="lazy"`（虚拟滚动已限 DOM，且 `display:none` → 打开切换下懒加载可能不触发），已修复并 e2e 守护
   - [x] UI-059 行间距无重叠：`measureElement` 动态测行高 + 虚拟器 `gap`（`ROW_GAP`）统一行间距，杜绝固定 `estimateSize` 行重叠；e2e 守护
-  - [x] 新增 e2e `test/e2e/ticket-modal.spec.ts`（3 例，chromium-desktop）：打开渲染非空 / 海报加载非 lazy / 行间距无重叠，均已通过
+  - [x] 新增 e2e `test/e2e/ticket-modal.spec.ts`（4 例，chromium-desktop）：打开渲染非空 / 海报加载非 lazy / 行间距无重叠 / 切换语言后内容仍完整，均已通过
   - 文档同步：`doc/README_DEV.md` / `README_DEV_EN.md` 新增「10.2 票根列表虚拟滚动」
+- 2026-11-07：书册加载页、慢网与安全审查后的全量回归 ——
+  - [x] UI-060 ~ UI-068：新增 `book-loader.spec.ts`（6 例）与 `slow-network.spec.ts`（3 例，含 HTML 压缩语义）
+  - [x] 修复 404 错误页被 `br` 压缩导致 `Decompression failed`：Nuxt 内部 `/__nuxt_error` 渲染路径现在跳过压缩；生产服务实测 200 页 br 可解压、404 页明文
+  - [x] 消除串行用例间的点赞状态污染：限流用例改用不存在的演唱会 id（零写库），结构断言改以 `/api/data` 当前值为基准
+  - [x] 单元测试（vitest run）：28 文件 / 401 用例全通过；端到端（playwright test）：10 套件 / 69 用例全通过（0 失败）；`npm run build` 成功
+  - [x] H2 加固：JSON-LD 改用 `serializeJsonLd()` 显式转义（生产实测无字面 script 闭合标签、JSON 可解析、数据保真）；`seo-utils.test.ts` 5 例 + `security.spec.ts` SSR 反逃逸断言

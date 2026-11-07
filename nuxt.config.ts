@@ -203,15 +203,42 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', href: '/img/logo.jpg' },
         // canonical 不再在此硬编码（原先所有语言页共用同一个根域名 canonical）：
         // 已改为 app/app.vue 按当前 locale 输出，如 https://ilive.lyc.la/ 与 https://ilive.lyc.la/en。
-        // 原 CSS 原样链路 · Original CSS as-is (kept as separate requests to match original network behavior)
+        /** 首屏关键 CSS：main.css 已移除 @import，可独立完成首屏渲染 */
         { rel: 'stylesheet', href: '/css/main.css' },
         { rel: 'preconnect', href: 'https://cdnjs.cloudflare.com' },
         { rel: 'dns-prefetch', href: 'https://cdn.busuanzi.cc' },
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com' },
         /**
-         * FontAwesome（CDN）· Font Awesome via CDN
-         * @description 沿用现有 `fa` 图标类名所需的字体样式库
+         * 非关键 CSS 移到 bodyClose · Defer non-critical stylesheets
+         * @description head 里的 stylesheet 会阻塞首次绘制，跨域 CDN 慢或不可达时
+         *  会把书册封面拖到十几秒后才出现（实测 40 KB/s 下 29s）。书册样式已内联在
+         *  SSR HTML，字体与图标延后加载不影响首屏；display=swap + 系统字体栈兜底。
+         *  Inter 字体（原 main.css 首行 @import，串行阻塞解析）
          */
-        { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css' }
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+          tagPosition: 'bodyClose' as const
+        },
+        /** FontAwesome（CDN）· 沿用现有 `fa` 图标类名所需的字体样式库 */
+        {
+          rel: 'stylesheet',
+          href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+          tagPosition: 'bodyClose' as const
+        }
+      ],
+      /**
+       * 无 JS 兜底 · No-JS fallback
+       * @description 书册遮罩的 15s CSS 兜底改为「水合成功后才武装」（SiteLoader.vue 的
+       *  html.book-loader-armed），避免慢网把遮罩提前隐藏。JS 完全不可用时由这条
+       *  noscript 规则在 15s 后隐藏遮罩，仍不会永久盖住首页。
+       */
+      noscript: [
+        {
+          // 必须自行包 <style>：noscript.innerHTML 是裸内容，否则 CSS 会被当文本渲染、兜底不生效
+          innerHTML: '<style>#loader{animation:bk-nojs-hide 0s linear 15s forwards!important}@keyframes bk-nojs-hide{to{opacity:0;visibility:hidden;pointer-events:none}}</style>'
+        }
       ],
       script: [
         /**

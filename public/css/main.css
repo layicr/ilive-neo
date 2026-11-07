@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Inter 字体样式表已移至 nuxt.config.ts 的 bodyClose link：
+   原先的字体导入声明会串行阻塞本文件解析，慢网下拖住首屏渲染；
+   改为异步加载 + 系统字体栈兜底。 */
 
 * {
     margin: 0;
@@ -1883,32 +1885,7 @@ body {
     object-fit: cover;
 }
 
-.loader {
-    display: none;
-    text-align: center;
-    padding: 20px;
-}
-
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid rgba(0, 0, 0, 0.1);
-    border-radius: 50%;
-    border-top: 5px solid #3498db;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
+/* 全屏书册加载页样式由 app/components/SiteLoader.vue 自带（scoped），此处不再保留旧 spinner */
 .city-modal {
     display: none;
     position: fixed;

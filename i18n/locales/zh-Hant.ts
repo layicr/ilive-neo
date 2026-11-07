@@ -45,6 +45,29 @@ export default {
     loading: '載入中...'
   },
 
+  /** 書冊載入頁文案 · Book-style loading screen copy（繁體） */
+  loadingBook: {
+    brand: 'LAYICR',
+    brandTail: '演唱會足跡',
+    cvTop: 'LAYICR PRESENTS',
+    cvTitle: '演唱會足跡',
+    cvEn: 'Live Archive · {from}—{to}',
+    cvHint: '正在翻開第一頁',
+    cvCount: '{count} 場演出 / {cities} 座城市',
+    tocKicker: 'Contents',
+    tocTitle: 'Concert Archive',
+    tocSub: '{from} — {to} · 共 {count} 場演出',
+    labelNo: 'No.',
+    labelDate: '日期',
+    labelCity: '城市',
+    labelVenue: '場館',
+    labelContents: '目錄',
+    binding: '正在裝訂書冊…',
+    turning: '正在翻閱 · {a}「{n}」',
+    closed: '書冊已合上',
+    enter: '歡迎回來，{count} 場演出已就緒'
+  },
+
   songlist: {
     totalSongs: '共 {count} 首歌曲',
     searchPlaceholder: '搜尋歌曲...'

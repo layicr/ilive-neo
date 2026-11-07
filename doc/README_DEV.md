@@ -3,6 +3,8 @@
 > Nuxt4 + Turso(LibSQL) 迁移版本 · 记录每一次演唱会的感动与回忆
 >
 > [English Version](./README_DEV_EN.md) | 中文文档
+>
+> 最近更新：**2026-11-07** —— 书册加载页、20 KB/s 慢网首屏、SSR HTML 压缩、测试体系与安全审查（见第 11 / 14 章）。
 
 ---
 
@@ -25,6 +27,7 @@
 - **语言切换零请求**：前端 `useI18n` + `pickLocale` 在已拉取的**多语言数据**上派生（zh / en / zh-Hant 三种），不额外请求。
 - **多语言 SEO**：`app/app.vue` 统一输出 `<html lang>`、3 语言 `hreflang`（含 `x-default`）与 `og:locale` / `og:locale:alternate`；页面级 `title` / `description` 由 `app/pages/index.vue` 按 locale 输出。
 - **数据库以远程 Turso 为准**：线上（Vercel）通过 `NUXT_TURSO_DATABASE_URL=libsql://...` 连接远程库；本地开发可回退到 `file:` SQLite。
+- **首屏不依赖外部 CDN**：书册遮罩由 SSR 直出并内联关键 CSS，字体 / 图标样式延后到 `bodyClose`；动态 SSR HTML 由 Nitro 插件压缩（见第 11 章）。
 
 ---
 
@@ -37,10 +40,11 @@
 | PWA | `@vite-pwa/nuxt`（配置化 Service Worker，`/api/*` NetworkFirst）|
 | 多语言 | `@nuxtjs/i18n` v10（3 语言：zh / en / zh-Hant，`strategy: prefix_except_default`，默认 zh 无前缀）|
 | 语言 | TypeScript（`strict` 开启，构建期 `typeCheck: false`）|
-| 动画 | GSAP 3.12.2（CDN）|
-| 样式 | `public/css/main.css`（含从 Tailwind CDN 迁移的手写工具类）、Font Awesome 6.4.0（CDN） |
+| 动画 | GSAP 3.12.2（CDN，保留 SRI）|
+| 样式 | `public/css/main.css`（手写工具类，已移除 Google Fonts `@import` 与旧 spinner）、Font Awesome 6.4.0（CDN，`bodyClose` 加载） |
+| 首屏 | 全屏书册加载页（SSR 直出 + 内联关键 CSS）、Nitro `render:response` 动态 HTML brotli / gzip 压缩、系统字体栈兜底 |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**26 文件 / 356 用例**）+ Playwright（E2E，**8 套件 / 59 用例**）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 401 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -56,19 +60,22 @@
 
 ```
 ilive_neo/
-├── nuxt.config.ts             # Nuxt 总配置（SSR/runtimeConfig/head/PWA/SEO）
+├── nuxt.config.ts             # Nuxt 总配置（SSR/runtimeConfig/head/PWA/SEO；关键 CSS / bodyClose 非关键 CSS / noscript 兜底）
+├── playwright.config.ts       # E2E 配置（双 project、fixture 库种子、PLAYWRIGHT_USE_EDGE 零下载模式）
 ├── app/                       # [Nuxt 4 srcDir] 应用层
 │   ├── app.vue                # 根组件（NuxtPage + 全局错误处理 + 全站语言 SEO：html lang/hreflang/og:locale）
 │   ├── pages/
-│   │   └── index.vue          # 首页「组合根」：仅保留 SEO / JSON-LD、初始化编排、body 滚动锁，其余区块委托子组件（363 行）
+│   │   └── index.vue          # 首页「组合根」：SEO / JSON-LD、初始化编排、body 滚动锁 + 与内容区同级的 <SiteLoader />（363 行）
 │   ├── components/            # 首页拆分出的展示组件（18 个，自 index.vue 抽出，各自直连共享 composable）
 │   │   ├── AlbumShowcase.vue      # 3D 专辑轮播（含封面缩略图 + @error 回退）
 │   │   ├── TicketModal.vue        # 票根模态（@tanstack/vue-virtual 按行虚拟滚动）
 │   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
 │   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
-│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue / SiteLoader.vue
+│   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue
+│   │   ├── SiteLoader.vue        # 全屏书册加载页（SSR 直出 #loader、内联关键 CSS、15s 兜底需水合武装）
 │   │   └── LanguageSwitcher.vue / MusicPlayer.vue / FeedbackButton.vue / BackToTopButton.vue
 │   ├── composables/           # [核心] 全部交互逻辑（Vue composables）
+│   │   ├── useBookLoader.ts   # 书册加载页时序调度 + 海报预取（纯 TS，假定时器单测）
 │   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖；本地化派生写入请求级共享快照（app:localized，只计算一次）
 │   │   ├── useI18n.ts         # 多语言切换（zh / en / zh-Hant，useState 懒初始化）
 │   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
@@ -91,13 +98,13 @@ ilive_neo/
 │   │   └── guestbook.ts       # 留言板领域模型（GuestbookMessage / GuestbookReply / GuestbookPage）
 │   └── utils/
 │       ├── config.ts          # 全局配置常量 CONFIG
-│       ├── index.ts           # 工具函数（safeHtml / 时间格式化 / pickLocale / localize* / computeCityConcertCounts）
+│       ├── index.ts           # 工具函数（safeHtml / 时间格式化 / pickLocale / localize* / computeCityConcertCounts / firstSentence）
 │       ├── thumb.ts           # 缩略图工具（thumbSrc：.jpg → _thumb.jpg；onThumbError：缺失回退原图）
-│       └── seo.ts             # SEO 纯函数（hreflang 链接 / og:locale / 多语言描述模板与艺人分隔符）
+│       └── seo.ts             # SEO 纯函数（hreflang / og:locale / 描述模板 / serializeJsonLd 安全序列化）
 ├── i18n/                      # [根目录] 多语言文案（@nuxtjs/i18n v10 布局，langDir 相对此目录）
-│   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts（各语言 message）
+│   └── locales/               # zh-CN.ts · en.ts · zh-Hant.ts（各语言 message，含 loadingBook 书册三语文案）
 ├── public/                    # 静态资源
-│   ├── css/  main.css
+│   ├── css/  main.css         # 全局样式（已移除 @import 与旧 spinner；首屏关键 CSS 独立可解析）
 │   ├── img/  logo.jpg
 │   ├── music/ bgm_cn.mp3 · bgm_en.mp3
 │   ├── concert/  海报与现场照片
@@ -124,9 +131,11 @@ ilive_neo/
 │   │   ├── guestbook.ts       # 留言/回复读写（仅读已通过；回复父留言校验；IN 批量取回复无 N+1）
 │   │   ├── ua.ts              # 服务端 UA 解析（浏览器 / 系统）
 │   │   ├── rateLimit.ts       # 每 IP 内存限流（点赞与留言写接口共用）
-│   │   └── locales.ts         # 语言定义（LOCALES）
+│   │   ├── locales.ts         # 语言定义（LOCALES）
+│   │   └── htmlCompression.ts # 压缩纯逻辑（编码协商 / 是否压缩 / Vary 与响应头 / 错误页识别），单测覆盖
 │   ├── plugins/
-│   │   └── init-db.ts         # Nitro 启动时幂等初始化（远程 Turso 跳过）
+│   │   ├── init-db.ts         # Nitro 启动时幂等初始化（远程 Turso 跳过）
+│   │   └── html-compression.ts # render:response 动态 SSR HTML br/gzip 压缩（错误页跳过，可开关关闭）
 │   └── db/
 │       ├── schema.sql         # 表结构（12 张表，可翻译字段为 *_i18n JSON 列）
 │       └── seed.mjs           # 建空库脚本（DROP + CREATE，不含业务数据）
@@ -134,9 +143,11 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（26 文件 / 356 用例）
-│   ├── e2e/                   # Playwright 端到端测试（8 套件 / 59 用例，桌面/移动双 project + fixture 库种子）
-│   ├── ui-tests.md            # UI 验收清单（手动 + 自动化）
+│   ├── unit/                  # Vitest 单元测试（28 文件 / 401 用例；含 useBookLoader / htmlCompression / firstSentence）
+│   ├── e2e/                   # Playwright 端到端测试（10 套件 / 69 用例，桌面/移动双 project + fixture 库种子）
+│   │   ├── book-loader.spec.ts   # 书册加载页三语文案 / 目录 / 主题首句 / 淡出 / 窄视口
+│   │   └── slow-network.spec.ts  # CDP 20 KB/s 限速、首屏关键路径、noscript 与 HTML 压缩语义
+│   ├── ui-tests.md            # UI 验收清单（手动 + 自动化，第 18 节为加载页与慢网）
 │   └── unit-tests.md / README.md
 └── doc/
     ├── README_DEV.md          # 本文档（中文）
@@ -160,7 +171,8 @@ app/pages/index.vue（组合根：只做协调）
   ├─ watch(currentLanguage) → 更新 document.title + 重新应用专辑布局
   ├─ onMounted             → initBgMusic / initDataLayout（时间轴渐显）
   ├─ watch([5 个模态 open 态]) → 任意弹窗打开时锁定 body 滚动（须留在协调层，不可下放到子模态）
-  └─ <template>            → 仅组合 18 个子组件 + 静态背景圈
+  ├─ <template>            → 组合 18 个子组件 + 静态背景圈
+  └─ <SiteLoader />        → 与内容区同级（避免祖先层叠上下文影响 position: fixed 全屏遮罩）
 
 app/components/*.vue（各区块自管状态与生命周期）
   ├─ AlbumShowcase / TicketModal / CityModal / GalleryModal / VideoModal / SonglistModal
@@ -183,6 +195,7 @@ app/app.vue (setup)
 - **统计数字滚动（`app/composables/useCountUp.ts`）**：展示值是 `computed`——未播放时**惰性透传**目标值（不能在 setup 期取快照：SSR 阶段 `useAsyncData` 尚未 resolve 会取到 0，导致 SSR HTML 输出 0 且水合文本不一致）；客户端 `onMounted` 后下一帧归零并播放（默认 5s，easeOutCubic），可传 `repeatMs` 周期重播（首页为 120s）；命中 `prefers-reduced-motion` 时直接显示终值。
 - **错误提示的上下文安全（`app/composables/useAppError.ts`）**：vue-i18n 的 `useI18n()` 在无组件实例时会**直接抛** `Must be called at the top of a 'setup' function`。因此错误文案解析器**只在 setup 阶段注册**，之后 watch / 事件回调 / 全局监听复用它——`handleError(err, ctx, showUser=true, messageKey)` 在回调里可安全调用；新增回调时请勿在其中直接解析 i18n。
 - **时间轴 observer 生命周期（`app/composables/useTimeline.ts`）**：`IntersectionObserver` 会**强引用**被 observe 的节点。宿主卸载（`onScopeDispose`）时 `disconnect` 并置空单例，且每次 `initTimelineReveal()` 都先 `disconnect` 再按当前 DOM 重新 observe，避免语言切换重建页面后旧 DOM / 图片节点无法回收。
+- **书册加载页与首屏解耦**（详见第 11 章）：`SiteLoader.vue` 由 SSR 直出 `#loader` 并内联关键 CSS，不等待 JS 水合或外部 CDN 样式；15s CSS 兜底仅在 `onMounted` 水合成功后由 `html.book-loader-armed` 武装，慢网下不会提前隐藏遮罩。
 
 ### 4.2 服务端数据层
 
@@ -218,6 +231,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 - **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
 - `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）。注意：hreflang / canonical / `og:locale` 已由 `app/app.vue` 统一发射，**此处不再重复**（旧实现两侧同 key 去重，实为冗余）。
 - JSON-LD 用 `JSON.parse(JSON.stringify(toRaw(...)))` 剥离 Vue 响应式 Proxy，用 `computed` 保证在数据就绪后输出完整演唱会列表。
+- **JSON-LD 安全序列化**：`innerHTML` 一律经 `app/utils/seo.ts` 的 `serializeJsonLd()`（把 `< > &` 与 U+2028 / U+2029 写成 JSON `\u` 转义），不再直接用 `JSON.stringify`：演唱会名来自 DB，含 script 闭合标签时会提前结束 ld+json 块，造成 SSR 存储型 XSS。unhead 当前的隐式转义不作为安全边界；回归见 `test/unit/seo-utils.test.ts` 与 `test/e2e/security.spec.ts`（详见 14.4）。
 
 ### 4.4 首页悬浮按钮：背景音乐 & universe 外链
 
@@ -275,6 +289,10 @@ npm run db:seed   # 或 npm run db:init（等价）—— 先 DROP 后 CREATE，
 | `NUXT_TURSO_AUTH_TOKEN` | 远程 Turso 鉴权 token | 空 |
 | `NUXT_TRUST_PROXY` | 是否信任 `X-Forwarded-For`（**自建**反代 / CDN 前置时设 `true`；Vercel 自动处理，无需设置） | 空（关闭） |
 | `VERCEL` | 由 Vercel 平台**自动注入**（`=1`），用于识别平台并优先取 `x-vercel-forwarded-for` | 平台注入 |
+| `NUXT_DISABLE_HTML_COMPRESSION` | `=1` 时关闭 `server/plugins/html-compression.ts` 的 SSR HTML 压缩（部署在已压缩的反代 / CDN 之后，避免双重压缩） | 空（启用压缩） |
+| `PLAYWRIGHT_USE_EDGE` | `=1` 时复用系统 Edge 跑 E2E，零浏览器下载；同时关闭依赖 ffmpeg 的录屏 / trace / 失败截图 | 空（用自带 Chromium） |
+| `PLAYWRIGHT_DOWNLOAD_HOST` | Playwright 浏览器下载镜像（国内可用 `https://cdn.npmmirror.com/binaries/playwright`） | 官方 CDN |
+| `E2E_PORT` / `E2E_DB_FILE` | E2E 隔离 dev server 端口 / fixture 库绝对路径（真实库全程只读） | `3000` / `%TEMP%\ilive-e2e\e2e-data.db` |
 
 > **关键**：必须用 **`NUXT_` 前缀**，Nuxt 才会在**运行时**覆盖 `runtimeConfig.turso.*`。若用 `TURSO_` 前缀，`nuxt.config.ts` 求值时 `process.env` 可能读不到，导致落回本地 `file:` 默认值。
 
@@ -303,6 +321,23 @@ NUXT_TURSO_AUTH_TOKEN=your-token
 
 `.env` 不会上传（gitignore 忽略），Vercel 构建/运行时依赖这些后台变量连接 Turso。
 
+### 6.4 测试环境与压缩开关
+
+```powershell
+# 零下载跑 E2E（本机未装 Playwright 自带浏览器时，复用系统 Edge）
+$env:PLAYWRIGHT_USE_EDGE = '1'
+npm run test:e2e
+
+# 用国内镜像安装最小浏览器组件（替代慢速官方下载）
+$env:PLAYWRIGHT_DOWNLOAD_HOST = 'https://cdn.npmmirror.com/binaries/playwright'
+npx playwright install chromium-headless-shell ffmpeg
+
+# 关闭 SSR HTML 压缩（前置反代 / CDN 已压缩时）
+$env:NUXT_DISABLE_HTML_COMPRESSION = '1'
+```
+
+> `NUXT_DISABLE_HTML_COMPRESSION` 只影响动态 SSR HTML；`nitro.compressPublicAssets` 的静态资源压缩不受影响。E2E 通过 `NUXT_TURSO_DATABASE_URL` 指向隔离 fixture 库，真实库 `public/data/data.db` 全程只读。
+
 ---
 
 ## 7. 开发命令
@@ -312,13 +347,18 @@ npm install        # 安装依赖（含 postinstall: nuxt prepare）
 npm run dev        # 启动开发服务器（默认 http://localhost:3000/）
 npm run build      # 生产构建（Nitro，可部署到 Vercel）
 npm run preview    # 预览生产构建
+node .output/server/index.mjs  # 直接启动生产构建（用 PORT 指定端口，如 $env:PORT='3100'）
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，26 文件 / 356 用例）
+npm run test       # 运行单元测试（vitest run，28 文件 / 401 用例）
 npm run test:watch # 监听模式运行测试
-npm run test:e2e   # 运行端到端测试（Playwright，8 套件；自动 seed fixture 库并启动隔离 dev server）
+npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 69 用例；自动 seed fixture 库并启动隔离 dev server）
+npx playwright test --list     # 仅列出用例，核对套件 / 用例数
 npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb.jpg，幂等；新增图片后一键补齐）
 ```
+
+> ⚠️ `.output` 累积数百文件后，重复构建的清空动作可能触发 IDE 批量删除保护；先清理 `.output` 目录再构建（详见 `test/README.md` 第六节）。
+> E2E 与 vitest **不要同批并行**：`playwright.config.ts` 串行执行（`workers: 1`），并行会抢 dev server / fixture 库资源。
 
 ---
 
@@ -353,6 +393,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 - `SITE_URL = 'https://ilive.lyc.la'`，og:url / canonical / og:image / twitter:image 统一为 **https**。
 - `app.head` 只保留**与语言无关**的静态信息：`author` / `robots` / `referrer` / `og:type` / `og:url` / `og:image` / `twitter:card` / `twitter:site` / `twitter:creator` / `twitter:image`，以及 favicon / stylesheet / GSAP 等资源引用。
+- **资源加载策略（首屏关键路径）**：`<head>` 只保留 `/css/main.css` 一张关键样式表（`main.css` 已移除 `@import`）；Inter / FontAwesome 的 stylesheet 用 `tagPosition: 'bodyClose'` 延后，`fonts.googleapis.com` / `fonts.gstatic.com` 保留 `preconnect`，字体以 `display=swap` + 系统字体栈兜底；GSAP 保留 SRI。`noscript` 内置 15s 隐藏遮罩规则，**必须自行包 `<style>`**（`innerHTML` 是裸内容，否则 CSS 会被当文本渲染），详见第 11 章。
 - 原硬编码中文的 `title` / `keywords` / `description` / `og:title` / `og:description` / `twitter:title` / `twitter:description` **已全部移除**（避免与页面级 `useSeoMeta` 重复或冲突）。
 - 语言相关 meta：`og:locale` / `og:locale:alternate` 由 `app/app.vue` 输出；`og:site_name` 由页面级 `useSeoMeta` 输出。
 
@@ -406,6 +447,53 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 ---
 
+## 11. 书册加载页、首屏关键路径与慢网（2026-11-07）
+
+> 背景：慢网实测下首页 SSR HTML 约 248 KB（其中 Nuxt payload 约 121 KB），跨域字体 / 图标 CSS 串行阻塞解析，书册封面曾要十几秒才绘制；旧 15s CSS 兜底从「页面开始加载」计时，JS 尚未水合时还会提前隐藏遮罩。本轮以「最小改动组合」落地 P0 三项，并用 20 KB/s 自动化回归固化。
+
+### 11.1 书册加载页（SiteLoader）
+
+- `app/components/SiteLoader.vue`：旧 spinner 重写为全屏书册（封面 / 左页目录 / 右页演出详情 / 底部进度条），桌面双页、窄视口单页迷你目录；无按钮、无跳过提示，`aria-busy="true"`，`:data-finish` 输出 `ready | timeout | error` 便于排查。
+- SSR 直出 `#loader` 并**内联关键 CSS**（不等 JS 水合、不等外部 CDN）；`<SiteLoader />` 与首页内容区同级，避免祖先层叠上下文影响 `position: fixed`。
+- 数据全部来自 `/api/data`：目录行数 / 年份、右页演出信息；引文为当前语言 `theme` 的**第一句话**（`app/utils/index.ts` 的 `firstSentence()`：先按换行取首段，再按中英文句末标点切分，英文句点需后接空格 / 大写 / 中文才切）；海报走 `thumbSrc()` 的 `_thumb.jpg`。三语文案在 `i18n/locales/*.ts` 的 `loadingBook`（已移除 `tocFoot` 与静态 `quotes`）。
+- 时序与预取抽到 `app/composables/useBookLoader.ts`（纯 TS + 假定时器单测）：
+
+| 常量 | 值 | 作用 |
+|------|-----|------|
+| `BOOK_COVER_MS` | 900 ms | 封面停留 |
+| `BOOK_WINDOW_MS` | 12.6 s | 翻页窗口，页间隔二次递减 `G_MAX 1.32s → G_MIN 0.32s` |
+| `BOOK_MIN_SHOW_MS` | 2.4 s | 最短可感知窗口；SSR 数据已就绪也不能瞬间淡出 |
+| `BOOK_MAX_MS` | 13.5 s | 硬上限，`timeout` 强制淡出 |
+| `BOOK_FADE_MS` | 900 ms | 淡出后移除遮罩，合计 < 15 s |
+
+`setReady()` 过最短窗口即 `finish('ready')`；`setFailed()` 立即 `finish('error')`；整本翻完仍未就绪按 `timeout` 收口。`createPosterPrefetcher()` 去重 + `warmAround()` 预热当前 / 下一页 + `requestIdleCallback` 低优先级补齐。
+
+> ⚠️ `clearAll()` 用 `timers.forEach(...)` 而非 `for...of` 遍历 `Set`：低 TS target 下后者需要 `downlevelIteration`，构建会报错。
+
+### 11.2 首屏关键路径（P0 三项）
+
+1. **外部 CSS 移出关键路径**：删除 `main.css` 首行 Google Fonts `@import` 与旧 `.loader/.spinner`；`nuxt.config.ts` 把 Inter / FontAwesome 的 stylesheet 改为 `tagPosition: 'bodyClose'`，保留 `preconnect` 与 `display=swap` + 系统字体栈。head 只留 `/css/main.css`，20 KB/s 下遮罩随 SSR 内联 CSS 立即生效。
+2. **修正 15s CSS 兜底计时起点**：`:global(html.book-loader-armed) .bk-loader { animation: bk-failsafe 0s linear 15s forwards }` —— 仅 `onMounted`（水合成功）后加 `book-loader-armed`，`finish` / 卸载移除；无 JS 时由 `nuxt.config.ts` 的 `noscript > <style>` 规则兜底，仍不会永久盖住首页。
+3. **SSR HTML 压缩**：见 11.3。
+
+> 注释里也不要写 `@import` 字面量：静态检测曾因注释中的字样误判 `main.css` 仍有导入声明。
+
+### 11.3 SSR HTML 压缩（`server/plugins/html-compression.ts`）
+
+- `nitro.compressPublicAssets` 只压 `public/**` 静态资源，动态 SSR HTML 仍是明文。插件在 `render:response` 按 `Accept-Encoding` 做 brotli（优先，quality 5）/ gzip（level 6），**异步**压缩；实测首页约 248 KB → **47 KB (br) / 63 KB (gzip)**。
+- 纯逻辑在 `server/lib/htmlCompression.ts`（`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / 大小写不敏感响应头工具），由 `test/unit/htmlCompression.test.ts` 覆盖 19 例。
+- 缓存 / 协商语义：所有 HTML 统一声明 `Vary: Accept-Encoding`；解析 q 值与 `q=0`、`*` 通配，br 优先；仅压 `200 + text/html + 字符串 body + ≥ 1 KB + 未编码`；压缩后删除 `ETag` / `Last-Modified` / `Content-Length`，避免 CDN 把 br 版本复用给仅支持 gzip 的客户端。`NUXT_DISABLE_HTML_COMPRESSION=1` 可关闭。
+- ⚠️ **404 / 500 错误页必须跳过压缩**：Nuxt 把错误页交给内部 `/__nuxt_error?...&statusCode=404` 路由渲染，`render:response` 触发时 `response.statusCode` 与 `event.node.res.statusCode` **都还是 200**，真实状态只在该内部路径上；且错误渲染路径会把压缩后的 `Buffer` 当作字符串按 UTF-8 重新编码（非法字节替换为 U+FFFD），客户端报 `failed to decompress 'br' encoding`。现由 `isNuxtErrorRender()` 显式识别并跳过，错误页保持明文。
+
+### 11.4 20 KB/s 慢网回归与测试隔离
+
+- `test/e2e/slow-network.spec.ts`：CDP `Network.emulateNetworkConditions` 模拟 **20 KB/s 下行 / 500 ms RTT**，断言遮罩立即成为 fixed 全屏、水合前不被 15s 兜底提前隐藏、恢复带宽后正常淡出；另断言 head 无阻塞外部 CSS、`noscript` 含 `<style>`，以及压缩语义（200 页 br 可解压 / 404 明文 / `q=0` 不压缩）。
+- dev server 会把 Vue 依赖拆成大量模块请求，全程限速时水合无法在 120 s 用例超时内完成 → **仅首屏关键路径阶段限速约 8 s**，随后恢复带宽继续验证水合与淡出。
+- `test/e2e/book-loader.spec.ts`（6 例）覆盖三语文案、目录数量 / 年份、主题首句、无按钮、进度条、淡出与窄视口单页书册。
+- 写状态隔离：E2E 串行共享 fixture 库，点赞限流用例改用**不存在的演唱会 id**（限流判定早于存在性校验，仍触发 429 但零写库），`ui-structure.spec.ts` 的点赞数以 `/api/data` 当前值为动态基准，避免前序用例改动造成假失败。
+
+---
+
 ## 12. 部署（Vercel）
 
 1. 在 Vercel 后台配置 `NUXT_TURSO_DATABASE_URL` / `NUXT_TURSO_AUTH_TOKEN`。
@@ -414,7 +502,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 4. `public/robots.txt` / `sitemap.xml` 会被 Nitro 打包为静态文件。
 5. 首次部署后访问 `/api/data` 确认返回远程 Turso 数据。
 6. **真实客户端 IP**：Vercel 运行时自动注入 `VERCEL=1`，`getClientIp()` 会优先取平台覆写的 `x-vercel-forwarded-for`（单值、不可伪造），因此点赞去重 / 限流 / 留言板 IP 采集**无需**额外配置 `NUXT_TRUST_PROXY`。
-7. 静态资源压缩：`nitro.compressPublicAssets: true` 已开启，`public/**` 静态资源自动压缩。
+7. **压缩**：`nitro.compressPublicAssets: true` 已开启，`public/**` 静态资源自动压缩；动态 SSR HTML 由 `server/plugins/html-compression.ts` 按 `Accept-Encoding` 做 br / gzip（约 248 KB → 47 KB），并统一 `Vary: Accept-Encoding`。若 Vercel / CDN 已开启 HTML 压缩，设 `NUXT_DISABLE_HTML_COMPRESSION=1` 避免双重压缩；404 / 500 错误页由插件保持明文（见 11.3）。
 
 ---
 
@@ -434,6 +522,10 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 - **`useTimeline` 的 observer 必须显式释放**：语言切换会重建页面组件，卸载时由 `onScopeDispose` 接管 `disconnect`；新增观察逻辑请走 `initTimelineReveal()`，不要另建 `IntersectionObserver`。
 - **已知取舍**：`/api/data` 的点赞数受内层 1 小时共享缓存影响，写入后不会主动失效，他人看到的计数需等缓存/SWR 刷新才更新（不影响当前用户的 `liked` 判定，该值由外层实时合并）。
 - **token 安全**：`.env` 已加入 `.gitignore`。若 token 曾提交进 git 历史，应立即到 Turso 控制台**更换新 token**。
+- **书册遮罩的 15s 兜底**：CSS 动画仅在 `html.book-loader-armed` 下生效，该类只能由 `SiteLoader.vue` 的 `onMounted`（水合成功）添加，`finish` / 卸载必须移除；否则计时从页面加载开始，慢网下 JS 未水合就提前隐藏遮罩。无 JS 兜底规则必须自行包 `<style>`（见 11.2）。
+- **压缩插件不要把二进制交给错误渲染路径**：修改 `render:response` 或新增 HTML 响应时，`shouldCompress()` 必须同时检查状态码与 `isNuxtErrorRender(event.path)`；错误页被压缩会产生不可解压的 br 响应（见 11.3）。
+- **E2E 写状态**：fixture 库在多个 spec 间串行共享；会写库的用例应使用不存在的目标 / 相对断言或自行回滚，静态结构断言改读动态基准，避免顺序相关的假失败。
+- **报告产物**：`test/report/e2e-artifacts` / `e2e-html` 累积数百文件后，Playwright 启动时的清空动作会触发 IDE 批量删除保护；先删这两个目录再跑（见 `test/README.md` 第六节）。
 
 ---
 
@@ -466,5 +558,9 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 - **邮箱仅入库、不对外返回**：`guestbook` / `guestbook_reply` 的 `email` 列不随读接口暴露。
 - **长度与格式校验**：昵称 ≤ 40 / 内容 ≤ 1000 / 邮箱 ≤ 120 且格式校验；写接口复用同一条限流。
 - **端到端回归**：`test/e2e/guestbook.spec.ts` 断言脚本 / 事件载荷「以纯文本渲染、不执行」。
+
+### 14.4 只读安全审查结论（2026-11-07）· Security review
+
+**本轮已修复 / 加固**：H2（JSON-LD 改用 `serializeJsonLd()` 显式转义 `< > &` 与 U+2028/U+2029，不再依赖 unhead 的隐式转义；见 4.3）、H3（SSR 压缩共用 ETag / 未统一 `Vary`，CDN 串编码）、M6（压缩类型契约、q 值、同步阻塞、状态码边界与 404 br 损坏）、L3（`noscript` 裸 CSS 未包 `<style>`）。实现与回归见 11.3、`test/unit/htmlCompression.test.ts`、`test/unit/seo-utils.test.ts`、`test/e2e/slow-network.spec.ts` 与 `test/e2e/security.spec.ts`。
 
 

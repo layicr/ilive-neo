@@ -5,6 +5,18 @@
 > `app/utils/seo.ts`（hreflang / og:locale / 多语言描述）、`server/lib/mappers.ts`（DB 行 → 多语言结构）、
 > `nuxt.config.ts`（i18n / head / PWA 配置）。每类给出去除前端项目后仍可 `node`（vitest）运行的验证脚本。
 
+> ⚠️ 本文件为历史用例存档。**最新口径（28 文件 / 401 用例）以 [`README.md`](./README.md) 为准**；
+> 下列 UT-N 章节记录 2026-11-07 新增的四组纯函数测试（含 SSR HTML 压缩错误页与 JSON-LD 反逃逸回归）。
+
+## UT-N 新增纯函数测试（2026-11-07）
+
+| 组 | 文件 | 用例数 | 关键点 |
+|----|------|--------|--------|
+| `firstSentence` | `unit/localize.test.ts` | 6 | 主题首句：中文 `。！？`、繁体、英文句点后接空格/大写才切分、换行优先取首段、引号内句点不误判、空值 |
+| `useBookLoader` | `unit/useBookLoader.test.ts` | 15 | 二次递减间隔 1.32s→0.32s；19 场全翻完且含淡出 <15s；数据就绪过最短窗口即淡出；13.5s 硬上限；失败立即淡出；stop 清理；海报预取去重与 `requestIdleCallback` 补齐 |
+| `htmlCompression` | `unit/htmlCompression.test.ts` | 19 | Accept-Encoding 的 q 值 / `q=0` / `*` 通配；仅 200 + text/html；304 / 错误页 / 小体积 / 已编码 / 开关关闭跳过；大小写不敏感响应头；统一 `Vary`；`resolveStatusCode` 多来源状态解析；`isNuxtErrorRender` 识别 `/__nuxt_error` 并跳过压缩 |
+| `serializeJsonLd` | `unit/seo-utils.test.ts` | 5 | JSON-LD 反逃逸：script 闭合标签载荷不出现字面 `< >`；HTML 注释 / `&` / U+2028 / U+2029 均转义；`JSON.parse` 可逆还原；不可序列化输入退化为 `null` |
+
 ## UT-01 escapeHtml — HTML 转义
 
 | 用例 | 输入 | 预期输出 |

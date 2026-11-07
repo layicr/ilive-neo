@@ -244,3 +244,24 @@ export function computeCityConcertCounts(
   }
   return counts
 }
+
+// ==================== 文本摘要 · Text summary ====================
+
+/**
+ * 取文本的第一句话 · Extract the first sentence
+ * @description 书册加载页每页引文使用「当前语言演唱会主题的首句」。
+ *  规则：先按换行取第一段（主题常分段），再找第一个句末标点；中/繁用 `。！？`，
+ *  英文用 `!?` 与后跟空白、大写字母、中文或结尾的 `.`
+ *  （避免把 `'LIFE.'`、小数点、缩写点误判为句末）。无句末标点时返回整段原文。
+ *              First sentence of a localized concert theme. Paragraph breaks win over punctuation;
+ *              a Latin period only counts as a terminator when followed by whitespace, an uppercase
+ *              letter, a CJK char or end-of-string.
+ */
+export function firstSentence(text: string): string {
+  if (typeof text !== 'string') return ''
+  const normalized = text.trim()
+  if (!normalized) return ''
+  const paragraph = normalized.split(/\r?\n+/, 1)[0] ?? normalized
+  const end = /[。！？!?]|\.(?=\s|$|[\u3400-\u9FFF]|[A-Z])/.exec(paragraph)
+  return (end ? paragraph.slice(0, end.index + end[0].length) : paragraph).trim()
+}

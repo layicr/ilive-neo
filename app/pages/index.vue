@@ -19,7 +19,7 @@ import { useAlbumShowcase } from '~/composables/useAlbumShowcase'
 import { useTicketModal } from '~/composables/useTicketModal'
 import { useAppError } from '~/composables/useAppError'
 import { pickLocale } from '~/utils'
-import { ARTIST_DELIMITER, buildSiteDescription, resolveSiteUrl, toAbsoluteImageUrl } from '~/utils/seo'
+import { ARTIST_DELIMITER, buildSiteDescription, resolveSiteUrl, serializeJsonLd, toAbsoluteImageUrl } from '~/utils/seo'
 
 const { currentLanguage, currentData } = useAppI18n()
 
@@ -209,8 +209,13 @@ function buildJsonLd(): Record<string, unknown> {
 //      从而确保 JSON-LD 包含已加载的演唱会列表（而非 setup 阶段的空数组）。
 // innerHTML is a computed so unhead re-evaluates once useAsyncData resolves, ensuring JSON-LD carries
 // the loaded concerts (not the empty array from the setup phase).
-/** JSON-LD 纯 JSON 字符串（响应式，数据就绪后更新）· serialized JSON-LD string */
-const jsonLdHTML = computed(() => JSON.stringify(buildJsonLd()))
+/**
+ * JSON-LD 安全 JSON 字符串（响应式，数据就绪后更新）· safe serialized JSON-LD string
+ * @description 必须用 serializeJsonLd 而非裸 JSON.stringify：演唱会名 / 描述来自 DB，
+ *              数据里出现 script 闭合标签（`</` + `script>`）会提前结束 ld+json 块，污染数据可造成 SSR 存储型 XSS。
+ *              unhead 当前的隐式转义只是第三方行为，不作为安全边界（见 app/utils/seo.ts）。
+ */
+const jsonLdHTML = computed(() => serializeJsonLd(buildJsonLd()))
 
 // 仅 SSR 输出 JSON-LD；客户端元信息交给 app.vue 与 useSeoMeta。
 // 注意：hreflang / canonical / og:locale 已由根组件 app.vue 统一发射（覆盖所有页面），此处不再重复。
@@ -331,9 +336,6 @@ watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen
     <!-- 时间轴（已拆分为 TimelineSection） · Timeline -->
     <TimelineSection />
 
-    <!-- 加载动画（已拆分为 SiteLoader） · Loader -->
-    <SiteLoader />
-
     <!-- 城市列表模态（已拆分为 CityModal） · City modal -->
     <CityModal />
 
@@ -360,4 +362,7 @@ watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen
     <FeedbackButton />
     <BackToTopButton />
   </div>
+
+  <!-- 全屏书册加载页：与内容区同级，避免任何祖先层叠上下文影响 fixed 遮罩；淡出后由组件自行移除 -->
+  <SiteLoader />
 </template>

@@ -44,12 +44,19 @@ test.describe('页面结构渲染', () => {
     await expect(firstItem.locator('.concert-location')).not.toBeEmpty()
   })
 
-  test('时间轴条目包含标签与点赞计数等结构化元素', async ({ page }) => {
+  test('时间轴条目包含标签与点赞计数等结构化元素', async ({ page, request }) => {
     await gotoHome(page, '/')
 
     const item = page.locator('.timeline-item[data-concert-id="1"]')
     await expect(item.locator('.concert-tags .tag').first()).toBeVisible()
-    await expect(item.locator('.like-count')).toHaveText('3')
+
+    // 点赞数是可写状态：以 /api/data 的当前值为基准，而不是硬编码 fixture 初始值。
+    // 全量串行时其他用例（点赞 / 限流）曾把它改成 4，导致此处假失败。
+    const api = await (await request.get('/api/data?lang=zh-CN')).json()
+    const likes = api.data.concerts.find((c: { id: number }) => Number(c.id) === 1)?.likes
+    expect(Number.isInteger(likes), '接口应返回该场次的点赞总数').toBe(true)
+    await expect(item.locator('.like-count')).toHaveText(String(likes))
+
     await expect(item.locator('.songlist-btn')).toBeVisible()
     await expect(item.locator('.video-btn')).toBeVisible()
     await expect(item.locator('.gallery .gallery-item').first()).toBeVisible()

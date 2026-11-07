@@ -45,6 +45,29 @@ export default {
     loading: 'Loading...'
   },
 
+  /** Book-style loading screen copy · 书册加载页文案（英文） */
+  loadingBook: {
+    brand: 'LAYICR',
+    brandTail: 'Live Archive',
+    cvTop: 'LAYICR PRESENTS',
+    cvTitle: 'LIVE ARCHIVE',
+    cvEn: 'Concert Footprints · {from}—{to}',
+    cvHint: 'Turning the first page',
+    cvCount: '{count} SHOWS / {cities} CITIES',
+    tocKicker: 'Contents',
+    tocTitle: 'Concert Archive',
+    tocSub: '{from} — {to} · {count} shows',
+    labelNo: 'No.',
+    labelDate: 'Date',
+    labelCity: 'City',
+    labelVenue: 'Venue',
+    labelContents: 'Contents',
+    binding: 'Binding the album…',
+    turning: 'Turning pages · {a} — {n}',
+    closed: 'Album closed',
+    enter: 'Welcome back · {count} shows ready'
+  },
+
   songlist: {
     totalSongs: 'Total {count} songs',
     searchPlaceholder: 'Search songs...'
