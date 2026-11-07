@@ -19,7 +19,7 @@ AIGC:
 
 | 路径 | 说明 |
 |------|------|
-| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **28 文件 / 401 用例** |
+| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **28 文件 / 402 用例** |
 | `unit/*.mjs` | 手工辅助脚本：`verify-seo.mjs` / `dump-head.mjs` / `html-head.mjs`（SSR head 与 SEO 探测）、`seed-test.mjs`（本地测试数据准备） |
 | `e2e/` | 端到端测试源码（`*.spec.ts`，由 Playwright 运行），共 **10 套件 / 69 用例** |
 | `e2e/book-loader.spec.ts` | **新增** 书册加载页回归：三语文案、目录行数与年份、主题首句引文、无按钮、进度条、淡出、窄视口单页书册 |
@@ -47,7 +47,7 @@ AIGC:
 ## 三、运行方式
 
 ```bash
-# 单元测试（28 文件 / 401 用例）
+# 单元测试（28 文件 / 402 用例）
 npm test
 npm run test:watch            # 监听模式
 
@@ -87,7 +87,7 @@ E2E_PORT=3000 npx playwright test                # Bash
 
 ## 五、覆盖范围
 
-**单元 / 功能 / 安全（`unit/`，28 文件 401 用例）**：`safeHtml`（含 XSS 绕过专项）、`localize`（含 **新增 `firstSentence` 主题首句 6 例**）、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`guestbook`、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、**`seo-utils`（含 `serializeJsonLd` JSON-LD 反逃逸 5 例）**、`seo-settings`、`i18n`、`config`、`formatWishDate`、`data-get-handler`、`artistStats`、`composables`、`useAppError.context`、`useCountUp`、`useTimeline`、`useData`、`useAppI18n`、**`useBookLoader`（15 例：加速翻页时间表 / 就绪即淡出 / 超时与失败兜底 / 清理 / 海报预取去重补齐）**、**`htmlCompression`（19 例：Accept-Encoding q 值、304/错误页、大小写响应头、统一 Vary、ETag/长度清理、部署开关，以及 `resolveStatusCode` / `isNuxtErrorRender` 错误页不压缩回归）**。
+**单元 / 功能 / 安全（`unit/`，28 文件 402 用例）**：`safeHtml`（含 XSS 绕过专项）、`localize`（含 **新增 `firstSentence` 主题首句 6 例**）、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`guestbook`、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、**`seo-utils`（含 `serializeJsonLd` JSON-LD 反逃逸 5 例）**、`seo-settings`、`i18n`、`config`、`formatWishDate`、`data-get-handler`、`artistStats`、`composables`、`useAppError.context`、`useCountUp`、`useTimeline`、`useData`、`useAppI18n`、**`useBookLoader`（16 例：加速翻页时间表 / 最短展示 >10s / 就绪即淡出 / 超时与失败兜底 / 清理 / 海报预取去重补齐）**、**`htmlCompression`（19 例：Accept-Encoding q 值、304/错误页、大小写响应头、统一 Vary、ETag/长度清理、部署开关，以及 `resolveStatusCode` / `isNuxtErrorRender` 错误页不压缩回归）**。
 
 **端到端（`e2e/`，10 套件 69 用例）**：
 
@@ -99,9 +99,9 @@ E2E_PORT=3000 npx playwright test                # Bash
 | `guestbook.spec.ts` | 8 | 留言板结构、回复折叠分页、回复表单邮箱与表情、邮箱校验、UGC 文本渲染安全 |
 | `security.spec.ts` | 10 | XSS 载荷真实渲染不执行、JSON-LD 反逃逸（SSR 原始 HTML 无字面闭合标签 + 转义可逆）、外链 rel 与伪协议白名单、API 非法参数、点赞限流（用不存在的 id，零写库）、静态目录暴露面（含 `test.fail` 登记的已知缺陷） |
 | `mobile-responsive.spec.ts` | 8 | 移动视口与触摸、横向溢出、触摸交互（Pixel 5 六条 + iPhone 12 两条） |
-| `ticket-modal.spec.ts` | 4 | 票根虚拟滚动渲染、海报缩略图非 lazy、行间距无重叠、切换语言后内容仍完整 |
+| `ticket-modal.spec.ts` | 4 | 票根虚拟滚动渲染、海报缩略图非 lazy、行间距无重叠、切换语言后内容仍完整且**不重播书册遮罩** |
 | `p0-verify.spec.ts` | 1 | 3D 专辑封面使用 `_thumb` 缩略图且无破图 |
-| **`book-loader.spec.ts`** | **6** | **新增** 三语文案 / 目录与年份 / 主题首句 / 无按钮 / 淡出 / 窄视口单页书册 |
+| **`book-loader.spec.ts`** | **6** | **新增** 三语文案 / 目录与年份 / 主题首句 / 无按钮 / 淡出（最短展示 >10s）/ 窄视口单页书册 |
 | **`slow-network.spec.ts`** | **3** | **新增** 20 KB/s 首屏关键路径、水合前不被 CSS 兜底提前隐藏、head 无阻塞外部 CSS、noscript `<style>` 兜底、HTML 压缩语义（200 br 可解压 / 404 不压缩 / `q=0`） |
 
 ## 六、测试报告
@@ -114,7 +114,7 @@ E2E_PORT=3000 npx playwright test                # Bash
 > 产物目录累积到数百个文件后，Playwright 启动时的清空动作可能触发 IDE 的批量删除保护；
 > 出现 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 时，先删除 `report/e2e-artifacts` 与 `report/e2e-html` 再跑。
 
-**2026-11-07 全量执行结果**：`npm test` → **28 文件 / 401 用例全通过**；`npx playwright test --reporter=line` → **10 套件 / 69 用例全通过（0 失败）**；`npm run build` 成功。生产服务实测：`/`、`/en` 的 `br` 响应可正常解压（约 47/49 KB），404 错误页保持明文（不压缩），`q=0` 不压缩由 e2e 压缩语义用例验证；JSON-LD 载荷以 `\u` 转义输出、SSR HTML 无字面 script 闭合标签，`JSON.parse` 仍可还原原文。
+**2026-11-07 全量执行结果**：`npm test` → **28 文件 / 402 用例全通过**；`npx playwright test --reporter=line` → **10 套件 / 69 用例全通过（0 失败）**；`npm run build` 成功。生产服务实测：`/`、`/en` 的 `br` 响应可正常解压（约 47/49 KB），404 错误页保持明文（不压缩），`q=0` 不压缩由 e2e 压缩语义用例验证；JSON-LD 载荷以 `\u` 转义输出、SSR HTML 无字面 script 闭合标签，`JSON.parse` 仍可还原原文。书册加载页最短展示 11s（>10s）与 SPA 语言切换不重播遮罩已由单测 / E2E 固化。
 
 ## 七、已知安全问题（2026-11-07 只读代码审查）
 

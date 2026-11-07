@@ -4,7 +4,6 @@
 >
 > [English Version](./README_DEV_EN.md) | 中文文档
 >
-> 最近更新：**2026-11-07** —— 书册加载页、20 KB/s 慢网首屏、SSR HTML 压缩、测试体系与安全审查（见第 11 / 14 章）。
 
 ---
 
@@ -44,7 +43,7 @@
 | 样式 | `public/css/main.css`（手写工具类，已移除 Google Fonts `@import` 与旧 spinner）、Font Awesome 6.4.0（CDN，`bodyClose` 加载） |
 | 首屏 | 全屏书册加载页（SSR 直出 + 内联关键 CSS）、Nitro `render:response` 动态 HTML brotli / gzip 压缩、系统字体栈兜底 |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 401 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 402 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -143,7 +142,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（28 文件 / 401 用例；含 useBookLoader / htmlCompression / firstSentence）
+│   ├── unit/                  # Vitest 单元测试（28 文件 / 402 用例；含 useBookLoader / htmlCompression / firstSentence）
 │   ├── e2e/                   # Playwright 端到端测试（10 套件 / 69 用例，桌面/移动双 project + fixture 库种子）
 │   │   ├── book-loader.spec.ts   # 书册加载页三语文案 / 目录 / 主题首句 / 淡出 / 窄视口
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s 限速、首屏关键路径、noscript 与 HTML 压缩语义
@@ -350,7 +349,7 @@ npm run preview    # 预览生产构建
 node .output/server/index.mjs  # 直接启动生产构建（用 PORT 指定端口，如 $env:PORT='3100'）
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，28 文件 / 401 用例）
+npm run test       # 运行单元测试（vitest run，28 文件 / 402 用例）
 npm run test:watch # 监听模式运行测试
 npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 69 用例；自动 seed fixture 库并启动隔离 dev server）
 npx playwright test --list     # 仅列出用例，核对套件 / 用例数
@@ -455,6 +454,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 - `app/components/SiteLoader.vue`：旧 spinner 重写为全屏书册（封面 / 左页目录 / 右页演出详情 / 底部进度条），桌面双页、窄视口单页迷你目录；无按钮、无跳过提示，`aria-busy="true"`，`:data-finish` 输出 `ready | timeout | error` 便于排查。
 - SSR 直出 `#loader` 并**内联关键 CSS**（不等 JS 水合、不等外部 CDN）；`<SiteLoader />` 与首页内容区同级，避免祖先层叠上下文影响 `position: fixed`。
+- **整页会话只播放一次**：`bookLoaderSession`（`useBookLoader.ts` 的模块级标记）保证 SPA 语言切换重建页面组件时不再渲染遮罩；`<script setup>` 顶层变量属于组件实例、会被重建重置，故标记必须放模块作用域。该标记只在客户端 `onMounted` 写入，SSR 每次仍直出遮罩且无跨请求污染；`test/e2e/ticket-modal.spec.ts` 断言语言切换后 `#loader` 数量为 0。
 - 数据全部来自 `/api/data`：目录行数 / 年份、右页演出信息；引文为当前语言 `theme` 的**第一句话**（`app/utils/index.ts` 的 `firstSentence()`：先按换行取首段，再按中英文句末标点切分，英文句点需后接空格 / 大写 / 中文才切）；海报走 `thumbSrc()` 的 `_thumb.jpg`。三语文案在 `i18n/locales/*.ts` 的 `loadingBook`（已移除 `tocFoot` 与静态 `quotes`）。
 - 时序与预取抽到 `app/composables/useBookLoader.ts`（纯 TS + 假定时器单测）：
 
@@ -462,7 +462,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 |------|-----|------|
 | `BOOK_COVER_MS` | 900 ms | 封面停留 |
 | `BOOK_WINDOW_MS` | 12.6 s | 翻页窗口，页间隔二次递减 `G_MAX 1.32s → G_MIN 0.32s` |
-| `BOOK_MIN_SHOW_MS` | 2.4 s | 最短可感知窗口；SSR 数据已就绪也不能瞬间淡出 |
+| `BOOK_MIN_SHOW_MS` | 11 s | 最短展示窗口（要求加载页 >10 秒）；SSR 数据已就绪也不能提前淡出，淡出后 11.9s 仍早于 15s 兜底 |
 | `BOOK_MAX_MS` | 13.5 s | 硬上限，`timeout` 强制淡出 |
 | `BOOK_FADE_MS` | 900 ms | 淡出后移除遮罩，合计 < 15 s |
 

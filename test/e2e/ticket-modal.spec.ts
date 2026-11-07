@@ -91,6 +91,10 @@ test.describe('票根模态框 · 虚拟滚动', () => {
     await expect(page.locator('.lang-menu')).toBeVisible()
     await page.locator('.lang-option[data-lang="en"]').click()
     await expect(page).toHaveURL(/\/en\/?$/)
+    expect(
+      await page.locator('#loader').count(),
+      'SPA 语言切换不应重播 11s 书册遮罩'
+    ).toBe(0)
 
     await page.locator('.stat-card.total').click()
     await expect(page.locator('#ticketModal')).toHaveClass(/active/)

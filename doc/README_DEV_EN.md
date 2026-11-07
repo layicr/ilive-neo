@@ -4,7 +4,7 @@
 >
 > [中文文档](./README_DEV.md) | English Version
 >
-> Last updated: **2026-11-07** — book-style loader, 20 KB/s slow-network first paint, SSR HTML compression, test suite & security review (sections 11 / 14).
+
 
 ---
 
@@ -45,7 +45,7 @@ Key principles:
 | Styling | `public/css/main.css` (hand-written utilities; Google Fonts `@import` and the legacy spinner removed), Font Awesome 6.4.0 (CDN, loaded at `bodyClose`) |
 | First paint | Full-screen book-style loader (SSR-emitted + inlined critical CSS), Nitro `render:response` dynamic HTML brotli / gzip compression, system font-stack fallback |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **28 files / 401 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **28 files / 402 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -144,7 +144,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (28 files / 401 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
+│   ├── unit/                  # Vitest unit tests (28 files / 402 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
 │   ├── e2e/                   # Playwright end-to-end tests (10 suites / 69 cases, desktop/mobile projects + fixture DB seed)
 │   │   ├── book-loader.spec.ts   # Loader copy / catalog / theme first sentence / fade-out / narrow viewport
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s throttling, critical path, noscript & HTML compression semantics
@@ -349,7 +349,7 @@ npm run preview    # Preview production build
 node .output/server/index.mjs  # Start the production build directly (use PORT, e.g. $env:PORT='3100')
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 28 files / 401 cases)
+npm run test       # Run unit tests (vitest run, 28 files / 402 cases)
 npm run test:watch # Run tests in watch mode
 npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 69 cases; seeds the fixture DB and boots an isolated dev server)
 npx playwright test --list     # List cases only, to verify suite / case counts
@@ -457,6 +457,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 
 - `app/components/SiteLoader.vue`: the legacy spinner became a full-screen book (cover / left catalog / right concert details / bottom progress bar), two-page desktop layout and a single-page narrow-viewport layout; no buttons or skip hints, `aria-busy="true"`, and `:data-finish` reporting `ready | timeout | error`.
 - `#loader` is SSR-emitted with **inlined critical CSS** (no hydration, no external CDN); `<SiteLoader />` sits alongside the homepage content so no ancestor stacking context can break `position: fixed`.
+- **Played once per document**: `bookLoaderSession` (a module-level flag in `useBookLoader.ts`) prevents the overlay from re-appearing when SPA locale switches rebuild the page component. Top-level `<script setup>` variables belong to a component instance and reset on rebuild, so the flag must live at module scope. It is written only in client `onMounted`, so SSR still emits the overlay on every full page load with no cross-request state. `test/e2e/ticket-modal.spec.ts` asserts `#loader` count is 0 after a locale switch.
 - All data comes from `/api/data`: catalog rows / years and right-page concert details; the quote is the **first sentence** of the current-locale `theme` (`firstSentence()` in `app/utils/index.ts` — take the first paragraph, then split on CJK / English sentence punctuation); posters use `_thumb.jpg` via `thumbSrc()`. Three-language copy lives in `loadingBook` inside `i18n/locales/*.ts` (`tocFoot` and the static `quotes` were removed).
 - Timing and prefetch live in `app/composables/useBookLoader.ts` (pure TS + fake-timer unit tests):
 
@@ -464,7 +465,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 |------|------|------|
 | `BOOK_COVER_MS` | 900 ms | Cover dwell |
 | `BOOK_WINDOW_MS` | 12.6 s | Page-turn window, quadratic easing `G_MAX 1.32s → G_MIN 0.32s` |
-| `BOOK_MIN_SHOW_MS` | 2.4 s | Minimum perceptible window; SSR-ready data must not fade instantly |
+| `BOOK_MIN_SHOW_MS` | 11 s | Minimum visible window (loader must stay > 10 s); SSR-ready data cannot fade early, and 11.9 s after fade-out is still before the 15 s failsafe |
 | `BOOK_MAX_MS` | 13.5 s | Hard cap, forces `timeout` fade-out |
 | `BOOK_FADE_MS` | 900 ms | Fade then remove the overlay, total < 15 s |
 

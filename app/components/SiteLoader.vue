@@ -2,10 +2,11 @@
 /**
  * 书册加载页 · Book-style full-screen loader
  *
- * @description 每次刷新播放：封面 → 19 场演唱会按「从慢到快」逐页翻阅 → 淡出显示首页面。
+ * @description 每个文档会话（整页加载）播放一次：封面 → 演唱会逐页翻阅 → 淡出显示首页面。
  *   · 数据：useData().localizedConcerts（真实 DB 数据，按日期倒序），海报走 thumbSrc() 与首页同 URL
- *   · 文案：i18n/locales/{zh-CN,en,zh-Hant}.ts 的 loadingBook 命名空间（tm + rt 解析引文数组）
- *   · 时序：useBookLoader 统一调度，数据就绪且过最短窗口即淡出，13.5s 硬上限兜底
+ *   · 文案：i18n/locales/{zh-CN,en,zh-Hant}.ts 的 loadingBook 命名空间；引文为当前语言 theme 首句
+ *   · 时序：useBookLoader 统一调度，最短展示 11s（>10s）、数据就绪且过窗口即淡出，13.5s 硬上限兜底
+ *   · 一次：SPA 语言切换会重建页面组件，但不再重播遮罩（避免 11s 遮挡交互）
  *   · 预取：翻页逐张预热 + 淡出期间 requestIdleCallback 补齐剩余海报
  *   · SSR：遮罩随 SSR 一起输出，避免水合前闪现首页；无 JS 时由纯 CSS 15s 兜底自动隐藏
  *
@@ -17,6 +18,7 @@ import { useData } from '~/composables/useData'
 import {
   useBookLoader,
   createPosterPrefetcher,
+  bookLoaderSession,
   BOOK_FADE_MS,
   speedOf,
   type BookStep,
@@ -108,8 +110,12 @@ const copy = computed(() => {
 })
 
 // ==================== 播放状态 · playback state ====================
-/** 遮罩是否仍在 DOM（淡出结束后移除，e2e 的 #loader toBeHidden 依赖此行为） */
-const visible = ref(true)
+/**
+ * 遮罩是否仍在 DOM（淡出结束后移除，e2e 的 #loader toBeHidden 依赖此行为）
+ * @description SSR 必须直出遮罩；客户端水合时标志尚未置位，与 SSR 输出一致（无 mismatch）。
+ *              SPA 导航重建组件时标志已置位 → 初始就不渲染，避免闪一帧遮罩。
+ */
+const visible = ref(import.meta.server || !bookLoaderSession.played)
 const phase = ref<'cover' | 'reading' | 'done'>('cover')
 const page = ref(0)
 const flipping = ref(false)
@@ -174,6 +180,13 @@ function finish(reason: BookFinishReason): void {
 }
 
 onMounted(() => {
+  // 整页会话已播放过（SPA 语言切换重建组件）：不再遮罩、不重新武装 15s 兜底
+  if (bookLoaderSession.played) {
+    visible.value = false
+    return
+  }
+  bookLoaderSession.played = true
+
   // 水合成功才武装 CSS 兜底计时（与 SSR 资源下载耗时解耦）
   document.documentElement.classList.add('book-loader-active', 'book-loader-armed')
   loader = useBookLoader({

@@ -166,7 +166,7 @@
 | UI-061 目录与年份 | 观察左页目录 | 列出全部演唱会，每行日期含 4 位年份（如 `2026.10.31`）；底部无 `tocFoot` 文字 |
 | UI-062 纯自动 | 观察加载页控件 | 无任何按钮 / 跳过提示；保留顶部品牌小字与底部进度条 |
 | UI-063 主题首句 | 观察右页引文 | 引文为该场演唱会当前语言主题的第一句话（无标点短主题取整段），且不跨段 |
-| UI-064 淡出显示首页 | 等待数据就绪 | 数据就绪且过最短窗口后淡出，`#loader` 从 DOM 移除，首页面与统计卡片可见 |
+| UI-064 淡出显示首页 | 等待数据就绪 | 加载页至少展示 11 秒（>10s）；数据就绪且过最短窗口后淡出，`#loader` 从 DOM 移除，首页面与统计卡片可见；SPA 语言切换不重播遮罩 |
 | UI-065 移动端书册 | 393×851 视口打开 | 左页目录隐藏、迷你目录显示，书册为单页，进度条与封面正常 |
 | UI-066 20 KB/s 慢网 | CDP 限速 20 KB/s / 500ms 后刷新 | 遮罩随 SSR 内联关键 CSS 立即成为 fixed 全屏；水合成功前不被 15s CSS 兜底提前隐藏；恢复带宽后正常淡出，无站点自身未捕获异常 |
 | UI-067 首屏关键路径 | 查看 SSR HTML head | 字体与图标 CSS 不在 `<head>` 的渲染阻塞样式表中；`noscript` 兜底规则用 `<style>` 包裹 |
@@ -227,5 +227,7 @@
   - [x] UI-060 ~ UI-068：新增 `book-loader.spec.ts`（6 例）与 `slow-network.spec.ts`（3 例，含 HTML 压缩语义）
   - [x] 修复 404 错误页被 `br` 压缩导致 `Decompression failed`：Nuxt 内部 `/__nuxt_error` 渲染路径现在跳过压缩；生产服务实测 200 页 br 可解压、404 页明文
   - [x] 消除串行用例间的点赞状态污染：限流用例改用不存在的演唱会 id（零写库），结构断言改以 `/api/data` 当前值为基准
-  - [x] 单元测试（vitest run）：28 文件 / 401 用例全通过；端到端（playwright test）：10 套件 / 69 用例全通过（0 失败）；`npm run build` 成功
+  - [x] 单元测试（vitest run）：28 文件 / 402 用例全通过；端到端（playwright test）：10 套件 / 69 用例全通过（0 失败）；`npm run build` 成功
   - [x] H2 加固：JSON-LD 改用 `serializeJsonLd()` 显式转义（生产实测无字面 script 闭合标签、JSON 可解析、数据保真）；`seo-utils.test.ts` 5 例 + `security.spec.ts` SSR 反逃逸断言
+  - [x] 书册加载页最短展示 2.4s → **11s（>10s）**：`useBookLoader.test.ts` 新增「10s 时不得淡出」回归；数据就绪时约 11.9s 完成淡出，仍早于 15s CSS 兜底；13.5s 硬上限不变
+  - [x] 整页会话只播放一次：模块级 `bookLoaderSession` 避免 SPA 语言切换重建组件时重播遮罩；`ticket-modal.spec.ts` 断言切换后 `#loader` 数量为 0（否则 11s 遮罩会挡住点击触发 actionTimeout）

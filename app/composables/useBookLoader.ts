@@ -6,15 +6,16 @@
  *              便于用假定时器单测，组件只负责把回调结果映射成响应式状态。
  *
  *  时序（从 start 起算，单位 ms）：
- *    0                       封面停留
- *    BOOK_COVER_MS(900)      封面翻开 → onOpen，进入翻阅窗口
- *    ...                     按二次递减间隔逐页 onFlip → onPage → onFlipEnd
- *    BOOK_MIN_SHOW_MS(2400)  最短可感知窗口结束；若数据已就绪 → onFinish('ready')
- *    BOOK_MAX_MS(13500)      硬上限；数据仍未就绪 → onFinish('timeout')
- *    + BOOK_FADE_MS(900)     淡出结束，遮罩移除 → 14.4s < 15s
+ *    0                        封面停留
+ *    BOOK_COVER_MS(900)       封面翻开 → onOpen，进入翻阅窗口
+ *    ...                      按二次递减间隔逐页 onFlip → onPage → onFlipEnd
+ *    BOOK_MIN_SHOW_MS(11000)  最短展示窗口结束（>10s）；若数据已就绪 → onFinish('ready')
+ *    BOOK_MAX_MS(13500)       硬上限；数据仍未就绪 → onFinish('timeout')
+ *    + BOOK_FADE_MS(900)      淡出结束，遮罩移除 → 14.4s < 15s
  *
  *  设计取舍：SSR 预取使数据在客户端水合时几乎总是已就绪，若「数据就绪」立刻淡出，
- *  每次刷新将完全看不到动画。故保留 2.4s 最短窗口（封面 + 首次慢翻），就绪后不等待整本翻完。
+ *  每次刷新将完全看不到动画。故保留 11s 最短展示窗口（>10s，可看完整本的大部分翻页），
+ *  就绪后不等待整本翻完；数据失败仍立即淡出以露出错误提示。
  *
  *              Timing/posters are pure TS so the pacing, early-exit and cleanup are unit-testable;
  *              the component only maps callbacks onto reactive state.
@@ -28,11 +29,19 @@ export const BOOK_WINDOW_MS = 12_600
 export const BOOK_FADE_MS = 900
 /** 硬上限（ms，触发淡出的最晚时刻；与淡出相加仍 < 15s） · hard deadline before fade-out */
 export const BOOK_MAX_MS = 13_500
-/** 最短展示（ms）：保证每次刷新至少看到封面 + 一次慢翻 · minimum visible duration */
-export const BOOK_MIN_SHOW_MS = 2400
+/** 最短展示（ms）：加载页至少停留 11 秒（>10s），且淡出后仍早于 15s CSS 兜底 · minimum visible duration */
+export const BOOK_MIN_SHOW_MS = 11_000
 /** 最慢 / 最快的每页停留（秒） · slowest / fastest page dwell (seconds) */
 export const G_MAX = 1.32
 export const G_MIN = 0.32
+
+/**
+ * 整页会话播放标记 · module-level "played once" flag
+ * @description `<script setup>` 顶层变量属于组件实例，SPA 语言切换重建组件会把它重置；
+ *              因此标记必须放在模块作用域。只在客户端 onMounted 写入，服务端始终为 false，
+ *              既保证 SSR 每次都直出遮罩，也不会造成跨请求状态污染。
+ */
+export const bookLoaderSession = { played: false }
 
 /** 结束原因 · why the loader stopped */
 export type BookFinishReason = 'ready' | 'timeout' | 'error'

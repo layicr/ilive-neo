@@ -100,6 +100,21 @@ describe('书册节奏（从慢到快）', () => {
 })
 
 describe('调度生命周期（就绪即淡出 / 超时 / 失败 / 清理）', () => {
+  it('加载页最短展示 > 10s，且最快淡出仍早于 15s CSS 兜底', () => {
+    expect(BOOK_MIN_SHOW_MS).toBeGreaterThan(10_000)
+    expect(BOOK_MIN_SHOW_MS + BOOK_FADE_MS).toBeLessThan(15_000)
+    expect(BOOK_MIN_SHOW_MS).toBeLessThan(BOOK_MAX_MS)
+
+    // SSR 数据已就绪：10s 时仍不得淡出，最短窗口到点才结束
+    const { loader, events } = harness()
+    loader.start()
+    loader.setReady()
+    vi.advanceTimersByTime(10_000)
+    expect(events.some((e) => e.startsWith('finish:'))).toBe(false)
+    vi.advanceTimersByTime(BOOK_MIN_SHOW_MS - 10_000)
+    expect(events.at(-1)).toBe('finish:ready')
+  })
+
   it('封面在 900ms 翻开，翻页按时间表依次触发 onFlip → onPage → onFlipEnd', () => {
     const { loader, events } = harness()
     loader.start()
