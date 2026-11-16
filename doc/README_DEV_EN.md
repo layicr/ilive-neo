@@ -45,7 +45,7 @@ Key principles:
 | Styling | `public/css/main.css` (hand-written utilities; Google Fonts `@import` and the legacy spinner removed), Font Awesome 6.4.0 (CDN, loaded at `bodyClose`) |
 | First paint | Full-screen book-style loader (SSR-emitted + inlined critical CSS), Nitro `render:response` dynamic HTML brotli / gzip compression, system font-stack fallback |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **28 files / 405 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **30 files / 430 cases**, incl. songlist/guestbook composable suites) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -80,7 +80,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override; localized derivation is written to a request-scoped shared snapshot (app:localized), computed once
 │   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
-│   │   ├── useSonglist.ts     # Song list modal (bodies are NOT shipped with /api/data; lazy-loaded per concert via GET /api/concerts/:id on click, cached by locale+id, prefetched on hover/focus)
+│   │   ├── useSonglist.ts     # Song list modal (bodies are NOT shipped with /api/data; lazy-loaded per concert via GET /api/concerts/:id on click, cached by locale+id, prefetched on hover/focus; the first 5 are prefetched right after page load, the rest warmed up serially at 20s)
 │   │   ├── useTimeline.ts     # Timeline rendering
 │   │   ├── useNavigation.ts   # Section navigation scrolling
 │   │   ├── useTicketModal.ts  # Ticket modal
@@ -144,7 +144,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (28 files / 405 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
+│   ├── unit/                  # Vitest unit tests (30 files / 430 cases; incl. useBookLoader / htmlCompression / useSonglist / useGuestbook)
 │   ├── e2e/                   # Playwright end-to-end tests (10 suites / 69 cases, desktop/mobile projects + fixture DB seed)
 │   │   ├── book-loader.spec.ts   # Loader copy / catalog / theme first sentence / fade-out / narrow viewport
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s throttling, critical path, noscript & HTML compression semantics
@@ -349,7 +349,7 @@ npm run preview    # Preview production build
 node .output/server/index.mjs  # Start the production build directly (use PORT, e.g. $env:PORT='3100')
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 28 files / 405 cases)
+npm run test       # Run unit tests (vitest run, 30 files / 430 cases)
 npm run test:watch # Run tests in watch mode
 npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 69 cases; seeds the fixture DB and boots an isolated dev server)
 npx playwright test --list     # List cases only, to verify suite / case counts
@@ -379,7 +379,10 @@ npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.j
 >
 > **Lazy songlist**: `useSonglist` caches bodies by "locale + concert id"; clicking the button lazy-loads
 > `GET /api/concerts/:id?lang=xx` (the modal opens first with a loading state), and hover / focus prefetch reuses the
-> same cache and in-flight Promise (prefetch failures stay silent; a later click can retry). The first paint therefore
+> same cache and in-flight Promise (prefetch failures stay silent; a later click can retry). Right after page load,
+> `TimelineSection` **serially prefetches the first 5 songlist-bearing concerts** (`prefetchInitialSonglists`), and at
+> 20s schedules a one-shot **full serial warm-up** (`scheduleSonglistWarmup`, once per locale per session, skipping
+> cached entries) for the rest (avoiding 20 concurrent requests). The first paint therefore
 > no longer ships every songlist with `/api/data` (previously 607 tri-lingual song entries).
 >
 > **`POST /api/like` writes inside an interactive transaction** (`client.transaction('write')`, i.e. `BEGIN IMMEDIATE`):
@@ -524,7 +527,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 - `concert_likes` now has an index `idx_concert_likes_ip` (speeds up per-IP like-set/count lookups). **Existing local databases** must manually run `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);` after the schema change (or rebuild via `npm run db:seed`, which is destructive) for it to take effect.
 - **The guestbook has write endpoints**: `POST /api/guestbook` and `POST /api/guestbook/reply` write to the database (auto-approved on submit). In local `file:` mode the database file must be writable; on Turso it requires write access.
 - The client `useData` now requests `/api/data?lang=<locale>` per current locale (key carries the locale for per-language caching). `localizedConcerts/Cities/Wishes` pass through when the server already localized, otherwise `localizeConcert` runs client-side; `counts` reads the server-precomputed `city.concertCount` in single-locale mode (no cross-locale recompute).
-- **Songlist bodies are lazy-loaded**: the list endpoint only carries the `hasSonglist` flag; `useSonglist`'s cache is keyed by "locale + id" (a locale switch refetches), failures are not cached and a later click can retry. To mark a new concert as having a songlist you only write `concert_songlist` rows — no frontend change needed, the DISTINCT-based flag follows automatically.
+- **Songlist bodies are lazy-loaded**: the list endpoint only carries the `hasSonglist` flag; `useSonglist`'s cache is keyed by "locale + id" (a locale switch refetches), failures are not cached and a later click can retry; the first 5 are prefetched right after page load and the rest warmed up serially at 20s (once per locale per session, re-scheduled per locale after a switch). To mark a new concert as having a songlist you only write `concert_songlist` rows — no frontend change needed, the DISTINCT-based flag follows automatically.
 - **Guestbook double-submit guard**: the publish / reply buttons in `GuestbookSection` are disabled while in-flight (a double click cannot post duplicates); paging keeps the old list (the full-wall loading shows only on the first, empty load) and disables page buttons, scrolling back to the section top on success.
 - After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
 - **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/components/StatsCards.vue` (extracted from `index.vue`); the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0). The three `useCountUp` calls must **stay in place** in that component (they own SSR pass-through and timer lifecycle).

@@ -227,7 +227,7 @@
   - [x] UI-060 ~ UI-068：新增 `book-loader.spec.ts`（6 例）与 `slow-network.spec.ts`（3 例，含 HTML 压缩语义）
   - [x] 修复 404 错误页被 `br` 压缩导致 `Decompression failed`：Nuxt 内部 `/__nuxt_error` 渲染路径现在跳过压缩；生产服务实测 200 页 br 可解压、404 页明文
   - [x] 消除串行用例间的点赞状态污染：限流用例改用不存在的演唱会 id（零写库），结构断言改以 `/api/data` 当前值为基准
-  - [x] 单元测试（vitest run）：28 文件 / 402 用例全通过；端到端（playwright test）：10 套件 / 69 用例全通过（0 失败）；`npm run build` 成功
+  - [x] 单元测试（vitest run）：30 文件 / 430 用例全通过（含新增歌单与留言板 composable 套件）；端到端（playwright test）：10 套件 / 69 用例全通过（0 失败）；`npm run build` 成功
   - [x] H2 加固：JSON-LD 改用 `serializeJsonLd()` 显式转义（生产实测无字面 script 闭合标签、JSON 可解析、数据保真）；`seo-utils.test.ts` 5 例 + `security.spec.ts` SSR 反逃逸断言
   - [x] 书册加载页最短展示 2.4s → **11s（>10s）**：`useBookLoader.test.ts` 新增「10s 时不得淡出」回归；数据就绪时约 11.9s 完成淡出，仍早于 15s CSS 兜底；13.5s 硬上限不变
   - [x] 整页会话只播放一次：模块级 `bookLoaderSession` 避免 SPA 语言切换重建组件时重播遮罩；`ticket-modal.spec.ts` 断言切换后 `#loader` 数量为 0（否则 11s 遮罩会挡住点击触发 actionTimeout）

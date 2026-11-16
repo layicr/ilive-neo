@@ -43,7 +43,7 @@
 | 样式 | `public/css/main.css`（手写工具类，已移除 Google Fonts `@import` 与旧 spinner）、Font Awesome 6.4.0（CDN，`bodyClose` 加载） |
 | 首屏 | 全屏书册加载页（SSR 直出 + 内联关键 CSS）、Nitro `render:response` 动态 HTML brotli / gzip 压缩、系统字体栈兜底 |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 405 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**30 文件 / 430 用例**，含歌单/留言板 composable 套件）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -78,7 +78,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖；本地化派生写入请求级共享快照（app:localized，只计算一次）
 │   │   ├── useI18n.ts         # 多语言切换（zh / en / zh-Hant，useState 懒初始化）
 │   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
-│   │   ├── useSonglist.ts     # 歌单弹层（正文不随 /api/data 下发；点击时按单场 GET /api/concerts/:id 懒加载，按语言+id 缓存，hover/focus 预取）
+│   │   ├── useSonglist.ts     # 歌单弹层（正文不随 /api/data 下发；点击时按单场 GET /api/concerts/:id 懒加载，按语言+id 缓存，hover/focus 预取；页面加载后立即预取前 5 场，20s 后串行速热其余）
 │   │   ├── useTimeline.ts     # 时间线渲染
 │   │   ├── useNavigation.ts   # 角色导航滚动
 │   │   ├── useTicketModal.ts  # 票务模态框
@@ -142,7 +142,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（28 文件 / 405 用例；含 useBookLoader / htmlCompression / firstSentence）
+│   ├── unit/                  # Vitest 单元测试（30 文件 / 430 用例；含 useBookLoader / htmlCompression / useSonglist / useGuestbook）
 │   ├── e2e/                   # Playwright 端到端测试（10 套件 / 69 用例，桌面/移动双 project + fixture 库种子）
 │   │   ├── book-loader.spec.ts   # 书册加载页三语文案 / 目录 / 主题首句 / 淡出 / 窄视口
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s 限速、首屏关键路径、noscript 与 HTML 压缩语义
@@ -349,7 +349,7 @@ npm run preview    # 预览生产构建
 node .output/server/index.mjs  # 直接启动生产构建（用 PORT 指定端口，如 $env:PORT='3100'）
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，28 文件 / 405 用例）
+npm run test       # 运行单元测试（vitest run，30 文件 / 430 用例）
 npm run test:watch # 监听模式运行测试
 npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 69 用例；自动 seed fixture 库并启动隔离 dev server）
 npx playwright test --list     # 仅列出用例，核对套件 / 用例数
@@ -373,7 +373,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 | POST | `/api/guestbook/reply` | 发布回复（body `{ guestbookId, nickname, content, email? }`，邮箱可选），父留言不存在/未通过 404 |
 
 > 前端调用 `/api/data`、`/api/concerts/:id`、`POST /api/like` 与留言板三接口（`GET /api/guestbook`、`POST /api/guestbook`、`POST /api/guestbook/reply`）。
-> **歌单按需加载**：`useSonglist` 按「语言 + 演唱会 id」缓存正文；点击按钮时懒加载 `GET /api/concerts/:id?lang=xx`（弹窗先开并显示 loading），hover / focus 预取复用同一份缓存与在途 Promise（hover 失败静默、点击可重试）；首屏因此不再随 `/api/data` 下发全部歌单（原 607 首三语文案）。
+> **歌单按需加载**：`useSonglist` 按「语言 + 演唱会 id」缓存正文；点击按钮时懒加载 `GET /api/concerts/:id?lang=xx`（弹窗先开并显示 loading），hover / focus 预取复用同一份缓存与在途 Promise（hover 失败静默、点击可重试）；页面加载后 `TimelineSection` **立即串行预取时间线前 5 场有歌单的**（`prefetchInitialSonglists`），20s 后再调度一次**全量串行速热**（`scheduleSonglistWarmup`，每语言每会话一次，自动跳过已缓存），逐个预取其余歌单进缓存（避免一次性并发 20 个请求）；首屏因此不再随 `/api/data` 下发全部歌单（原 607 首三语文案）。
 > 点赞计数并入 `/api/data`（不新增 GET 请求）；为避免共享缓存把「按 IP 的 liked」串给其他访问者，
 > `/api/data` 拆为「内层缓存共享数据 + 外层按 IP 合并 liked」，并覆盖响应头为 `private, no-store`；
 > 命中条件请求时内层返回 `undefined`（Nitro 已响应 304），外层判空后提前返回。
@@ -517,7 +517,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 - `concert_likes` 已加索引 `idx_concert_likes_ip`（按 `ip` 查询点赞集合/统计加速）。**存量本地库**需在 `schema.sql` 变更后手动执行 `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);`（或重跑 `npm run db:seed` 破坏性重建）方生效。
 - **留言板为写接口**：`POST /api/guestbook` 与 `POST /api/guestbook/reply` 会写库（提交即 `is_approved=1`），本地 `file:` 模式需保证库文件可写；线上 Turso 需写权限。
 - 前端 `useData` 现按当前语言请求 `/api/data?lang=<locale>`（key 含 locale 分语言缓存），`localizedConcerts/Cities/Wishes` 在「服务端已本地化」时直接透传、否则前端 `localizeConcert`；`counts` 单语言时读服务端预置的 `city.concertCount`（不再前端跨语言重算）。
-- **歌单正文按需加载**：列表接口只带 `hasSonglist` 标记；`useSonglist` 的缓存按「语言 + id」区分（语言切换后重新拉取），失败不写缓存、下次点击可重试。给列表新增「有歌单」的场只需写 `concert_songlist`，无需改前端——按钮显隐由 DISTINCT 统计自动跟随。
+- **歌单正文按需加载**：列表接口只带 `hasSonglist` 标记；`useSonglist` 的缓存按「语言 + id」区分（语言切换后重新拉取），失败不写缓存、下次点击可重试；页面加载后立即串行预取前 5 场，20s 后全量速热其余（每语言每会话一次，语言切换按新语言再调度）。给列表新增「有歌单」的场只需写 `concert_songlist`，无需改前端——按钮显隐由 DISTINCT 统计自动跟随。
 - **留言板前端防重复提交**：`GuestbookSection` 的发布/回复按钮带 in-flight 禁用（双击不会产生重复留言）；分页翻页时保留旧列表（仅首屏无内容才显示整墙 loading）并禁用翻页按钮，成功后 `scrollIntoView` 回留言区顶部。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
 - **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/components/StatsCards.vue`（自 `index.vue` 抽出）；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。三次 `useCountUp` 调用须**原地保留**在该组件内（自带 SSR 透传与定时器生命周期）。

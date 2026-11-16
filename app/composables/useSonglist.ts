@@ -33,6 +33,8 @@ function getSonglistLoading() {
 const songlistCache = new Map<string, SongItem[]>()
 /** 在途请求（同一 key 去重，hover + click 只发一次）· in-flight requests */
 const songlistPending = new Map<string, Promise<SongItem[] | null>>()
+/** 已调度过延时速热的语言（每语言每会话一次，语言切换重建组件后按新语言再调度）· languages already scheduled for warm-up */
+const warmedLanguages = new Set<string>()
 
 function cacheKey(id: number, lang: string): string {
   return `${lang}:${id}`
@@ -132,6 +134,49 @@ export function useSonglist() {
     void loadSonglist(concert.id, currentLanguage.value, true, () => {})
   }
 
+  /**
+   * 页面加载后立即预取前 count 个有歌单的场（串行、静默）· Prefetch the first N songlists right after load
+   * @description 用户最可能先浏览时间线最前几场，立即填缓存实现秒开；
+   *              与 20s 全量速热共享同一份缓存与在途 Promise 去重，不产生重复请求。
+   */
+  async function prefetchInitialSonglists(concerts: Concert[], count = 5): Promise<void> {
+    let picked = 0
+    for (const c of concerts) {
+      if (picked >= count) return
+      if (!c.hasSonglist) continue
+      picked += 1
+      const lang = currentLanguage.value
+      if (songlistCache.has(cacheKey(c.id, lang))) continue
+      await loadSonglist(c.id, lang, true, () => {})
+    }
+  }
+
+  /**
+   * 串行预取未缓存的歌单（静默，失败跳过）· Serially warm up uncached songlists (silent)
+   * @description 空闲期后台把全部歌单填入缓存：逐个串行请求避免一次性并发打满；
+   *              语言逐条动态读取（30s 等待期间用户切换语言也能落到正确 key）；失败不写缓存。
+   */
+  async function warmupSonglistCache(concerts: Concert[]): Promise<void> {
+    for (const c of concerts) {
+      if (!c.hasSonglist) continue
+      const lang = currentLanguage.value
+      if (songlistCache.has(cacheKey(c.id, lang))) continue
+      await loadSonglist(c.id, lang, true, () => {})
+    }
+  }
+
+  /**
+   * 调度延时速热（页面加载 delayMs 后自动预取未缓存歌单）· Schedule delayed warm-up
+   * @description 每个语言每会话只调度一次；语言切换重建组件后按新语言重新调度。仅客户端执行。
+   */
+  function scheduleSonglistWarmup(concerts: Concert[], delayMs = 20_000): void {
+    if (typeof window === 'undefined') return
+    const lang = currentLanguage.value
+    if (warmedLanguages.has(lang)) return
+    warmedLanguages.add(lang)
+    setTimeout(() => { void warmupSonglistCache(concerts) }, delayMs)
+  }
+
   return {
     songlistOpen,
     songlistLoading,
@@ -141,6 +186,8 @@ export function useSonglist() {
     songlistSearch,
     openSonglistModal,
     closeSonglistModal,
-    prefetchSonglist
+    prefetchSonglist,
+    prefetchInitialSonglists,
+    scheduleSonglistWarmup
   }
 }

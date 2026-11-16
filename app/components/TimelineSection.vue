@@ -16,7 +16,7 @@ import { thumbSrc, onThumbError } from '~/utils/thumb'
 const { sortedConcerts, visibleIds } = useTimeline()
 const { localizedConcerts, toggleLike } = useData()
 const { openGallery } = useGallery()
-const { openSonglistModal, prefetchSonglist } = useSonglist()
+const { openSonglistModal, prefetchSonglist, prefetchInitialSonglists, scheduleSonglistWarmup } = useSonglist()
 const { openVideoModal } = useNavigation()
 const { showUserMessage } = useAppError()
 const { currentData } = useAppI18n()
@@ -28,6 +28,12 @@ const hotConcertIds = computed<Set<number>>(() => pickHotConcertIds(localizedCon
 function onGalleryItemClick(concertId: number, index: number): void {
   openGallery(concertId, index)
 }
+
+/** 页面加载后立即串行预取前 5 场有歌单的，20s 后速热其余全部 · prefetch first 5 songlists on load, warm the rest at 20s */
+onMounted(() => {
+  void prefetchInitialSonglists(localizedConcerts.value, 5)
+  scheduleSonglistWarmup(localizedConcerts.value)
+})
 
 /** 打开外链视频 · open external video link */
 function openVideoLink(url: string): void {

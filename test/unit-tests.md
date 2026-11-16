@@ -5,7 +5,7 @@
 > `app/utils/seo.ts`（hreflang / og:locale / 多语言描述）、`server/lib/mappers.ts`（DB 行 → 多语言结构）、
 > `nuxt.config.ts`（i18n / head / PWA 配置）。每类给出去除前端项目后仍可 `node`（vitest）运行的验证脚本。
 
-> ⚠️ 本文件为历史用例存档。**最新口径（28 文件 / 402 用例）以 [`README.md`](./README.md) 为准**；
+> ⚠️ 本文件为历史用例存档。**最新口径（30 文件 / 430 用例）以 [`README.md`](./README.md) 为准**；
 > 下列 UT-N 章节记录 2026-11-07 新增的四组纯函数测试（含 SSR HTML 压缩错误页与 JSON-LD 反逃逸回归）。
 
 ## UT-N 新增纯函数测试（2026-11-07）
@@ -270,3 +270,5 @@ npm run test:watch # 监听模式
 - **UT-14 演唱会点赞**：已自动化 → `test/unit/concertLikes.test.ts`（11 例，IP 归一化 + 点赞/取消切换 + 计数聚合 + 表缺失容错）。端到端对应见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
 - **UT-15 留言板**：已自动化 → `test/unit/guestbook.test.ts`（17 例，主留言自动通过 + UGC 原样落库 + 回复父留言校验 + 可选邮箱 + `IN (...)` 批量取回复 + UA 解析）。端到端对应见 `test/e2e/guestbook.spec.ts` 与 `test/ui-tests.md` 的 UI-049 ~ UI-056。
 - **UT-16 艺人去重统计（多歌手拆分）**：已自动化 → `test/unit/artistStats.test.ts`（10 例，覆盖 `server/lib/concerts.ts` 的 `countUniqueArtists`：`artist_i18n` 内以「、」分隔多歌手时拆分、trim、去空、跨场次去重计数；单歌手、空数组、空值/null/undefined 跳过、顿号带空格、末尾多余顿号不计入空串、不同写法视为不同歌手）。对应 `server/api/data.get.ts` 的 `stats.totalArtists` 计算。
+- **UT-17 歌单 composable（懒加载 / 缓存 / 两级预热）**：已自动化 → `test/unit/useSonglist.test.ts`（13 例，happy-dom）。覆盖点击 `GET /api/concerts/:id?lang=xx` 懒加载与 loading 切换、`hasSonglist=false` 不打开、按「语言 + id」缓存命中零请求与切语言重拉、失败不写缓存可重试、`filteredSonglist` 搜索过滤、`closeSonglistModal`、hover 预取与在途 Promise 去重（同 key 只发一次）、失败静默、`prefetchInitialSonglists` 前 N 场与跳过已缓存、`scheduleSonglistWarmup` 的 20s 触发/跳过已缓存/每语言每会话一次。
+- **UT-18 留言板 composable（分页 / 首页尾页 / 滚动 / 总数）**：已自动化 → `test/unit/useGuestbook.test.ts`（12 例，happy-dom）。覆盖 `fetchMessages` 分页请求与 total/totalPages/messages 更新、`total` 对外暴露（回归「共 X 条留言」为空）、过期响应丢弃（竞态）、失败 error/loading 处理、`firstPage`/`lastPage`/`prevPage`/`nextPage` 跳转与边界不请求、成功后 `scrollIntoView` 回区块顶部/失败不滚动、`postMessage` 回第 1 页、`postReply` 刷新当前页、`setView` 视图切换。
