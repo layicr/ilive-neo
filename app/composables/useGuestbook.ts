@@ -23,6 +23,8 @@ interface UseGuestbookReturn {
   page: globalThis.Ref<number>
   /** 总页数 · total pages */
   totalPages: globalThis.Ref<number>
+  /** 已通过留言总数 · total approved messages */
+  total: globalThis.Ref<number>
   /** 加载中 · loading */
   loading: globalThis.Ref<boolean>
   /** 错误 · error */
@@ -37,10 +39,14 @@ interface UseGuestbookReturn {
   postReply: (payload: { guestbookId: number; nickname: string; content: string; email?: string }) => Promise<void>
   /** 切换视图 · switch view */
   setView: (v: 'card' | 'list') => void
-  /** 上一页 · previous page */
+  /** 上一页（成功后滚回区块顶部）· previous page (scrolls to section top on success) */
   prevPage: () => void
-  /** 下一页 · next page */
+  /** 下一页（成功后滚回区块顶部）· next page (scrolls to section top on success) */
   nextPage: () => void
+  /** 跳到首页（成功后滚回区块顶部）· jump to first page (scrolls to section top on success) */
+  firstPage: () => void
+  /** 跳到尾页（成功后滚回区块顶部）· jump to last page (scrolls to section top on success) */
+  lastPage: () => void
 }
 
 export function useGuestbook(): UseGuestbookReturn {
@@ -101,17 +107,37 @@ export function useGuestbook(): UseGuestbookReturn {
   function setView(v: 'card' | 'list'): void {
     view.value = v
   }
+
+  /**
+   * 翻页并滚动回留言区顶部 · Change page, then scroll back to the section top
+   * @description 卡片较高，翻页后内容替换但视口停在原处容易迷失；成功加载后平滑滚回区块顶部。
+   */
+  async function gotoPage(target: number): Promise<void> {
+    if (target === page.value) return
+    await fetchMessages(target)
+    if (!error.value && typeof document !== 'undefined') {
+      document.getElementById('guestbookSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   function prevPage(): void {
-    if (page.value > 1) void fetchMessages(page.value - 1)
+    if (page.value > 1) void gotoPage(page.value - 1)
   }
   function nextPage(): void {
-    if (page.value < totalPages.value) void fetchMessages(page.value + 1)
+    if (page.value < totalPages.value) void gotoPage(page.value + 1)
+  }
+  function firstPage(): void {
+    if (page.value > 1) void gotoPage(1)
+  }
+  function lastPage(): void {
+    if (page.value < totalPages.value) void gotoPage(totalPages.value)
   }
 
   return {
     messages,
     page,
     totalPages,
+    total,
     loading,
     error,
     view,
@@ -120,6 +146,8 @@ export function useGuestbook(): UseGuestbookReturn {
     postReply,
     setView,
     prevPage,
-    nextPage
+    nextPage,
+    firstPage,
+    lastPage
   }
 }

@@ -43,7 +43,7 @@
 | 样式 | `public/css/main.css`（手写工具类，已移除 Google Fonts `@import` 与旧 spinner）、Font Awesome 6.4.0（CDN，`bodyClose` 加载） |
 | 首屏 | 全屏书册加载页（SSR 直出 + 内联关键 CSS）、Nitro `render:response` 动态 HTML brotli / gzip 压缩、系统字体栈兜底 |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 402 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**28 文件 / 405 用例**）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -78,7 +78,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖；本地化派生写入请求级共享快照（app:localized，只计算一次）
 │   │   ├── useI18n.ts         # 多语言切换（zh / en / zh-Hant，useState 懒初始化）
 │   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
-│   │   ├── useSonglist.ts     # 歌单弹层
+│   │   ├── useSonglist.ts     # 歌单弹层（正文不随 /api/data 下发；点击时按单场 GET /api/concerts/:id 懒加载，按语言+id 缓存，hover/focus 预取）
 │   │   ├── useTimeline.ts     # 时间线渲染
 │   │   ├── useNavigation.ts   # 角色导航滚动
 │   │   ├── useTicketModal.ts  # 票务模态框
@@ -88,7 +88,7 @@ ilive_neo/
 │   │   ├── useSharedState.ts  # 跨组件共享状态（useState 封装）
 │   │   ├── useCountUp.ts      # 统计数字滚动（0 → 目标值，easeOutCubic 5s，每 120s 重播；SSR 透传真值、水合安全）
 │   │   ├── useFriendLink.ts   # 友情链接
-│   │   ├── useGuestbook.ts    # 留言板（分页列表 / 发布留言 / 发布回复 / 卡片·列表视图）
+│   │   ├── useGuestbook.ts    # 留言板（分页列表 / 首页·尾页·上下页 / 发布留言·回复 / 卡片·列表视图；翻页保留旧内容并滚回区块顶部）
 │   │   └── useAppError.ts     # 全局错误处理 + Toast
 │   ├── plugins/
 │   │   └── statis.client.ts   # 第三方统计注入（百度/GA/51.la，客户端插件）
@@ -112,9 +112,9 @@ ilive_neo/
 │   └── sitemap.xml            # 站点地图（当前仅收录默认语言首页；多语言 hreflang 由页面 useHead 输出）
 ├── server/                    # Nitro 服务端
 │   ├── api/
-│   │   ├── data.get.ts        # GET /api/data（单端点聚合：concerts/cities/wishes/stats/seo/friendLinks + 点赞）
+│   │   ├── data.get.ts        # GET /api/data（单端点聚合：concerts/cities/wishes/stats/seo/friendLinks + 点赞；不含歌单正文，仅 hasSonglist 标记）
 │   │   ├── like.post.ts       # POST /api/like（演唱会点赞/取消，按 IP 去重）
-│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id（单场详情 + likes/liked）
+│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id（单场详情 + tags/images/songlist + likes/liked；前端歌单懒加载的唯一正文来源）
 │   │   ├── guestbook.get.ts   # GET /api/guestbook（分页读取已通过留言及其回复）
 │   │   ├── guestbook.post.ts  # POST /api/guestbook（发布留言，提交即通过）
 │   │   └── guestbook/reply.post.ts  # POST /api/guestbook/reply（发布回复，校验父留言存在且已通过）
@@ -127,7 +127,7 @@ ilive_neo/
 │   │   ├── seo.ts             # SEO_I18N_KEYS / SEO_FALLBACK / fetchSiteSeo（DB 优先 + 代码回退）
 │   │   ├── friendLinks.ts     # 友情链接映射（含 href 协议白名单 sanitizeHref）
 │   │   ├── concertLikes.ts    # 点赞读写（事务内切换 + COUNT(*) 自愈重算冗余列）+ getClientIp（按 IP 去重、可取消）
-│   │   ├── guestbook.ts       # 留言/回复读写（仅读已通过；回复父留言校验；IN 批量取回复无 N+1）
+│   │   ├── guestbook.ts       # 留言/回复读写（仅读已通过；回复用原子 INSERT...SELECT...WHERE EXISTS 校验父留言；IN 批量取回复无 N+1）
 │   │   ├── ua.ts              # 服务端 UA 解析（浏览器 / 系统）
 │   │   ├── rateLimit.ts       # 每 IP 内存限流（点赞与留言写接口共用）
 │   │   ├── locales.ts         # 语言定义（LOCALES）
@@ -142,7 +142,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（28 文件 / 402 用例；含 useBookLoader / htmlCompression / firstSentence）
+│   ├── unit/                  # Vitest 单元测试（28 文件 / 405 用例；含 useBookLoader / htmlCompression / firstSentence）
 │   ├── e2e/                   # Playwright 端到端测试（10 套件 / 69 用例，桌面/移动双 project + fixture 库种子）
 │   │   ├── book-loader.spec.ts   # 书册加载页三语文案 / 目录 / 主题首句 / 淡出 / 窄视口
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s 限速、首屏关键路径、noscript 与 HTML 压缩语义
@@ -198,11 +198,11 @@ app/app.vue (setup)
 
 ### 4.2 服务端数据层
 
-- `GET /api/data`（`server/api/data.get.ts`）：**单端点聚合**，一次返回 `{ concerts, cities, wishes, stats }`。城市场次数复用同一份 concerts 计算（`computeCityConcertCounts`），消除原多端点重复全量查询。
+- `GET /api/data`（`server/api/data.get.ts`）：**单端点聚合**，一次返回 `{ concerts, cities, wishes, stats }`。城市场次数复用同一份 concerts 计算（`computeCityConcertCounts`），消除原多端点重复全量查询。**歌单正文不随该接口下发**——`fetchAllConcerts` 以 `includeSonglist: false` 调用，仅用一条 `SELECT DISTINCT concert_id` 填充 `hasSonglist` 布尔标记（控制「歌单」按钮显隐），正文改由前端点击时经 `GET /api/concerts/:id` 按需加载（见第 8 章）。
 - **两层缓存 + 响应缓存策略**：内层 `defineCachedEventHandler`（生产 1h SWR）只产出与请求者无关的共享数据；外层非缓存，按当前 IP 合并 `liked` 后返回。两点必须注意：
   1. 内层会把缓存条目自带的 `cache-control`（`s-maxage=3600`）写到同一个 event 的响应上，**外层必须显式覆盖为 `private, no-store`**，否则 CDN / 边缘 / nginx 会把「某个 IP 的点赞态」缓存 1 小时并发给其他人；`etag` / `last-modified` 保留以维持条件请求。
   2. 命中条件请求（`If-None-Match` / `If-Modified-Since`）时，Nitro 会自行写入 304 并结束响应、向调用方返回 **`undefined`**，外层须先判空再解引用（否则生产环境抛 `TypeError`；dev 走未缓存分支不会复现）。
-- `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist: { zh, en, 'zh-Hant' }`、`location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析）；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
+- `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist: { zh, en, 'zh-Hant' }`、`location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析）；`includeSonglist: false` 时不查歌单正文、只以 DISTINCT 查询填充 `hasSonglist`；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
 - 前端 `useData.ts` 的 `pickLocale` / `localizeConcert` 根据 `currentLanguage` 把多语言结构**选为单语言字段**（如 `artist: "五月天"`）；目标语言缺失时按 `请求语言 → zh → en` 回退链兜底（`app/utils/index.ts`，纯函数可直接单测）。
 
 ```
@@ -215,7 +215,7 @@ useAsyncData('app-data') → GET /api/data
 localizedConcerts (computed, 按 currentLanguage 选单语言)
 ```
 
-- 留言板（`server/lib/guestbook.ts`）：`guestbook`（主留言）+ `guestbook_reply`（回复）两张表；写入即 `is_approved=1`（自动通过），回复先校验父留言存在且已通过（否则返回 `null` → 接口 404）；读取仅返回已通过内容，本页回复用一条 `IN (...)` 批量取回（无 N+1）。邮箱仅入库、不对外返回；浏览器/系统/IP 由服务端采集（`ua.ts` / `getClientIp`）。
+- 留言板（`server/lib/guestbook.ts`）：`guestbook`（主留言）+ `guestbook_reply`（回复）两张表；写入即 `is_approved=1`（自动通过），回复用**单条原子 `INSERT ... SELECT ... WHERE EXISTS`** 校验父留言存在且已通过（校验与插入无间隙，不产生孤立回复；失败返回 `null` → 接口 404），写接口经 `ResultSet.lastInsertRowid` 直接取回自增 id（单次往返）；读取仅返回已通过内容，本页回复用一条 `IN (...)` 批量取回（无 N+1）。邮箱仅入库、不对外返回；浏览器/系统/IP 由服务端采集（`ua.ts` / `getClientIp`）。
 - `server/lib/turso.ts`：`getTursoClient()` 惰性创建全局单例客户端。根据 `runtimeConfig.turso.databaseUrl` 自动切换：
   - `libsql://xxx.turso.io` → 远程 Turso（生产/线上，需 `NUXT_TURSO_AUTH_TOKEN`）
   - `file:./public/data/data.db` → 本地 SQLite（开发兜底）
@@ -349,7 +349,7 @@ npm run preview    # 预览生产构建
 node .output/server/index.mjs  # 直接启动生产构建（用 PORT 指定端口，如 $env:PORT='3100'）
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，28 文件 / 402 用例）
+npm run test       # 运行单元测试（vitest run，28 文件 / 405 用例）
 npm run test:watch # 监听模式运行测试
 npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 69 用例；自动 seed fixture 库并启动隔离 dev server）
 npx playwright test --list     # 仅列出用例，核对套件 / 用例数
@@ -365,14 +365,15 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/data` | 单端点聚合：演唱会（含 `likes` / `liked`）+ 城市 + 许愿 + 统计 + SEO + 友链；可选 `?lang=<locale>` 直接返回单语言本地化结果，响应含 `locale` 字段（= 请求语言或 null） |
-| GET | `/api/concerts/:id` | 单场详情（含 tags/images/songlist 与 `likes` / `liked`），非法 id 400、未找到 404 |
+| GET | `/api/data` | 单端点聚合：演唱会（含 `likes` / `liked` 与 `hasSonglist` 标记，**不含歌单正文**）+ 城市 + 许愿 + 统计 + SEO + 友链；可选 `?lang=<locale>` 直接返回单语言本地化结果，响应含 `locale` 字段（= 请求语言或 null） |
+| GET | `/api/concerts/:id` | 单场详情（含 tags/images/songlist 与 `likes` / `liked`），非法 id 400、未找到 404；也是前端歌单弹层的**按需正文来源** |
 | POST | `/api/like` | 演唱会点赞/取消（body `{ id }`，按 IP 去重可反复切换），返回 `{ id, likes, liked }`；非法 id 400、未找到 404 |
 | GET | `/api/guestbook` | 分页读取已通过留言及其已通过回复（`?page=` / `?pageSize=`，默认 9、上限 50） |
 | POST | `/api/guestbook` | 发布留言（body `{ nickname, email, content }`，提交即自动通过），返回 `{ id, ok }`；字段非法/超限 400、超频 429 |
 | POST | `/api/guestbook/reply` | 发布回复（body `{ guestbookId, nickname, content, email? }`，邮箱可选），父留言不存在/未通过 404 |
 
 > 前端调用 `/api/data`、`/api/concerts/:id`、`POST /api/like` 与留言板三接口（`GET /api/guestbook`、`POST /api/guestbook`、`POST /api/guestbook/reply`）。
+> **歌单按需加载**：`useSonglist` 按「语言 + 演唱会 id」缓存正文；点击按钮时懒加载 `GET /api/concerts/:id?lang=xx`（弹窗先开并显示 loading），hover / focus 预取复用同一份缓存与在途 Promise（hover 失败静默、点击可重试）；首屏因此不再随 `/api/data` 下发全部歌单（原 607 首三语文案）。
 > 点赞计数并入 `/api/data`（不新增 GET 请求）；为避免共享缓存把「按 IP 的 liked」串给其他访问者，
 > `/api/data` 拆为「内层缓存共享数据 + 外层按 IP 合并 liked」，并覆盖响应头为 `private, no-store`；
 > 命中条件请求时内层返回 `undefined`（Nitro 已响应 304），外层判空后提前返回。
@@ -516,6 +517,8 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 - `concert_likes` 已加索引 `idx_concert_likes_ip`（按 `ip` 查询点赞集合/统计加速）。**存量本地库**需在 `schema.sql` 变更后手动执行 `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);`（或重跑 `npm run db:seed` 破坏性重建）方生效。
 - **留言板为写接口**：`POST /api/guestbook` 与 `POST /api/guestbook/reply` 会写库（提交即 `is_approved=1`），本地 `file:` 模式需保证库文件可写；线上 Turso 需写权限。
 - 前端 `useData` 现按当前语言请求 `/api/data?lang=<locale>`（key 含 locale 分语言缓存），`localizedConcerts/Cities/Wishes` 在「服务端已本地化」时直接透传、否则前端 `localizeConcert`；`counts` 单语言时读服务端预置的 `city.concertCount`（不再前端跨语言重算）。
+- **歌单正文按需加载**：列表接口只带 `hasSonglist` 标记；`useSonglist` 的缓存按「语言 + id」区分（语言切换后重新拉取），失败不写缓存、下次点击可重试。给列表新增「有歌单」的场只需写 `concert_songlist`，无需改前端——按钮显隐由 DISTINCT 统计自动跟随。
+- **留言板前端防重复提交**：`GuestbookSection` 的发布/回复按钮带 in-flight 禁用（双击不会产生重复留言）；分页翻页时保留旧列表（仅首屏无内容才显示整墙 loading）并禁用翻页按钮，成功后 `scrollIntoView` 回留言区顶部。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
 - **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/components/StatsCards.vue`（自 `index.vue` 抽出）；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。三次 `useCountUp` 调用须**原地保留**在该组件内（自带 SSR 透传与定时器生命周期）。
 - **`handleError` 可在 watch / 事件回调中安全调用**（错误文案解析器已在 setup 阶段注册）；但切勿在回调里直接调用 `useAppI18n()` / `useI18n()` —— 无组件实例时会抛错。

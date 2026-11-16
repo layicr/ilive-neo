@@ -16,7 +16,7 @@ import { thumbSrc, onThumbError } from '~/utils/thumb'
 const { sortedConcerts, visibleIds } = useTimeline()
 const { localizedConcerts, toggleLike } = useData()
 const { openGallery } = useGallery()
-const { openSonglistModal } = useSonglist()
+const { openSonglistModal, prefetchSonglist } = useSonglist()
 const { openVideoModal } = useNavigation()
 const { showUserMessage } = useAppError()
 const { currentData } = useAppI18n()
@@ -124,7 +124,7 @@ async function onToggleLike(concert: { id: number }): Promise<void> {
             <i class="fas fa-heart" aria-hidden="true"></i>
             <span class="like-count">{{ concert.likes || 0 }}</span>
           </button>
-          <button v-if="concert.songlist && concert.songlist.length" class="songlist-btn" :data-concert-id="concert.id" @click="openSonglistModal(concert)">
+          <button v-if="concert.hasSonglist" class="songlist-btn" :data-concert-id="concert.id" @mouseenter="prefetchSonglist(concert)" @focus="prefetchSonglist(concert)" @click="openSonglistModal(concert)">
             <i class="fas fa-music" aria-hidden="true"></i> {{ currentData.buttons.songlist }}
           </button>
           <button v-if="concert.video" class="video-btn" :data-video-id="concert.video" :data-video-title="concert.artist + ' - ' + concert.concertName" @click="openVideoModal(concert.video, concert.artist + ' - ' + concert.concertName)">

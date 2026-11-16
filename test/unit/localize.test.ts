@@ -48,6 +48,7 @@ function buildLocalizedConcert(overrides: Partial<LocalizedConcert> = {}): Local
       { name: { 'zh-CN': '为爱而生', en: 'Born to Love' }, link: 'https://example.com' },
       { name: { 'zh-CN': '温柔', en: 'Tenderness' }, link: null }
     ],
+    hasSonglist: true,
     ...overrides
   }
 }

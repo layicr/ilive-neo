@@ -45,7 +45,7 @@ Key principles:
 | Styling | `public/css/main.css` (hand-written utilities; Google Fonts `@import` and the legacy spinner removed), Font Awesome 6.4.0 (CDN, loaded at `bodyClose`) |
 | First paint | Full-screen book-style loader (SSR-emitted + inlined critical CSS), Nitro `render:response` dynamic HTML brotli / gzip compression, system font-stack fallback |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **28 files / 402 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **28 files / 405 cases**) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -80,7 +80,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override; localized derivation is written to a request-scoped shared snapshot (app:localized), computed once
 │   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
-│   │   ├── useSonglist.ts     # Song list modal
+│   │   ├── useSonglist.ts     # Song list modal (bodies are NOT shipped with /api/data; lazy-loaded per concert via GET /api/concerts/:id on click, cached by locale+id, prefetched on hover/focus)
 │   │   ├── useTimeline.ts     # Timeline rendering
 │   │   ├── useNavigation.ts   # Section navigation scrolling
 │   │   ├── useTicketModal.ts  # Ticket modal
@@ -90,7 +90,7 @@ ilive_neo/
 │   │   ├── useSharedState.ts  # Cross-component shared state (useState wrapper)
 │   │   ├── useCountUp.ts      # Statistic count-up (0 → target, easeOutCubic 5s, replay every 120s; SSR passes through the real value, hydration-safe)
 │   │   ├── useFriendLink.ts   # Friend links
-│   │   ├── useGuestbook.ts    # Guestbook (paginated list / post message / post reply / card·list view)
+│   │   ├── useGuestbook.ts    # Guestbook (paginated list / first·prev·next·last page / post message·reply / card·list view; paging keeps the old list and scrolls back to the section top)
 │   │   └── useAppError.ts     # Global error handling + Toast
 │   ├── plugins/
 │   │   └── statis.client.ts   # Third-party analytics injection (Baidu/GA/51.la, client-side plugin)
@@ -114,9 +114,9 @@ ilive_neo/
 │   └── sitemap.xml            # Sitemap (currently only the default-language homepage; multilingual hreflang is emitted by page useHead)
 ├── server/                    # Nitro server-side
 │   ├── api/
-│   │   ├── data.get.ts        # GET /api/data: aggregation (concerts/cities/wishes/stats/seo/friendLinks + likes)
+│   │   ├── data.get.ts        # GET /api/data: aggregation (concerts/cities/wishes/stats/seo/friendLinks + likes; songlist bodies excluded, only a hasSonglist flag)
 │   │   ├── like.post.ts       # POST /api/like (like/unlike a concert, deduped by IP)
-│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id (single concert details + likes/liked)
+│   │   ├── concerts/[id].get.ts  # GET /api/concerts/:id (single concert details + tags/images/songlist + likes/liked; the sole on-demand body source for the songlist modal)
 │   │   ├── guestbook.get.ts   # GET /api/guestbook (paginated approved messages + their replies)
 │   │   ├── guestbook.post.ts  # POST /api/guestbook (post a message, auto-approved)
 │   │   └── guestbook/reply.post.ts  # POST /api/guestbook/reply (post a reply, validates the parent message)
@@ -129,7 +129,7 @@ ilive_neo/
 │   │   ├── seo.ts             # SEO_I18N_KEYS / SEO_FALLBACK / fetchSiteSeo (DB-first + code fallback)
 │   │   ├── friendLinks.ts     # Friend link mapping (with href protocol allow-list sanitizeHref)
 │   │   ├── concertLikes.ts    # Like read/write (toggle inside a transaction + COUNT(*) self-healing recompute of the denormalized column) + getClientIp (per-IP dedupe, togglable)
-│   │   ├── guestbook.ts       # Message/reply read/write (approved only; parent validation; batched IN replies, no N+1)
+│   │   ├── guestbook.ts       # Message/reply read/write (approved only; replies validated atomically via INSERT...SELECT...WHERE EXISTS; batched IN replies, no N+1)
 │   │   ├── ua.ts              # Server-side UA parsing (browser / OS)
 │   │   ├── rateLimit.ts       # Per-IP in-memory rate limiter (shared by likes and guestbook writes)
 │   │   ├── locales.ts         # Locale definitions (LOCALES)
@@ -144,7 +144,7 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (28 files / 402 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
+│   ├── unit/                  # Vitest unit tests (28 files / 405 cases; incl. useBookLoader / htmlCompression / serializeJsonLd / firstSentence)
 │   ├── e2e/                   # Playwright end-to-end tests (10 suites / 69 cases, desktop/mobile projects + fixture DB seed)
 │   │   ├── book-loader.spec.ts   # Loader copy / catalog / theme first sentence / fade-out / narrow viewport
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s throttling, critical path, noscript & HTML compression semantics
@@ -198,11 +198,11 @@ Key points:
 
 ### 4.2 Server-Side Data Layer
 
-- `GET /api/data` (`server/api/data.get.ts`): **Single-endpoint aggregation**, returns `{ concerts, cities, wishes, stats }` in one response. City concert counts reuse the same concerts data via `computeCityConcertCounts`, eliminating the original multi-endpoint redundant full-table queries.
+- `GET /api/data` (`server/api/data.get.ts`): **Single-endpoint aggregation**, returns `{ concerts, cities, wishes, stats }` in one response. City concert counts reuse the same concerts data via `computeCityConcertCounts`, eliminating the original multi-endpoint redundant full-table queries. **Songlist bodies are NOT shipped with this endpoint** — `fetchAllConcerts` is called with `includeSonglist: false` and fills only a `hasSonglist` boolean via a single `SELECT DISTINCT concert_id` (drives the songlist button visibility); bodies are lazy-loaded by the frontend through `GET /api/concerts/:id` on click (see section 8).
 - **Two-layer caching + response cache policy**: the inner `defineCachedEventHandler` (1h SWR in production) emits only request-agnostic shared data; the outer, non-cached layer merges `liked` per IP. Two things matter:
   1. The inner layer writes the cache entry's own `cache-control` (`s-maxage=3600`) onto the very same event response, so **the outer layer must explicitly override it to `private, no-store`** — otherwise a CDN / edge / nginx would cache one visitor's per-IP `liked` state for an hour and serve it to everyone. `etag` / `last-modified` are kept so conditional requests still work.
   2. On a conditional request (`If-None-Match` / `If-Modified-Since`), Nitro writes 304 itself, ends the response and returns **`undefined`** to the caller, so the outer layer must null-check before dereferencing (otherwise it throws a `TypeError` in production; dev uses the uncached branch and never reproduces it).
-- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist: { zh, en, 'zh-Hant' }`, `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`); `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
+- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist: { zh, en, 'zh-Hant' }`, `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`); with `includeSonglist: false` it skips songlist bodies and fills `hasSonglist` from a DISTINCT query; `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
 - Frontend `useData.ts`'s `pickLocale` / `localizeConcert` **selects single-language fields** from multilingual structures based on `currentLanguage` (e.g., `artist: "Mayday"`); when the target language is missing it falls back via `requested language → zh → en` (`app/utils/index.ts`, pure functions, directly unit-testable).
 
 ```
@@ -215,7 +215,7 @@ useAsyncData('app-data') → GET /api/data
 localizedConcerts (computed, selects single language by currentLanguage)
 ```
 
-- Guestbook (`server/lib/guestbook.ts`): two tables — `guestbook` (messages) + `guestbook_reply` (replies). Writes set `is_approved=1` (auto-approved); a reply first validates that its parent message exists and is approved (otherwise returns `null` → HTTP 404). Reads return only approved content, and this page's replies are fetched in a single `IN (...)` batch (no N+1). Emails are stored but never returned; browser/OS/IP are collected server-side (`ua.ts` / `getClientIp`).
+- Guestbook (`server/lib/guestbook.ts`): two tables — `guestbook` (messages) + `guestbook_reply` (replies). Writes set `is_approved=1` (auto-approved); a reply validates its parent message via a **single atomic `INSERT ... SELECT ... WHERE EXISTS`** (no gap between validation and insert, no orphan rows; failure returns `null` → HTTP 404) and the write endpoints read back the auto-increment id from `ResultSet.lastInsertRowid` (one round-trip). Reads return only approved content, and this page's replies are fetched in a single `IN (...)` batch (no N+1). Emails are stored but never returned; browser/OS/IP are collected server-side (`ua.ts` / `getClientIp`).
 - `server/lib/turso.ts`: `getTursoClient()` lazily creates a global singleton client. Auto-switches based on `runtimeConfig.turso.databaseUrl`:
   - `libsql://xxx.turso.io` → Remote Turso (production/online, requires `NUXT_TURSO_AUTH_TOKEN`)
   - `file:./public/data/data.db` → Local SQLite (development fallback)
@@ -349,7 +349,7 @@ npm run preview    # Preview production build
 node .output/server/index.mjs  # Start the production build directly (use PORT, e.g. $env:PORT='3100')
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 28 files / 402 cases)
+npm run test       # Run unit tests (vitest run, 28 files / 405 cases)
 npm run test:watch # Run tests in watch mode
 npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 69 cases; seeds the fixture DB and boots an isolated dev server)
 npx playwright test --list     # List cases only, to verify suite / case counts
@@ -365,8 +365,8 @@ npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.j
 
 | Method | Path | Description |
 |------|------|------|
-| GET | `/api/data` | Single-endpoint aggregation: concerts (with `likes` / `liked`) + cities + wishes + stats + SEO + friend links; optional `?lang=<locale>` returns single-locale results and the response carries a `locale` field (= requested locale, or null) |
-| GET | `/api/concerts/:id` | Single concert details (incl. tags/images/songlist and `likes` / `liked`), 400 for invalid id, 404 for not found |
+| GET | `/api/data` | Single-endpoint aggregation: concerts (with `likes` / `liked` and a `hasSonglist` flag, **no songlist bodies**) + cities + wishes + stats + SEO + friend links; optional `?lang=<locale>` returns single-locale results and the response carries a `locale` field (= requested locale, or null) |
+| GET | `/api/concerts/:id` | Single concert details (incl. tags/images/songlist and `likes` / `liked`), 400 for invalid id, 404 for not found; also the frontend songlist modal's **on-demand body source** |
 | POST | `/api/like` | Like/unlike a concert (body `{ id }`, deduped by IP, togglable); returns `{ id, likes, liked }`; 400 / 404 on errors |
 | GET | `/api/guestbook` | Paginated approved messages + their approved replies (`?page=` / `?pageSize=`, default 9, max 50) |
 | POST | `/api/guestbook` | Post a message (body `{ nickname, email, content }`, auto-approved on submit); returns `{ id, ok }`; 400 on invalid/over-length fields, 429 when rate-limited |
@@ -376,6 +376,11 @@ npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.j
 > cache, `/api/data` is split into a cached shared layer (counts included) plus a non-cached per-IP merge layer, and
 > the response header is overridden to `private, no-store`; on a conditional request the inner layer returns
 > `undefined` (Nitro already answered 304) and the outer layer returns early after a null check.
+>
+> **Lazy songlist**: `useSonglist` caches bodies by "locale + concert id"; clicking the button lazy-loads
+> `GET /api/concerts/:id?lang=xx` (the modal opens first with a loading state), and hover / focus prefetch reuses the
+> same cache and in-flight Promise (prefetch failures stay silent; a later click can retry). The first paint therefore
+> no longer ships every songlist with `/api/data` (previously 607 tri-lingual song entries).
 >
 > **`POST /api/like` writes inside an interactive transaction** (`client.transaction('write')`, i.e. `BEGIN IMMEDIATE`):
 > `DELETE → INSERT → ±1 counter update` has a read-modify-write dependency, so any failing statement rolls the whole thing back.
@@ -519,6 +524,8 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 - `concert_likes` now has an index `idx_concert_likes_ip` (speeds up per-IP like-set/count lookups). **Existing local databases** must manually run `CREATE INDEX IF NOT EXISTS idx_concert_likes_ip ON concert_likes(ip);` after the schema change (or rebuild via `npm run db:seed`, which is destructive) for it to take effect.
 - **The guestbook has write endpoints**: `POST /api/guestbook` and `POST /api/guestbook/reply` write to the database (auto-approved on submit). In local `file:` mode the database file must be writable; on Turso it requires write access.
 - The client `useData` now requests `/api/data?lang=<locale>` per current locale (key carries the locale for per-language caching). `localizedConcerts/Cities/Wishes` pass through when the server already localized, otherwise `localizeConcert` runs client-side; `counts` reads the server-precomputed `city.concertCount` in single-locale mode (no cross-locale recompute).
+- **Songlist bodies are lazy-loaded**: the list endpoint only carries the `hasSonglist` flag; `useSonglist`'s cache is keyed by "locale + id" (a locale switch refetches), failures are not cached and a later click can retry. To mark a new concert as having a songlist you only write `concert_songlist` rows — no frontend change needed, the DISTINCT-based flag follows automatically.
+- **Guestbook double-submit guard**: the publish / reply buttons in `GuestbookSection` are disabled while in-flight (a double click cannot post duplicates); paging keeps the old list (the full-wall loading shows only on the first, empty load) and disables page buttons, scrolling back to the section top on success.
 - After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
 - **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/components/StatsCards.vue` (extracted from `index.vue`); the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0). The three `useCountUp` calls must **stay in place** in that component (they own SSR pass-through and timer lifecycle).
 - **`handleError` is safe from watch / event callbacks** (the error-copy resolver is registered during setup), but never call `useAppI18n()` / `useI18n()` directly inside a callback — it throws without a component instance.

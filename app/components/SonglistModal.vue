@@ -3,7 +3,7 @@
 import { useSonglist } from '~/composables/useSonglist'
 import { useAppI18n } from '~/composables/useI18n'
 
-const { songlistOpen, activeConcert, filteredSonglist, songlistSearch, closeSonglistModal } = useSonglist()
+const { songlistOpen, songlistLoading, activeConcert, filteredSonglist, songlistSearch, closeSonglistModal } = useSonglist()
 const { currentData } = useAppI18n()
 /** vue-i18n 原始 t（参数化插值，自动导入）· raw t for parameterized messages */
 const { t } = useI18n()
@@ -22,7 +22,10 @@ const { t } = useI18n()
         </div>
       </div>
       <div class="songlist-container" id="songlistContainer">
-        <ol class="songlist-list">
+        <div v-if="songlistLoading" class="songlist-loading" role="status" aria-live="polite">
+          <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+        </div>
+        <ol v-else class="songlist-list">
           <li v-for="song in filteredSonglist" :key="song.name" class="songlist-item" :class="{ 'has-link': !!song.link }">
             <span class="songlist-item-name">{{ song.name }}</span>
             <a v-if="song.link" class="songlist-play-btn" :href="song.link" target="_blank" rel="noopener noreferrer" :aria-label="'播放: ' + song.name">

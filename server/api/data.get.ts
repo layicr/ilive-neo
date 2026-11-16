@@ -38,7 +38,9 @@ const buildShared = defineEventHandler(async (event) => {
   // SEO 设置、友情链接与业务数据并行取回，并入同一响应体（不新增 API 端点、不增加请求数）
   // Fetch SEO settings, friend links and business data in parallel and merge them into one response body (no extra endpoints, no extra requests)
   const [concertRowsRaw, cityRows, wishRows, seo, friendLinks] = await Promise.all([
-    fetchAllConcerts(client),
+    // 歌单正文改为点击时按单场懒加载，列表接口只需 hasSonglist 标记（避免首屏全量载入 607 首歌）
+    // Songlist bodies are lazy-loaded per concert on click; the list endpoint only needs the flag.
+    fetchAllConcerts(client, { includeSonglist: false }),
     client.execute('SELECT id, country_i18n, name_i18n, seq, icon FROM cities ORDER BY seq'),
     client.execute('SELECT id, content_i18n, likes, liked FROM wishes ORDER BY id DESC'),
     fetchSiteSeo(client),

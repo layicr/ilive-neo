@@ -4,7 +4,8 @@
  * @module server/lib/guestbook
  * @description `guestbook`（主留言）与 `guestbook_reply`（回复）两张表的读写封装：
  *              · 写：`createGuestbookMessage` / `createGuestbookReply` —— 提交即 `is_approved = 1`
- *                （自动通过，依用户确认的策略）；回复会校验主留言存在且已通过，避免孤立回复；
+ *                （自动通过，依用户确认的策略）；回复用单条原子 `INSERT ... SELECT ... WHERE EXISTS`
+ *                校验主留言存在且已通过，校验与插入无间隙、不产生孤立回复；
  *                浏览器/系统/UA/IP 全部由服务端采集，绝不采信前端自报。
  *              · 读：`fetchGuestbookMessages(page, pageSize)` —— 仅取 `is_approved = 1` 的主留言，
  *                按 `created_at DESC` 分页；分页后用一条 `IN (...)` 批量取本页全部已通过回复，避免 N+1。
@@ -12,9 +13,10 @@
  *              容错：读操作在接口层统一捕获异常转 5xx；本模块不依赖 Nitro 运行时（只用 @libsql/client），
  *              可被 vitest 直接单测。
  *
- *              Writes auto-approve (is_approved=1 per confirmed policy) and validate the parent for replies;
- *              browser/os/UA/IP are server-collected. Reads return only approved rows, paginated by
- *              created_at DESC, with replies fetched in one IN(...) query (no N+1).
+ *              Writes auto-approve (is_approved=1 per confirmed policy); replies validate the parent
+ *              atomically (INSERT ... SELECT ... WHERE EXISTS) so no orphan rows can slip in between
+ *              validation and insert; browser/os/UA/IP are server-collected. Reads return only approved
+ *              rows, paginated by created_at DESC, with replies fetched in one IN(...) query (no N+1).
  */
 
 import type { Client } from '@libsql/client';
@@ -84,35 +86,37 @@ interface GuestbookReplyRow {
  * @returns 新留言的自增 id · the new message's auto-increment id
  */
 export async function createGuestbookMessage(client: Client, input: GuestbookMessageInput): Promise<number> {
-  await client.execute({
+  // ResultSet 自带 lastInsertRowid，无需再发一条 SELECT last_insert_rowid()（省一次 DB 往返）
+  // ResultSet already carries lastInsertRowid; no extra round-trip needed.
+  const res = await client.execute({
     sql: `INSERT INTO guestbook (nickname, email, content, browser, os, user_agent, ip, is_approved)
           VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
     args: [input.nickname, input.email, input.content, input.browser, input.os, input.userAgent, input.ip]
   })
-  const idRes = await client.execute('SELECT last_insert_rowid() AS id')
-  return Number((idRes.rows[0] as unknown as { id: number }).id)
+  return Number(res.lastInsertRowid ?? 0)
 }
 
 /**
  * 发布回复（自动通过）· Create a reply (auto-approved)
- * @description 先校验主留言存在且已通过（`is_approved = 1`），否则返回 null 视为失败，
- *              避免向未通过/不存在的主留言挂回复。
- * @returns 新回复 id；主留言无效时返回 null · new reply id, or null when the parent is invalid
+ * @description 校验与插入合并为一条原子语句（INSERT ... SELECT ... WHERE EXISTS），
+ *              消除「校验通过后、插入前父留言被（软）删」的窗口，杜绝孤立回复；
+ *              WHERE EXISTS 未命中时插入 0 行，以 rowsAffected 判定失败返回 null。
+ *              （注意 SQLite 外键默认关闭且本项目删除为软删，CASCADE 不可依赖。）
+ * @returns 新回复 id；父留言无效时返回 null · new reply id, or null when the parent is invalid
  */
 export async function createGuestbookReply(client: Client, input: GuestbookReplyInput): Promise<number | null> {
-  const parent = await client.execute({
-    sql: 'SELECT id FROM guestbook WHERE id = ? AND is_approved = 1',
-    args: [input.guestbookId]
-  })
-  if (!parent.rows.length) return null
-
-  await client.execute({
+  const res = await client.execute({
     sql: `INSERT INTO guestbook_reply (guestbook_id, nickname, email, content, browser, os, user_agent, ip, is_approved)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    args: [input.guestbookId, input.nickname, input.email, input.content, input.browser, input.os, input.userAgent, input.ip]
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1
+          WHERE EXISTS (SELECT 1 FROM guestbook WHERE id = ? AND is_approved = 1)`,
+    args: [
+      input.guestbookId, input.nickname, input.email, input.content,
+      input.browser, input.os, input.userAgent, input.ip,
+      input.guestbookId
+    ]
   })
-  const idRes = await client.execute('SELECT last_insert_rowid() AS id')
-  return Number((idRes.rows[0] as unknown as { id: number }).id)
+  if (!res.rowsAffected) return null
+  return Number(res.lastInsertRowid ?? 0)
 }
 
 /**

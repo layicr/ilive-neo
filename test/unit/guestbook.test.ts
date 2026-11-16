@@ -53,19 +53,20 @@ function stubClient(seedMessages: any[] = [], seedReplies: any[] = []): StubClie
       const sql = typeof q === 'string' ? q : String((q as { sql: string }).sql)
       const args = (typeof q === 'string' ? [] : ((q as { args?: unknown[] }).args ?? [])) as unknown[]
 
-      if (sql.includes('last_insert_rowid')) {
-        return { rows: [{ id: seq }], rowsAffected: 0 }
-      }
-      // 先判 guestbook_reply（避免被 guestbook 前缀误匹配）· check reply first
+      // 原子 INSERT...SELECT...WHERE EXISTS：args[0]=guestbook_id、args[8]=父校验 id
+      // atomic INSERT...SELECT...WHERE EXISTS: args[0] = guestbook_id, args[8] = parent id for validation
       if (sql.startsWith('INSERT INTO guestbook_reply')) {
+        const gid = Number(args[0])
+        const parent = messages.find((m) => m.id === gid && m.is_approved === 1)
+        if (!parent) return { rows: [], rowsAffected: 0 } // WHERE EXISTS 未命中 → 插入 0 行
         seq += 1
         replies.push({
           id: seq,
-          guestbook_id: Number(args[0]), nickname: args[1], email: args[2], content: args[3],
+          guestbook_id: gid, nickname: args[1], email: args[2], content: args[3],
           browser: args[4], os: args[5], user_agent: args[6], ip: args[7],
           created_at: '2026-01-01 00:00:00', is_approved: 1 // 写接口硬编码 is_approved=1（自动通过）
         })
-        return { rows: [], rowsAffected: 1 }
+        return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(seq) }
       }
       if (sql.startsWith('INSERT INTO guestbook')) {
         seq += 1
@@ -75,12 +76,7 @@ function stubClient(seedMessages: any[] = [], seedReplies: any[] = []): StubClie
           browser: args[3], os: args[4], user_agent: args[5], ip: args[6],
           created_at: '2026-01-01 00:00:00', is_approved: 1 // 写接口硬编码 is_approved=1（自动通过）
         })
-        return { rows: [], rowsAffected: 1 }
-      }
-      if (sql.startsWith('SELECT id FROM guestbook')) {
-        const id = Number(args[0])
-        const found = messages.find((m) => m.id === id && m.is_approved === 1)
-        return { rows: found ? [{ id }] : [], rowsAffected: 0 }
+        return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(seq) }
       }
       if (sql.startsWith('SELECT COUNT')) {
         const n = messages.filter((m) => m.is_approved === 1).length
@@ -172,6 +168,16 @@ describe('createGuestbookReply — 发布回复（校验父留言 + 自动通过
       browser: null, os: null, userAgent: 'ua', ip: '1.1.1.1'
     })
     expect(rid).toBeNull()
+  })
+
+  it('父留言被软删(is_approved=2) → 返回 null（校验与插入原子，不产生孤立回复）', async () => {
+    const client = stubClient([{ id: 1, nickname: 'A', email: 'a@b.com', content: 'hi', is_approved: 2 }])
+    const rid = await createGuestbookReply(client, {
+      guestbookId: 1, nickname: 'B', content: 're',
+      browser: null, os: null, userAgent: 'ua', ip: '1.1.1.1'
+    })
+    expect(rid).toBeNull()
+    expect(client.__replies).toHaveLength(0)
   })
 })
 

@@ -124,6 +124,7 @@ export function mapConcert(
     video: has(row.video_i18n) ? parseI18n(row.video_i18n) : null,
     videoUrl: has(row.video_url_i18n) ? parseI18n(row.video_url_i18n) : null,
     songlist: songlist.map((s) => ({ name: parseI18n(s.i18n), link: s.link ?? null })),
+    hasSonglist: songlist.length > 0,
     // 点赞总数直接取 concerts.likes 冗余列；未迁移库缺列时回退 0（由迁移脚本 calibrate，接口层 fill）
     // Like total comes from the concerts.likes denormalized column; pre-migration (missing column) falls back to 0
     likes: Number(row.likes ?? 0),
@@ -178,8 +179,17 @@ export async function fetchConcert(client: Client, id: number): Promise<Localize
   return mapConcert(r, tags, images, songlist);
 }
 
-/** 全部演唱会（批量查询子表后 groupBy 组装，避免 N+1）· All concerts (batched) */
-export async function fetchAllConcerts(client: Client): Promise<LocalizedConcert[]> {
+/**
+ * 全部演唱会（批量查询子表后 groupBy 组装，避免 N+1）· All concerts (batched)
+ *
+ * @param options.includeSonglist 是否把歌单正文一并载入（列表接口传 false 以减小首屏 payload）。
+ *                                  为 false 时仍用一条 DISTINCT 查询填充 hasSonglist，保证按钮可见性不受影响。
+ */
+export async function fetchAllConcerts(
+  client: Client,
+  options: { includeSonglist?: boolean } = {}
+): Promise<LocalizedConcert[]> {
+  const includeSonglist = options.includeSonglist !== false
   const rows = (
     await client.execute(
       `SELECT ${await concertColumns(client)}
@@ -191,7 +201,6 @@ export async function fetchAllConcerts(client: Client): Promise<LocalizedConcert
 
   const tags = (await client.execute('SELECT concert_id, i18n FROM concert_tags')).rows.map((x) => x as unknown as TagRow);
   const images = (await client.execute('SELECT concert_id, url, alt_i18n FROM concert_images')).rows.map((x) => x as unknown as ImageRow);
-  const songlist = (await client.execute('SELECT concert_id, seq, i18n, link FROM concert_songlist')).rows.map((x) => x as unknown as SongRow);
 
   const byId = <T extends { concert_id: number }>(arr: T[]): Record<number, T[]> => {
     const m: Record<number, T[]> = {};
@@ -200,6 +209,18 @@ export async function fetchAllConcerts(client: Client): Promise<LocalizedConcert
   };
   const gTags = byId(tags);
   const gImages = byId(images);
+
+  if (!includeSonglist) {
+    const ids = (await client.execute('SELECT DISTINCT concert_id FROM concert_songlist')).rows
+      .map((x) => Number((x as { concert_id: number }).concert_id))
+    const idSet = new Set(ids)
+    return rows.map((r) => ({
+      ...mapConcert(r, gTags[r.id] ?? [], gImages[r.id] ?? [], []),
+      hasSonglist: idSet.has(r.id)
+    }));
+  }
+
+  const songlist = (await client.execute('SELECT concert_id, seq, i18n, link FROM concert_songlist')).rows.map((x) => x as unknown as SongRow);
   const gSongs = byId(songlist);
 
   return rows.map((r) => mapConcert(r, gTags[r.id] ?? [], gImages[r.id] ?? [], gSongs[r.id] ?? []));

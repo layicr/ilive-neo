@@ -108,8 +108,11 @@ export default {
     replySubmit: '提交回复',
     more: '更多',
     empty: '还没有留言，来做第一个留言的人吧！',
+    totalMessages: '共 {n} 条留言',
     prev: '上一页',
     next: '下一页',
+    first: '首页',
+    last: '尾页',
     required: '昵称、邮箱与内容均需填写完整',
     invalidEmail: '请输入正确的邮箱地址'
   },

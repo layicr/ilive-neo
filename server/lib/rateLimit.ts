@@ -5,14 +5,14 @@
  * @description 固定窗口计数：每 `windowMs` 毫秒内同一 `key`（此处为客户端 IP）最多允许 `max` 次请求。
  *              超出则 `allowed=false`，并给出 `retryAfter`（秒）供 `429` 响应写入 `Retry-After`。
  *
- *              · 用途：给「按 IP 去重」的写接口（点赞）加一层基础节流，抑制直连部署下伪造 IP 的刷量。
+ *              · 用途：给「按 IP 去重」的写接口（点赞 / 留言板）加一层基础节流，抑制直连部署下伪造 IP 的刷量。
  *              · 内存存储：键数 ≈ 近一个窗口内出现的不同 IP 数，数组长度上限 = max，内存可控；
- *                空桶会被及时清理（见 prune）。长期运行进程下无泄漏。
+ *                过期条目在该 key 下次请求时剔除（无定时 prune，不活跃 key 的桶会驻留但单桶极小）。
  *              · Serverless 局限：Vercel / 云函数等每个实例独立内存、冷启动重置，限流仅在「单实例」内生效，
  *                跨实例不共享；如需全局精确限流应改用 Redis 等共享存储。本实现作为零依赖的基础防护，
  *                并不替代反代/CDN 层的限流。
  *
- *              · Usage: throttle write endpoints keyed by client IP (likes) to curb spoofed-IP abuse.
+ *              · Usage: throttle write endpoints keyed by client IP (likes & guestbook) to curb spoofed-IP abuse.
  *              · Memory store: key count ≈ distinct IPs in the last window, bounded per-key array; no leak.
  *              · Serverless caveat: per-instance only; use a shared store (e.g. Redis) for global limits.
  */

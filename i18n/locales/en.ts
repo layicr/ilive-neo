@@ -105,8 +105,11 @@ export default {
     replySubmit: 'Submit reply',
     more: 'More',
     empty: 'No messages yet, be the first to leave one!',
+    totalMessages: '{n} messages in total',
     prev: 'Prev',
     next: 'Next',
+    first: 'First',
+    last: 'Last',
     required: 'Nickname, email and content are all required',
     invalidEmail: 'Please enter a valid email address'
   },

@@ -174,6 +174,7 @@ export function localizeConcert(c: LocalizedConcert, locale: Locale): Concert {
     video: c.video ? pickLocale(c.video, locale) : null,
     videoUrl: c.videoUrl ? pickLocale(c.videoUrl, locale) : null,
     songlist: c.songlist.map((s) => ({ name: pickLocale(s.name, locale), link: s.link })),
+    hasSonglist: c.hasSonglist ?? c.songlist.length > 0,
     likes: c.likes ?? 0,
     liked: !!c.liked
   };

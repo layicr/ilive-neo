@@ -105,8 +105,11 @@ export default {
     replySubmit: '提交回覆',
     more: '更多',
     empty: '還沒有留言，來做第一個留言的人吧！',
+    totalMessages: '共 {n} 則留言',
     prev: '上一頁',
     next: '下一頁',
+    first: '首頁',
+    last: '尾頁',
     required: '暱稱、郵箱與內容均需填寫完整',
     invalidEmail: '請輸入正確的郵箱地址'
   },

@@ -242,4 +242,29 @@ describe('fetchAllConcerts — 批量查询后内存 groupBy 装配', () => {
     expect(result[1].images).toEqual([])
     expect(result[1].songlist).toEqual([])
   })
+
+  it('includeSonglist:false 时不载入歌单正文，但仍按 DISTINCT 查询填充 hasSonglist', async () => {
+    const rows = [buildRow({ id: 1 }), buildRow({ id: 2 })]
+    const client = stubClient({
+      concerts: rows,
+      songlist: [{ concert_id: 1, seq: 1, i18n: T({ 'zh-CN': '温柔' }), link: null }]
+    })
+
+    const result = await fetchAllConcerts(client, { includeSonglist: false })
+
+    expect(result[0].songlist).toEqual([])
+    expect(result[0].hasSonglist).toBe(true)
+    expect(result[1].songlist).toEqual([])
+    expect(result[1].hasSonglist).toBe(false)
+  })
+
+  it('includeSonglist 默认true 时歌单正文与 hasSonglist 均正常装配', async () => {
+    const client = stubClient({
+      concerts: [buildRow({ id: 1 })],
+      songlist: [{ concert_id: 1, seq: 1, i18n: T({ 'zh-CN': '温柔' }), link: null }]
+    })
+    const result = await fetchAllConcerts(client)
+    expect(result[0].songlist).toHaveLength(1)
+    expect(result[0].hasSonglist).toBe(true)
+  })
 })

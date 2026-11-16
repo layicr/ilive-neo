@@ -22,27 +22,29 @@ let client: Client | null = null;
  * @description 惰性初始化，根据 runtimeConfig.turso 创建并缓存（模块级单例）。
  *              - url：远程 libsql 或本地 file（由 NUXT_TURSO_DATABASE_URL 决定）
  *              - authToken：仅远程 Turso 需要（NUXT_TURSO_AUTH_TOKEN）
- *              仅创建连接，连接本身不触发写操作；写操作仅发生在点赞接口
- *              （`POST /api/like` → `concert_likes` 的 INSERT/DELETE），
+ *              仅创建连接，连接本身不触发写操作；写操作包括点赞接口
+ *              （`POST /api/like` → `concert_likes` 的 INSERT/DELETE）与留言板
+ *              （`POST /api/guestbook` / `POST /api/guestbook/reply` → `guestbook` / `guestbook_reply`），
  *              因此生产 Turso 的 authToken 必须具备写权限。
  *              Lazily initialized from runtimeConfig.turso and cached (module-level singleton).
  *              - url: remote libsql or local file (driven by NUXT_TURSO_DATABASE_URL)
  *              - authToken: required only for remote Turso (NUXT_TURSO_AUTH_TOKEN)
- *              Creating the connection performs no writes; the only writes are the like endpoint
- *              (`POST /api/like` → INSERT/DELETE on `concert_likes`), so the production Turso
- *              authToken must have write permission.
+ *              Creating the connection performs no writes; write endpoints include likes
+ *              (`POST /api/like` → INSERT/DELETE on `concert_likes`) and the guestbook
+ *              (`POST /api/guestbook`, `POST /api/guestbook/reply` → `guestbook` / `guestbook_reply`),
+ *              so the production Turso authToken must have write permission.
  */
 export function getTursoClient(): Client {
   if (client) return client;
 
   const { url: rawUrl, token } = getDbConfig();
   const url = resolveFileUrl(rawUrl);
-  // 读写说明：除点赞接口（POST /api/like 写 concert_likes）外，其余 API 均为只读 SELECT。
+  // 读写说明：点赞与留言板接口（POST /api/like、POST /api/guestbook[/reply]）为写操作，其余 API 均为只读 SELECT。
   // 因存在写操作，不能使用只读模式；如确需只读部署，需自行改造（升级 libsql 或使用只读 VFS）。
   // 注意：本版本 @libsql/client 的 createClient Config 类型不支持 readOnly 属性，
   // 也不支持 ?mode=ro URL 参数（会抛 URL_PARAM_NOT_SUPPORTED）。
-  // Read/write note: apart from the like endpoint (POST /api/like writes concert_likes), all APIs are
-  // read-only SELECTs. Because of that write, read-only mode cannot be used; a read-only deployment
+  // Read/write note: like & guestbook endpoints write (POST /api/like, POST /api/guestbook[/reply]); the rest are
+  // read-only SELECTs. Because of those writes, read-only mode cannot be used; a read-only deployment
   // would need custom work (upgrade libsql or use a read-only VFS). This @libsql/client version's
   // createClient Config type has no readOnly option, nor is ?mode=ro supported (throws URL_PARAM_NOT_SUPPORTED).
   const authToken = token || '';

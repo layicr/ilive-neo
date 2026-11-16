@@ -13,6 +13,7 @@ const {
   messages: gbMessages,
   page: gbPage,
   totalPages: gbTotalPages,
+  total: gbTotal,
   loading: gbLoading,
   error: gbError,
   view: gbView,
@@ -21,7 +22,9 @@ const {
   postReply,
   setView,
   prevPage,
-  nextPage
+  nextPage,
+  firstPage,
+  lastPage
 } = useGuestbook()
 const { currentData } = useAppI18n()
 /** vue-i18n 原始 t（参数化插值，自动导入）· raw t */
@@ -30,6 +33,9 @@ const { t } = useI18n()
 // 主留言表单 · message form
 const gbForm = reactive({ nickname: '', email: '', content: '' })
 const gbFormError = ref('')
+// 提交中标记：双击/连点不会重复发布 · in-flight flags: no duplicate posts on rapid clicks
+const messageSubmitting = ref(false)
+const replySubmitting = ref(false)
 
 // 邮箱格式：与服务端一致的基础校验（避免依赖浏览器原生校验气泡）
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -89,6 +95,7 @@ function resolveGuestbookError(e: any): string {
 }
 
 async function submitMessage(): Promise<void> {
+  if (messageSubmitting.value) return
   gbFormError.value = ''
   const nickname = gbForm.nickname.trim()
   const email = gbForm.email.trim()
@@ -101,6 +108,7 @@ async function submitMessage(): Promise<void> {
     gbFormError.value = t('guestbook.invalidEmail')
     return
   }
+  messageSubmitting.value = true
   try {
     await postMessage({ nickname, email, content })
     gbForm.nickname = ''
@@ -109,10 +117,13 @@ async function submitMessage(): Promise<void> {
     emojiPanelOpen.value = false
   } catch (e: any) {
     gbFormError.value = resolveGuestbookError(e)
+  } finally {
+    messageSubmitting.value = false
   }
 }
 
 async function submitReply(id: number): Promise<void> {
+  if (replySubmitting.value) return
   replyError.value = ''
   const nickname = replyForm.nickname.trim()
   const email = replyForm.email.trim()
@@ -125,11 +136,14 @@ async function submitReply(id: number): Promise<void> {
     replyError.value = t('guestbook.invalidEmail')
     return
   }
+  replySubmitting.value = true
   try {
     await postReply({ guestbookId: id, nickname, email, content })
     replyOpenId.value = null
   } catch (e: any) {
     replyError.value = resolveGuestbookError(e)
+  } finally {
+    replySubmitting.value = false
   }
 }
 
@@ -151,7 +165,7 @@ onMounted(() => {
         <input class="gb-input" type="email" v-model="gbForm.email" :placeholder="currentData.guestbook.emailPlaceholder" maxlength="120" />
         <input class="gb-input gb-input-content" type="text" v-model="gbForm.content" :placeholder="currentData.guestbook.contentPlaceholder" maxlength="1000" />
         <button type="button" class="gb-emoji-btn" @click="toggleEmojiPanel('content')" aria-label="emoji">😊</button>
-        <button type="submit" class="gb-btn">{{ currentData.guestbook.publish }}</button>
+        <button type="submit" class="gb-btn" :disabled="messageSubmitting">{{ currentData.guestbook.publish }}</button>
       </div>
       <div class="gb-emoji-panel" :class="{ show: emojiPanelOpen && emojiTarget === 'content' }">
         <span class="gb-emoji-item" v-for="e in EMOJI_LIST" :key="e" @click="insertEmoji(e)">{{ e }}</span>
@@ -167,8 +181,8 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 加载 / 错误 / 空态 · loading / error / empty -->
-    <div v-if="gbLoading" class="gb-status">{{ currentData.status.loading }}</div>
+    <!-- 加载 / 错误 / 空态 · loading / error / empty（仅首屏无内容时才整墙 loading，翻页保留旧内容防闪烁）-->
+    <div v-if="gbLoading && gbMessages.length === 0" class="gb-status">{{ currentData.status.loading }}</div>
     <div v-else-if="gbError" class="gb-status gb-status-error">{{ currentData.errorMessages.loadFailed }}</div>
     <div v-else-if="gbMessages.length === 0" class="gb-empty">{{ currentData.guestbook.empty }}</div>
 
@@ -209,7 +223,7 @@ onMounted(() => {
             <input class="gb-input-sm" type="email" v-model="replyForm.email" :placeholder="currentData.guestbook.replyEmailPlaceholder" maxlength="120" />
             <input class="gb-input-sm" type="text" v-model="replyForm.content" :placeholder="currentData.guestbook.replyContentPlaceholder" maxlength="1000" />
             <button type="button" class="gb-emoji-btn" @click="toggleEmojiPanel('reply')" aria-label="emoji">😊</button>
-            <button type="button" class="gb-btn gb-btn-sm" @click="submitReply(m.id)">{{ currentData.guestbook.replySubmit }}</button>
+            <button type="button" class="gb-btn gb-btn-sm" :disabled="replySubmitting" @click="submitReply(m.id)">{{ currentData.guestbook.replySubmit }}</button>
             <p v-if="replyOpenId === m.id && replyError" class="gb-form-error gb-form-error--inline">{{ replyError }}</p>
             <div class="gb-emoji-panel" :class="{ show: emojiPanelOpen && emojiTarget === 'reply' }">
               <span class="gb-emoji-item" v-for="e in EMOJI_LIST" :key="e" @click="insertEmoji(e)">{{ e }}</span>
@@ -218,11 +232,13 @@ onMounted(() => {
         </article>
       </div>
 
-      <!-- 分页 · pagination -->
+      <!-- 分页 · pagination（加载中禁用翻页按钮；«»为首页/尾页） -->
       <div class="gb-pagination">
-        <button type="button" class="gb-btn gb-btn-ghost" @click="prevPage" :disabled="gbPage <= 1">{{ currentData.guestbook.prev }}</button>
-        <div class="gb-page-info">{{ gbPage }} / {{ gbTotalPages }}</div>
-        <button type="button" class="gb-btn" @click="nextPage" :disabled="gbPage >= gbTotalPages">{{ currentData.guestbook.next }}</button>
+        <button type="button" class="gb-btn gb-btn-ghost" @click="firstPage" :disabled="gbLoading || gbPage <= 1" :aria-label="currentData.guestbook.first" :title="currentData.guestbook.first">&lt;</button>
+        <button type="button" class="gb-btn gb-btn-ghost" @click="prevPage" :disabled="gbLoading || gbPage <= 1">{{ currentData.guestbook.prev }}</button>
+        <div class="gb-page-info">{{ gbPage }} / {{ gbTotalPages }} · {{ t('guestbook.totalMessages', { n: gbTotal }) }}</div>
+        <button type="button" class="gb-btn" @click="nextPage" :disabled="gbLoading || gbPage >= gbTotalPages">{{ currentData.guestbook.next }}</button>
+        <button type="button" class="gb-btn" @click="lastPage" :disabled="gbLoading || gbPage >= gbTotalPages" :aria-label="currentData.guestbook.last" :title="currentData.guestbook.last">&gt;</button>
       </div>
     </template>
   </section>

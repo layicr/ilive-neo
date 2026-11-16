@@ -34,6 +34,8 @@ export interface Concert {
   video: string | null
   videoUrl: string | null
   songlist: SongItem[]
+  /** 是否配有歌单（列表接口不携带歌单正文，仅用此标记控制按钮显示）· has songlist flag */
+  hasSonglist: boolean
   /** 点赞总数（由 concert_likes 统计）· total likes */
   likes: number
   /** 当前访问者是否已点赞 · whether the current visitor has liked */
@@ -59,6 +61,8 @@ export interface LocalizedConcert {
   video: LocalizedText | null
   videoUrl: LocalizedText | null
   songlist: { name: LocalizedText; link: string | null }[]
+  /** 是否配有歌单（列表接口不带正文时由 DISTINCT 查询填充）· has songlist flag */
+  hasSonglist: boolean
   /** 点赞总数（由 concert_likes 统计）· total likes */
   likes: number
   /** 当前访问者是否已点赞（按请求 IP 合并）· whether the current visitor has liked */

@@ -3087,6 +3087,15 @@ body {
     overflow-y: auto;
 }
 
+.songlist-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+    font-size: 1.8rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
 .songlist-container::-webkit-scrollbar {
     width: 8px;
 }
