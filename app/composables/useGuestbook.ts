@@ -3,7 +3,7 @@
  *
  * @module useGuestbook
  * @description 封装留言板的列表分页、发布主留言、发布回复，以及卡片/列表视图状态。
- *              状态用 `useState` 存储（SSR 安全、同源共享，避免跨请求泄漏），仅 index.vue 使用。
+ *              状态用 `useState` 存储（SSR 安全、同源共享，避免跨请求泄漏），由 GuestbookSection.vue 使用。
  *              列表接口 `GET /api/guestbook` 带 `page`/`pageSize`；写接口 `POST /api/guestbook`
  *              与 `POST /api/guestbook/reply`。新留言为最新，发布后回到第 1 页刷新；回复提交后刷新当前页。
  *

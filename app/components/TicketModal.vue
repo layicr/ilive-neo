@@ -8,6 +8,7 @@ import { onMounted, onUnmounted, watch, nextTick, ref, computed } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTicketModal } from '~/composables/useTicketModal'
+import { useKeyboard } from '~/composables/useKeyboard'
 import { useTimeline } from '~/composables/useTimeline'
 import { useAppI18n } from '~/composables/useI18n'
 import { thumbSrc, onThumbError } from '~/utils/thumb'
@@ -15,6 +16,18 @@ import { thumbSrc, onThumbError } from '~/utils/thumb'
 const { ticketModalOpen, closeTicketModal } = useTicketModal()
 const { sortedConcerts } = useTimeline()
 const { currentData } = useAppI18n()
+
+/** 场次搜索（本地态）：按艺人 / 演唱会名 / 日期 / 地点过滤 · filter tickets locally */
+const ticketSearch = ref('')
+const filteredConcerts = computed(() => {
+  const q = ticketSearch.value.trim().toLowerCase()
+  if (!q) return sortedConcerts.value
+  return sortedConcerts.value.filter((c) =>
+    [c.artist, c.concertName, c.date, c.location].some((field) =>
+      String(field ?? '').toLowerCase().includes(q)
+    )
+  )
+})
 
 const ticketContainerRef = ref<HTMLElement | null>(null)
 const ticketModalContentRef = ref<HTMLElement | null>(null)
@@ -36,7 +49,7 @@ function computeRowHeight(): void {
   // estimateSize 仅作首屏估算，真实高度由动态测量修正
   rowHeight.value = typeof window !== 'undefined' && window.innerWidth <= 768 ? 560 : 700
 }
-const rowCount = computed(() => Math.ceil(sortedConcerts.value.length / Math.max(1, columns.value)))
+const rowCount = computed(() => Math.ceil(filteredConcerts.value.length / Math.max(1, columns.value)))
 // 行间距：卡片高度随内容浮动（约 660–720px），固定 estimateSize 会导致行重叠。
 // 故交给虚拟器动态测量每行真实高度，再叠加固定的上下行间距 ROW_GAP。
 // Row gap: card height varies with content, so let the virtualizer measure each row
@@ -67,11 +80,14 @@ function setTicketRowRef(el: Element | ComponentPublicInstance | null): void {
 function rowItems(rowIndex: number): { concert: (typeof sortedConcerts.value)[number]; index: number }[] {
   const cols = Math.max(1, columns.value)
   const start = rowIndex * cols
-  return sortedConcerts.value
+  return filteredConcerts.value
     .slice(start, start + cols)
     .map((c, i) => ({ concert: c, index: start + i }))
 }
 let ticketResizeObserver: ResizeObserver | null = null
+/** ESC 关闭票根弹窗（打开时才消费按键）· close on Escape */
+const keyboard = useKeyboard()
+let unregisterEsc: (() => void) | null = null
 onMounted(() => {
   computeColumns()
   computeRowHeight()
@@ -82,21 +98,33 @@ onMounted(() => {
     })
     ticketResizeObserver.observe(ticketModalContentRef.value)
   }
+  unregisterEsc = keyboard.register('Escape', () => {
+    if (ticketModalOpen.value) { closeTicketModal(); return true }
+    return false
+  }, 20)
 })
 onUnmounted(() => {
   ticketResizeObserver?.disconnect()
+  unregisterEsc?.()
+  unregisterEsc = null
 })
 // 打开模态框时容器尺寸从 0 变化，强制重算列数/行高并刷新虚拟器
 // 注意：useVirtualizer 返回的是 ref，需通过 .value 访问实例方法
 // When the modal opens, the container resizes from 0; recompute columns/row height and refresh the virtualizer.
 watch(ticketModalOpen, (open) => {
   if (open) {
+    ticketSearch.value = ''
     nextTick(() => {
       computeColumns()
       computeRowHeight()
       virtualizer.value?.measure()
     })
   }
+})
+// 搜索词变化后回到列表顶部，避免停留在已被过滤掉的滚动位置
+watch(ticketSearch, () => {
+  virtualizer.value?.scrollToOffset(0)
+  nextTick(() => virtualizer.value?.measure())
 })
 </script>
 
@@ -106,10 +134,22 @@ watch(ticketModalOpen, (open) => {
     <div class="ticket-modal-content" ref="ticketModalContentRef">
       <div class="ticket-modal-header">
         <h2 class="ticket-modal-title" id="ticketModalTitle">{{ currentData.ticketModalTitle }}</h2>
+        <div class="ticket-search-container">
+          <input
+            type="text"
+            id="ticketSearchInput"
+            class="songlist-search-input"
+            :placeholder="currentData.ticketModalSearchPlaceholder"
+            :aria-label="currentData.ticketModalSearchPlaceholder"
+            v-model="ticketSearch"
+          >
+          <i class="fas fa-search songlist-search-icon"></i>
+        </div>
         <button class="ticket-close" id="closeTicketModal" aria-label="关闭票根展示" @click="closeTicketModal">&times;</button>
       </div>
       <div class="ticket-container" id="ticketContainer" ref="ticketContainerRef">
-        <div class="ticket-virtual-sizer" :style="{ height: virtualizer.getTotalSize() + 'px' }">
+        <div v-if="filteredConcerts.length === 0" class="ticket-empty">{{ currentData.ticketModalEmpty }}</div>
+        <div v-else class="ticket-virtual-sizer" :style="{ height: virtualizer.getTotalSize() + 'px' }">
           <div
             v-for="row in virtualizer.getVirtualItems()"
             :key="row.index"

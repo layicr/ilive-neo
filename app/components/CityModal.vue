@@ -1,12 +1,28 @@
 <script setup lang="ts">
 /** 城市列表模态 · City modal（打开态/数据/文案均为共享 composable，无需 props 透传） */
+import { onMounted, onUnmounted } from 'vue'
 import { useNavigation } from '~/composables/useNavigation'
+import { useKeyboard } from '~/composables/useKeyboard'
 import { useData } from '~/composables/useData'
 import { useAppI18n } from '~/composables/useI18n'
 
 const { cityModalOpen, closeCityModal } = useNavigation()
 const { localizedCities, counts } = useData()
 const { currentData } = useAppI18n()
+
+/** ESC 关闭城市弹窗（打开时才消费按键）· close on Escape */
+const keyboard = useKeyboard()
+let unregisterEsc: (() => void) | null = null
+onMounted(() => {
+  unregisterEsc = keyboard.register('Escape', () => {
+    if (cityModalOpen.value) { closeCityModal(); return true }
+    return false
+  }, 20)
+})
+onUnmounted(() => {
+  unregisterEsc?.()
+  unregisterEsc = null
+})
 </script>
 
 <template>

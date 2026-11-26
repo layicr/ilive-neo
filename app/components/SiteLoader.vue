@@ -502,7 +502,7 @@ onUnmounted(() => {
   line-height: 1.35; transition: background .18s ease, color .18s ease;
 }
 .bk-toc-row .bk-n { width: 20px; color: #b5a894; font-variant-numeric: tabular-nums; flex: none; }
-.bk-toc-row .bk-a { flex: none; max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-toc-row .bk-a { flex: 1 1 auto; min-width: 0; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bk-toc-row .bk-dots { flex: 1; border-bottom: 1px dotted #d8cfc0; transform: translateY(-3px); min-width: 6px; }
 .bk-toc-row .bk-d { flex: none; font-variant-numeric: tabular-nums; color: #a1958a; font-size: 10px; }
 .bk-toc-row.active { background: linear-gradient(90deg, rgba(72,81,173,.10), rgba(255,107,53,.06)); color: #4851AD; font-weight: 700; }

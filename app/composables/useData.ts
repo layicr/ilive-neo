@@ -39,7 +39,7 @@ interface UseDataReturn {
   stats: globalThis.Ref<{ totalConcerts: number; totalArtists: number; totalCities: number; totalWishes: number }>
   /** 站点级 SEO 设置（来自 /api/data 的 seo 字段；数据未就绪时为 null）· site SEO from `/api/data` */
   seo: globalThis.Ref<SiteSeoSettings | null>
-  /** 页脚友情链接（DB 优先；为空时由前端回退代码列表）· footer friend links */
+  /** 页脚友情链接（DB 优先；为空时展示空列表，无内置回退）· footer friend links */
   friendLinks: globalThis.Ref<LocalizedFriendLink[]>
   /** 点赞切换（乐观更新 + 失败回滚）· toggle a like with optimistic update */
   toggleLike: (id: number) => Promise<void>

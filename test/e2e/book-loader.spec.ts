@@ -7,6 +7,7 @@
  *  - 每页引文取自该场演唱会主题的第一句话
  *  - 数据就绪即淡出，遮罩移除后首页面可见
  *  - 窄视口下左页目录隐藏、迷你目录显示（移动端单页书册）
+ *  - 桌面目录标题放宽至 300px，较长演唱会名称不再被省略号截断
  *
  * 说明：fixture 库只有 4 场演唱会，目录行数以 /api/data 的实际数量为准，不硬编码 19。
  */
@@ -68,6 +69,29 @@ test.describe('书册加载页 · 三语与结构', () => {
         paragraph.slice(0, end.index + end[0].length).trim()
       )
     }
+  })
+
+  test('桌面目录标题放宽后较长名称完整显示', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'commit' })
+    await page.waitForSelector('.bk-toc-row')
+
+    const api = await (await page.request.get('/api/data?lang=zh-CN')).json()
+    const concert = api.data.concerts.find((c: { id: number }) => c.id === 1)
+    const label = `${concert.artist} · ${concert.concertName}`
+
+    const title = page.locator('.bk-toc-row .bk-a').filter({ hasText: label })
+    expect(await title.count(), '目录应包含该场次标题').toBe(1)
+
+    const metrics = await title.evaluate((el) => {
+      const style = getComputedStyle(el)
+      return {
+        maxWidth: style.maxWidth,
+        clientWidth: el.clientWidth,
+        scrollWidth: el.scrollWidth
+      }
+    })
+    expect(metrics.maxWidth, 'PC 目录标题宽度上限应放宽至 300px').toBe('300px')
+    expect(metrics.scrollWidth, '较长标题不应被省略号截断').toBeLessThanOrEqual(metrics.clientWidth)
   })
 
   test('数据就绪后遮罩移除，首页面可见', async ({ page }) => {

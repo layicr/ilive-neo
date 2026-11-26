@@ -96,12 +96,22 @@ test.describe('慢网与首屏关键路径', () => {
     ).toBe(true)
   })
 
-  test('HTML 压缩语义：200 页 br 可解压、404 错误页不压缩、q=0 不压缩', async ({ request }) => {
+  test('HTML 压缩语义：200 页 br 可解压、304 可复核、404 不压缩、q=0 不压缩', async ({ request }) => {
     const ok = await request.get('/', { headers: { 'Accept-Encoding': 'br' } })
     expect(ok.status()).toBe(200)
     expect(ok.headers()['content-encoding']).toBe('br')
     expect(ok.headers()['vary']).toContain('Accept-Encoding')
+    expect(ok.headers()['cache-control']).toContain('private')
+    const etag = ok.headers()['etag']
+    expect(etag, '压缩响应应带强 ETag').toBeTruthy()
     expect(await ok.text()).toContain('<html')
+
+    const revalidated = await request.get('/', {
+      headers: { 'Accept-Encoding': 'br', 'If-None-Match': etag }
+    })
+    expect(revalidated.status(), 'If-None-Match 命中应返回 304').toBe(304)
+    expect(revalidated.headers()['content-encoding'] ?? '').toBe('')
+    expect((await revalidated.body()).length).toBe(0)
 
     // 回归：Nitro 错误渲染路径会把压缩后的 Buffer 当字符串重新按 UTF-8 编码，
     // 非法字节被替换成 U+FFFD → 客户端按 br 解压报 "Decompression failed"。

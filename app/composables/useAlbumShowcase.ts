@@ -90,7 +90,7 @@ export function useAlbumShowcase() {
       // Use 600px thumbnail instead of the full-resolution poster to avoid downloading
       // all full-size images at once in the 3D carousel.
       image: thumbSrc(c.poster ?? ''),
-      // 缩略图缺失时回退原图（见 index.vue 封面 <img> 的 @error）· fallback to full poster
+      // 缩略图缺失时回退原图（见 AlbumShowcase.vue 封面 <img> 的 @error）· fallback to full poster
       rawPoster: c.poster ?? ''
     }))
   )

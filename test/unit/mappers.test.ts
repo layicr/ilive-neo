@@ -132,6 +132,34 @@ describe('mapConcert — 演唱会行 → 多语言对象映射', () => {
     })
   })
 
+  it('team 映射为多语言对象（团队成员以「、」分隔）', () => {
+    const result = mapConcert(
+      buildRow({ team_i18n: T({ 'zh-CN': '阿信、怪兽', en: 'Ashin、Monster', 'zh-Hant': '阿信、怪獸' }) }),
+      [],
+      [],
+      []
+    )
+    expect(result.team).toEqual({ 'zh-CN': '阿信、怪兽', en: 'Ashin、Monster', 'zh-Hant': '阿信、怪獸' })
+  })
+
+  it('歌单 / 视频外链经协议白名单清洗（点击型 XSS 回归）', () => {
+    const result = mapConcert(
+      buildRow({
+        video_url_i18n: T({ 'zh-CN': 'javascript:alert(1)', en: 'https://example.com/v' })
+      }),
+      [],
+      [],
+      [
+        { seq: 1, i18n: T({ 'zh-CN': '恶意链接' }), link: 'javascript:alert(1)' },
+        { seq: 2, i18n: T({ 'zh-CN': '正常链接' }), link: 'https://www.bilibili.com/video/BV1' }
+      ]
+    )
+    expect(result.songlist[0]?.link).toBeNull()
+    expect(result.songlist[1]?.link).toBe('https://www.bilibili.com/video/BV1')
+    expect(result.videoUrl?.['zh-CN']).toBe('')
+    expect(result.videoUrl?.en).toBe('https://example.com/v')
+  })
+
   it('seat / price / video 有值时为多语言对象', () => {
     const result = mapConcert(buildRow(), [], [], [])
     expect(result.seat).toEqual({ 'zh-CN': 'VIP 1排20座', en: 'VIP Row 1 Seat 20' })

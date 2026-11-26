@@ -11,8 +11,10 @@
  *
  * 安全审查修复要点：
  *  - 响应头一律大小写不敏感读写（旧实现只认小写键，Content-Length 删不掉会截断响应）
- *  - 压缩与未压缩的 HTML 统一声明 Vary；压缩后删除 etag / last-modified / content-length，
- *    避免 CDN 把 br 版本复用给仅支持 gzip 的客户端
+ *  - 压缩与未压缩的 HTML 统一声明 Vary；按归一化后的 HTML 生成强 ETag（计时字段归一化保证 304 命中），
+ *    缓存键另用原始 HTML 哈希，两条哈希刻意分离避免串用户；压缩后重算 content-length，删除 last-modified
+ *  - 按 HTML 内容哈希（不是仅 locale）缓存 br/gzip Buffer，命中时零压缩开销；
+ *    内容含按 IP 点赞态，故 Cache-Control 为 private, no-cache，避免共享缓存串用户
  *  - 只压 200 且未被编码的 text/html；解析 q 值；异步压缩不阻塞事件循环
  *
  * 开关 Switch：部署在已开启压缩的反代 / CDN 之后，设 NUXT_DISABLE_HTML_COMPRESSION=1 关闭压缩。
@@ -20,9 +22,13 @@
 import { brotliCompress, constants, gzip } from 'node:zlib'
 import { defineNitroPlugin } from '#imports'
 import {
+  computeContentKey,
+  computeETag,
+  createCompressionCache,
   deleteHeader,
   headerValue,
   isNuxtErrorRender,
+  matchETag,
   mergeVary,
   negotiateEncoding,
   resolveStatusCode,
@@ -43,6 +49,9 @@ function compressAsync(raw: Buffer, encoding: HtmlEncoding): Promise<Buffer> {
     }
   })
 }
+
+/** 按 HTML 内容哈希缓存两种编码，上限 12 个变体 · bounded cache keyed by HTML content hash */
+const compressionCache = createCompressionCache(12)
 
 export default defineNitroPlugin((nitroApp) => {
   // hook 参数：response = { body, headers, statusCode }，event 为当前 H3Event
@@ -75,14 +84,44 @@ export default defineNitroPlugin((nitroApp) => {
     ) return
 
     const raw = Buffer.from(response.body, 'utf8')
-    const encoded = await compressAsync(raw, encoding)
+    const etag = computeETag(response.body)
+    setHeader(headers, 'etag', etag)
+    // HTML 可能含按 IP 点赞态：只允许私有缓存且必须回源校验，避免 CDN 串用户
+    setHeader(headers, 'cache-control', 'private, no-cache')
+
+    // 条件请求命中则直接 304，不压缩也不写 body
+    const ifNoneMatch = headerValue(
+      event.node.req.headers as Record<string, string | undefined>,
+      'if-none-match'
+    )
+    if (matchETag(ifNoneMatch, etag)) {
+      response.statusCode = 304
+      event.node.res.statusCode = 304
+      response.body = ''
+      deleteHeader(headers, 'content-encoding')
+      deleteHeader(headers, 'content-length')
+      deleteHeader(headers, 'last-modified')
+      return
+    }
+
+    // 缓存键用原始内容哈希（保证不串 HTML 变体）；ETag 用归一化哈希（计时字段变化仍可 304）
+    const cacheKey = computeContentKey(response.body)
+    let entry = compressionCache.get(cacheKey)
+    if (!entry) {
+      const [br, gzipBuffer] = await Promise.all([
+        compressAsync(raw, 'br'),
+        compressAsync(raw, 'gzip')
+      ])
+      entry = { etag, br, gzip: gzipBuffer }
+      compressionCache.set(cacheKey, entry)
+    }
+    const encoded = encoding === 'br' ? entry.br : entry.gzip
 
     // Nitro 最终把 body 交给 res.end()，Buffer 可原样写出（已由生产构建响应实测验证）
     response.body = encoded as unknown as string
     setHeader(headers, 'content-encoding', encoding)
-    // 表示已变化：去掉共享校验头与旧长度，防止缓存串编码 / 响应被截断
-    deleteHeader(headers, 'etag')
+    setHeader(headers, 'content-length', String(encoded.length))
+    // 内容哈希已覆盖变更，last-modified 对 SSR 动态页无意义，避免过期值干扰缓存
     deleteHeader(headers, 'last-modified')
-    deleteHeader(headers, 'content-length')
   })
 })

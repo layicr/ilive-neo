@@ -17,6 +17,8 @@ export default {
   siteName: 'Layicr',
   modalTitle: '演唱會城市',
   ticketModalTitle: '演唱會足跡',
+  ticketModalSearchPlaceholder: '搜尋演唱會...',
+  ticketModalEmpty: '沒有符合的演唱會',
   rolesPrefix: '→   ',
 
   roles: {
@@ -81,6 +83,13 @@ export default {
   cityList: {
     concertsPrefix: '舉辦演唱會：',
     concertsSuffix: '場'
+  },
+
+  artistModal: {
+    title: '藝人',
+    searchPlaceholder: '搜尋藝人...',
+    empty: '沒有符合的藝人',
+    countSuffix: ' 場'
   },
 
   wishWall: {

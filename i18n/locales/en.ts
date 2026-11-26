@@ -17,6 +17,8 @@ export default {
   siteName: 'layicr',
   modalTitle: 'Tour Cities',
   ticketModalTitle: 'Concert Journey',
+  ticketModalSearchPlaceholder: 'Search concerts...',
+  ticketModalEmpty: 'No matching concerts',
   rolesPrefix: '->   ',
 
   roles: {
@@ -81,6 +83,13 @@ export default {
   cityList: {
     concertsPrefix: 'Concerts: ',
     concertsSuffix: ''
+  },
+
+  artistModal: {
+    title: 'Artists',
+    searchPlaceholder: 'Search artists...',
+    empty: 'No matching artists',
+    countSuffix: ' shows'
   },
 
   wishWall: {

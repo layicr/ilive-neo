@@ -129,7 +129,7 @@ describe('useSonglist — 点击懒加载与缓存', () => {
     expect(urls).toHaveLength(2)
   })
 
-  it('搜索过滤：filteredSonglist 按关键词即时过滤（不区分大小写）', async () => {
+  it('搜索过滤：filteredSonglist 在 150ms 防抖后按关键词过滤（不区分大小写）', async () => {
     __setFetch(async () => ({
       songlist: [
         { name: 'Rainbow', link: null },
@@ -139,9 +139,12 @@ describe('useSonglist — 点击懒加载与缓存', () => {
     const s = useSonglist()
     await s.openSonglistModal(concert(105))
     expect(s.filteredSonglist.value).toHaveLength(2)
+    const flushDebounce = () => new Promise((resolve) => setTimeout(resolve, 200))
     s.songlistSearch.value = 'rain'
+    await flushDebounce()
     expect(s.filteredSonglist.value.map((x) => x.name)).toEqual(['Rainbow'])
     s.songlistSearch.value = '不存在'
+    await flushDebounce()
     expect(s.filteredSonglist.value).toEqual([])
   })
 

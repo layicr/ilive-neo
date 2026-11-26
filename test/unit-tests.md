@@ -5,7 +5,7 @@
 > `app/utils/seo.ts`（hreflang / og:locale / 多语言描述）、`server/lib/mappers.ts`（DB 行 → 多语言结构）、
 > `nuxt.config.ts`（i18n / head / PWA 配置）。每类给出去除前端项目后仍可 `node`（vitest）运行的验证脚本。
 
-> ⚠️ 本文件为历史用例存档。**最新口径（30 文件 / 430 用例）以 [`README.md`](./README.md) 为准**；
+> ⚠️ 本文件为历史用例存档。**最新口径（31 文件 / 447 用例）以 [`README.md`](./README.md) 为准**；
 > 下列 UT-N 章节记录 2026-11-07 新增的四组纯函数测试（含 SSR HTML 压缩错误页与 JSON-LD 反逃逸回归）。
 
 ## UT-N 新增纯函数测试（2026-11-07）
@@ -14,7 +14,7 @@
 |----|------|--------|--------|
 | `firstSentence` | `unit/localize.test.ts` | 6 | 主题首句：中文 `。！？`、繁体、英文句点后接空格/大写才切分、换行优先取首段、引号内句点不误判、空值 |
 | `useBookLoader` | `unit/useBookLoader.test.ts` | 16 | 二次递减间隔 1.32s→0.32s；19 场全翻完且含淡出 <15s；**最短展示 >10s**（10s 时不得淡出、11s 才结束）；数据就绪过最短窗口即淡出；13.5s 硬上限；失败立即淡出；stop 清理；海报预取去重与 `requestIdleCallback` 补齐 |
-| `htmlCompression` | `unit/htmlCompression.test.ts` | 19 | Accept-Encoding 的 q 值 / `q=0` / `*` 通配；仅 200 + text/html；304 / 错误页 / 小体积 / 已编码 / 开关关闭跳过；大小写不敏感响应头；统一 `Vary`；`resolveStatusCode` 多来源状态解析；`isNuxtErrorRender` 识别 `/__nuxt_error` 并跳过压缩 |
+| `htmlCompression` | `unit/htmlCompression.test.ts` | 23 | Accept-Encoding 的 q 值 / `q=0` / `*` 通配；仅 200 + text/html；304 / 错误页 / 小体积 / 已编码 / 开关关闭跳过；大小写不敏感响应头；统一 `Vary`；归一化强 ETag、`matchETag` 列表/弱比较/通配符、`computeContentKey` 原始哈希与 ETag 分离、有界 LRU 缓存；`resolveStatusCode` 多来源状态解析；`isNuxtErrorRender` 识别 `/__nuxt_error` 并跳过压缩 |
 | `serializeJsonLd` | `unit/seo-utils.test.ts` | 5 | JSON-LD 反逃逸：script 闭合标签载荷不出现字面 `< >`；HTML 注释 / `&` / U+2028 / U+2029 均转义；`JSON.parse` 可逆还原；不可序列化输入退化为 `null` |
 
 ## UT-01 escapeHtml — HTML 转义
@@ -134,7 +134,7 @@
 > 被测对象：`app/utils/index.ts` 的纯函数（`pickLocale` / `localizeConcert` / `localizeCity` / `localizeWish` /
 > `computeCityConcertCounts`），对应 `app/types/index.ts` 的 `LocalizedConcert → Concert` 转换逻辑。
 > 旧 API 名 `pickText`（现为 `pickLocale`）、`BilingualConcert`（现为 `LocalizedConcert`）已不存在。
-> 已落地为 `test/unit/localize.test.ts`（29 例，2026-09-13 增补 `pickHotConcertIds`）——直接测 `app/utils`，不依赖 Nuxt 运行时（避开 `#app`）。
+> 已落地为 `test/unit/localize.test.ts`（35 例，2026-09-13 增补 `pickHotConcertIds`，后续新增 `firstSentence` 6 例）——直接测 `app/utils`，不依赖 Nuxt 运行时（避开 `#app`）。
 > 需 vitest 配置 `~`/`@` 别名解析 Nuxt 路径（见 `vitest.config.ts`）。
 
 | 用例 | 断言 |
@@ -224,7 +224,7 @@
 
 > 被测对象：`server/lib/guestbook.ts`（`createGuestbookMessage` / `createGuestbookReply` /
 > `fetchGuestbookMessages`）与 `server/lib/ua.ts`（`parseUserAgent`），用内存 Client 桩执行。
-> 已落地为 `test/unit/guestbook.test.ts`（17 例）。
+> 已落地为 `test/unit/guestbook.test.ts`（18 例）。
 
 | 分组 | 断言 |
 |------|------|
@@ -244,9 +244,9 @@ npm test          # 单次运行（vitest run）
 npm run test:watch # 监听模式
 ```
 
-> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishDate` / `formatWishTime` / `CONFIG` / `mappers` /
-> `localize` / `i18n + SEO` / `SEO 回退链` / 友情链接 / `concertLikes` / `data-get-handler` / `artistStats` 等，
-> 共 **25 文件 / 349 条**（2026-10-05：349 通过 / 0 失败）。下方「既有用例索引」（UT-01 ~ UT-16）为各文件落点清单，
+> 已落地为 `test/unit/*.test.ts`，覆盖 `safeHtml` / `formatWishDate` / `CONFIG` / `mappers` /
+> `localize` / `i18n + SEO` / `SEO 回退链` / 友情链接与外链白名单 / `concertLikes` / `data-get-handler` / `artistStats` 等，
+> 当前 **31 文件 / 447 条**（以 `README.md` 为准；2026-10-05 快照为 25 文件 / 349 条）。下方「既有用例索引」（UT-01 ~ UT-18）为各文件落点清单，
 > 旧版「10 文件 / 143 条」为 2026-09-13 历史快照，已废弃。
 > 配置见根目录 `vitest.config.ts`（node 环境，包含 `test/unit`，`~`/`@` 别名指向 `app/`）。
 > 依赖 Nuxt `useState/useAsyncData` 的 composables（UT-08 等）需 Nuxt 测试环境，暂未纳入；如需可后续引入 `@nuxt/test-utils`。
@@ -262,13 +262,13 @@ npm run test:watch # 监听模式
 - **UT-07 config**：已自动化 → `test/unit/config.test.ts`（4 例）。
 - **UT-06 debounce / throttle**：导出已移除（无引用），故作废。
 - **UT-08 composables**：需 Nuxt 环境，待 `@nuxt/test-utils` 支持。
-- **UT-09 mappers**：已自动化 → `test/unit/mappers.test.ts`（18 例，覆盖 `*_i18n` 多语言列与 `fetchAllConcerts` 装配）。
-- **UT-10 localize**：已自动化 → `test/unit/localize.test.ts`（29 例，`pickLocale` / `localizeConcert` / `localizeCity` / `localizeWish` / `computeCityConcertCounts` / `pickHotConcertIds`）。
+- **UT-09 mappers**：已自动化 → `test/unit/mappers.test.ts`（24 例，覆盖 `*_i18n` 多语言列、`fetchAllConcerts` 装配与歌单 / 视频外链白名单）。
+- **UT-10 localize**：已自动化 → `test/unit/localize.test.ts`（35 例，`pickLocale` / `localizeConcert` / `localizeCity` / `localizeWish` / `computeCityConcertCounts` / `pickHotConcertIds` / `firstSentence`）。
 - **UT-11 i18n / SEO**：已自动化 → `test/unit/i18n.test.ts`（25 例，i18n 配置 + head 清理 + hreflang / og:locale + 3 语言描述 + 源码回归）。
-- **UT-12 SEO 参数数据库化 / 回退链**：已自动化 → `test/unit/seo-settings.test.ts`（15 例，`fetchSiteSeo` DB 优先 + 空库 / 单行缺失 / 字段空值 / 查询失败的回退链 + 多语言取值 + canonical 语言前缀）。端到端对应见 `test/ui-tests.md` 的 UI-041 ~ UI-044。
-- **UT-13 友情链接**：已自动化 → `test/unit/friend-links.test.ts`（17 例，DB 优先 + 空库/查询失败回退 + 多语言取值 + 字段级兜底）。
-- **UT-14 演唱会点赞**：已自动化 → `test/unit/concertLikes.test.ts`（11 例，IP 归一化 + 点赞/取消切换 + 计数聚合 + 表缺失容错）。端到端对应见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
-- **UT-15 留言板**：已自动化 → `test/unit/guestbook.test.ts`（17 例，主留言自动通过 + UGC 原样落库 + 回复父留言校验 + 可选邮箱 + `IN (...)` 批量取回复 + UA 解析）。端到端对应见 `test/e2e/guestbook.spec.ts` 与 `test/ui-tests.md` 的 UI-049 ~ UI-056。
-- **UT-16 艺人去重统计（多歌手拆分）**：已自动化 → `test/unit/artistStats.test.ts`（10 例，覆盖 `server/lib/concerts.ts` 的 `countUniqueArtists`：`artist_i18n` 内以「、」分隔多歌手时拆分、trim、去空、跨场次去重计数；单歌手、空数组、空值/null/undefined 跳过、顿号带空格、末尾多余顿号不计入空串、不同写法视为不同歌手）。对应 `server/api/data.get.ts` 的 `stats.totalArtists` 计算。
+- **UT-12 SEO 参数数据库化 / 回退链**：已自动化 → `test/unit/seo-settings.test.ts`（19 例，`fetchSiteSeo` DB 优先 + 空库 / 单行缺失 / 字段空值 / 查询失败的回退链 + 多语言取值 + canonical 语言前缀）。端到端对应见 `test/ui-tests.md` 的 UI-041 ~ UI-044。
+- **UT-13 友情链接 / 外链白名单**：已自动化 → `test/unit/friend-links.test.ts`（21 例，DB 优先 + 空库/查询失败回退 + 多语言取值 + 字段级兜底 + `sanitizeHref` 协议白名单双层清洗）。
+- **UT-14 演唱会点赞**：已自动化 → `test/unit/concertLikes.test.ts`（31 例，IP 归一化 + 点赞/取消切换 + 计数聚合 + 表缺失容错）。端到端对应见 `test/ui-tests.md` 的 UI-045 ~ UI-048。
+- **UT-15 留言板**：已自动化 → `test/unit/guestbook.test.ts`（18 例，主留言自动通过 + UGC 原样落库 + 回复父留言校验 + 可选邮箱 + `IN (...)` 批量取回复 + UA 解析）。端到端对应见 `test/e2e/guestbook.spec.ts` 与 `test/ui-tests.md` 的 UI-049 ~ UI-056。
+- **UT-16 艺人去重统计（歌手 + 团队并集）**：已自动化 → `test/unit/artistStats.test.ts`（13 例，覆盖 `server/lib/concerts.ts` 的 `countUniqueArtists`：`artist_i18n` 与 `team_i18n` 成员均按「、」拆分、trim、去空后取并集跨场次去重；含团队并入、与歌手重复只计一次、team 缺失退化三组回归）。对应 `server/api/data.get.ts` 的 `stats.totalArtists` 计算。
 - **UT-17 歌单 composable（懒加载 / 缓存 / 两级预热）**：已自动化 → `test/unit/useSonglist.test.ts`（13 例，happy-dom）。覆盖点击 `GET /api/concerts/:id?lang=xx` 懒加载与 loading 切换、`hasSonglist=false` 不打开、按「语言 + id」缓存命中零请求与切语言重拉、失败不写缓存可重试、`filteredSonglist` 搜索过滤、`closeSonglistModal`、hover 预取与在途 Promise 去重（同 key 只发一次）、失败静默、`prefetchInitialSonglists` 前 N 场与跳过已缓存、`scheduleSonglistWarmup` 的 20s 触发/跳过已缓存/每语言每会话一次。
 - **UT-18 留言板 composable（分页 / 首页尾页 / 滚动 / 总数）**：已自动化 → `test/unit/useGuestbook.test.ts`（12 例，happy-dom）。覆盖 `fetchMessages` 分页请求与 total/totalPages/messages 更新、`total` 对外暴露（回归「共 X 条留言」为空）、过期响应丢弃（竞态）、失败 error/loading 处理、`firstPage`/`lastPage`/`prevPage`/`nextPage` 跳转与边界不请求、成功后 `scrollIntoView` 回区块顶部/失败不滚动、`postMessage` 回第 1 页、`postReply` 刷新当前页、`setView` 视图切换。

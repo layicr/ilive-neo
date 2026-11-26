@@ -592,16 +592,19 @@ body {
 .stat-card.total {
     --card-color: #00a1d6;
     --card-color-light: #00b5e2;
+    --ripple-color: rgba(0, 161, 214, 0.28);
 }
 
 .stat-card.cities {
     --card-color: #1da1f2;
     --card-color-light: #4fc3f7;
+    --ripple-color: rgba(29, 161, 242, 0.28);
 }
 
 .stat-card.artists {
     --card-color: #ff6b35;
     --card-color-light: #ff8c42;
+    --ripple-color: rgba(255, 107, 53, 0.28);
 }
 
 .stat-number {
@@ -627,6 +630,32 @@ body {
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 2px;
+}
+
+/* 统计卡按压涟漪反馈 · press + ripple feedback */
+.stat-card.cities:active,
+.stat-card.artists:active,
+.stat-card.total:active {
+    transform: translateY(-6px) scale(0.985);
+    transition-duration: 0.12s;
+}
+
+.stat-card .ripple {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ripple-color, rgba(255, 107, 53, 0.28));
+    transform: translate(-50%, -50%) scale(0);
+    animation: statRipple 0.55s ease-out forwards;
+    pointer-events: none;
+}
+
+@keyframes statRipple {
+    to {
+        transform: translate(-50%, -50%) scale(22);
+        opacity: 0;
+    }
 }
 
 @media (max-width: 768px) {
@@ -2028,6 +2057,142 @@ body {
     font-weight: 500;
 }
 
+/* ==================== 艺人列表模态 · Artist modal ==================== */
+.artist-modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.artist-modal.active {
+    display: flex;
+}
+
+.artist-modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    background: linear-gradient(135deg, rgba(26, 26, 46, 0.92) 0%, rgba(22, 33, 62, 0.92) 100%);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(72, 81, 173, 0.2);
+}
+
+.artist-modal-header {
+    background: linear-gradient(90deg, #4851ad, #637ec5);
+    padding: 20px 30px;
+    color: white;
+    text-align: center;
+}
+
+.artist-modal-title {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.artist-modal-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    color: white;
+    font-size: 32px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10;
+    transition: color 0.3s ease;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+}
+
+.artist-modal-close:hover {
+    color: #ff6b6b;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.artist-list {
+    padding: 20px 30px 30px 30px;
+    max-height: calc(85vh - 130px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.artist-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.artist-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.artist-list::-webkit-scrollbar-thumb {
+    background: rgba(72, 81, 173, 0.6);
+    border-radius: 4px;
+}
+
+.artist-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(72, 81, 173, 0.8);
+}
+
+.artist-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.artist-item:hover {
+    transform: translateX(5px);
+    background: rgba(72, 81, 173, 0.15);
+}
+
+.artist-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #e0e0e0;
+    letter-spacing: 0.3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.artist-count {
+    flex-shrink: 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+.artist-empty {
+    padding: 40px 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
+}
+
 .modal {
     display: none;
     position: fixed;
@@ -3120,7 +3285,16 @@ body {
     list-style: none;
     padding: 0;
     margin: 0;
+    position: relative;
     counter-reset: song-counter;
+}
+
+/* 虚拟行：绝对定位由 virtualizer 的 translateY 控制，间距由 gap 选项统一提供 */
+.songlist-virtual-row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
 }
 
 .songlist-item {
@@ -3128,7 +3302,7 @@ body {
     color: #e0e0e0;
     font-size: 0.95rem;
     padding: 12px 15px;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     transition: all 0.3s ease;
@@ -3273,7 +3447,7 @@ body {
         padding: 10px 12px;
         padding-left: 40px;
         font-size: 0.85rem;
-        margin-bottom: 6px;
+        margin-bottom: 0;
     }
     
     .songlist-item::before {
@@ -3409,16 +3583,30 @@ body {
     position: sticky;
     top: 0;
     z-index: 15;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "title title"
+        "search close";
     align-items: center;
-    justify-content: space-between;
+    column-gap: 16px;
+    row-gap: 12px;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
     backdrop-filter: blur(10px);
     margin: -40px -40px 30px -40px;
     padding: 20px 40px;
 }
 
+.ticket-search-container {
+    grid-area: search;
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+}
+
 .ticket-close {
+    grid-area: close;
     position: relative;
     top: 0;
     right: 0;
@@ -3444,19 +3632,26 @@ body {
 }
 
 .ticket-modal-title {
+    grid-area: title;
     text-align: center;
     color: #fff;
     font-size: 32px;
     font-weight: 700;
     letter-spacing: 2px;
     margin: 0;
-    flex: 1;
 }
 
 /* 票根容器 - 网格布局 */
 .ticket-container {
     position: relative;
     padding: 10px;
+}
+
+.ticket-empty {
+    padding: 60px 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
 }
 
 /* 虚拟滚动：sizer 撑开滚动高度，行绝对定位 */

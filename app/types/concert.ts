@@ -19,6 +19,8 @@ export interface SongItem {
 export interface Concert {
   id: number
   artist: string
+  /** 团队成员（顿号「、」分隔；歌手本人为单人时与 artist 相同）· team members */
+  team?: string
   concertName: string
   theme: string
   location: string
@@ -46,6 +48,8 @@ export interface Concert {
 export interface LocalizedConcert {
   id: number
   artist: LocalizedText
+  /** 团队列表（多语言 JSON 解析结果）· team members per locale */
+  team?: LocalizedText
   concertName: LocalizedText
   theme: LocalizedText
   location: LocalizedText

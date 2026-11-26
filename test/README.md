@@ -13,16 +13,16 @@ AIGC:
 
 > Nuxt4 + Turso 演唱会足迹站点的测试体系存档 · 单元测试（Vitest）+ 端到端测试（Playwright，桌面 / 移动双端）。
 
-最后更新：**2026-11-07**
+最后更新：**2026-11-25**
 
 ## 一、目录结构
 
 | 路径 | 说明 |
 |------|------|
-| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **30 文件 / 430 用例**（含本轮新增 `useSonglist` / `useGuestbook` 两个 composable 套件，见第五节） |
+| `unit/` | 单元 / 功能 / 安全测试源码（`*.test.ts`，由 vitest 运行），共 **31 文件 / 447 用例**（含 `useSonglist` / `useGuestbook` / `artistModal` 套件与团队列表统计回归，见第五节） |
 | `unit/*.mjs` | 手工辅助脚本：`verify-seo.mjs` / `dump-head.mjs` / `html-head.mjs`（SSR head 与 SEO 探测）、`seed-test.mjs`（本地测试数据准备） |
-| `e2e/` | 端到端测试源码（`*.spec.ts`，由 Playwright 运行），共 **10 套件 / 69 用例** |
-| `e2e/book-loader.spec.ts` | **新增** 书册加载页回归：三语文案、目录行数与年份、主题首句引文、无按钮、进度条、淡出、窄视口单页书册 |
+| `e2e/` | 端到端测试源码（`*.spec.ts`，由 Playwright 运行），共 **10 套件 / 72 用例** |
+| `e2e/book-loader.spec.ts` | **新增** 书册加载页回归：三语文案、目录行数与年份、主题首句引文、无按钮、进度条、淡出、窄视口单页书册、桌面目录标题放宽后完整显示 |
 | `e2e/slow-network.spec.ts` | **新增** 20 KB/s 慢网首屏、CSS 关键路径、noscript 兜底与 HTML 压缩语义回归（含 404 错误页不压缩） |
 | `e2e/helpers.ts` | E2E 公共辅助（首页导航、hydration 等待、错误采集、溢出检测） |
 | `e2e/fixtures/e2e-env.ts` | E2E 环境常量（测试库路径 / 端口 / baseURL 单点定义） |
@@ -47,7 +47,7 @@ AIGC:
 ## 三、运行方式
 
 ```bash
-# 单元测试（30 文件 / 430 用例）
+# 单元测试（31 文件 / 447 用例）
 npm test
 npm run test:watch            # 监听模式
 
@@ -87,9 +87,9 @@ E2E_PORT=3000 npx playwright test                # Bash
 
 ## 五、覆盖范围
 
-**单元 / 功能 / 安全（`unit/`，30 文件 430 用例）**：`safeHtml`（含 XSS 绕过专项）、`localize`（含 **新增 `firstSentence` 主题首句 6 例**）、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`guestbook`、`hotConcerts`、`friend-links`（含 `sanitizeHref` 协议白名单）、**`seo-utils`（含 `serializeJsonLd` JSON-LD 反逃逸 5 例）**、`seo-settings`、`i18n`、`config`、`formatWishDate`、`data-get-handler`、`artistStats`、`composables`、`useAppError.context`、`useCountUp`、`useTimeline`、`useData`、`useAppI18n`、**`useBookLoader`（16 例：加速翻页时间表 / 最短展示 >10s / 就绪即淡出 / 超时与失败兜底 / 清理 / 海报预取去重补齐）**、**`htmlCompression`（19 例：Accept-Encoding q 值、304/错误页、大小写响应头、统一 Vary、ETag/长度清理、部署开关，以及 `resolveStatusCode` / `isNuxtErrorRender` 错误页不压缩回归）**。
+**单元 / 功能 / 安全（`unit/`，31 文件 447 用例）**：`safeHtml`（含 XSS 绕过专项）、`localize`（含 **新增 `firstSentence` 主题首句 6 例**）、`mappers`、`parse`、`rateLimit`、`clientIp`、`db-config`、`concertLikes`、`guestbook`、`hotConcerts`、`friend-links` / 外链清洗（含 `sanitizeHref` 协议白名单，覆盖友链 + 歌单 + 视频外链）、**`seo-utils`（含 `serializeJsonLd` JSON-LD 反逃逸 5 例）**、`seo-settings`、`i18n`、`config`、`formatWishDate`、`data-get-handler`、`artistStats`（歌手 + team 并集去重）、`composables`、`useAppError.context`、`useCountUp`、`useTimeline`、`useData`、`useAppI18n`、`useSonglist`（搜索 150ms 防抖）、**`useBookLoader`（16 例：加速翻页时间表 / 最短展示 >10s / 就绪即淡出 / 超时与失败兜底 / 清理 / 海报预取去重补齐）**、**`htmlCompression`（23 例：Accept-Encoding q 值、304/错误页、大小写响应头、统一 Vary、归一化强 ETag 与 If-None-Match、原始哈希缓存键与 ETag 分离、有界 LRU 缓存、部署开关，以及 `resolveStatusCode` / `isNuxtErrorRender` 错误页不压缩回归）**。
 
-**端到端（`e2e/`，10 套件 69 用例）**：
+**端到端（`e2e/`，10 套件 72 用例）**：
 
 | 套件 | 用例数 | 主要覆盖 |
 |------|--------|----------|
@@ -99,20 +99,28 @@ E2E_PORT=3000 npx playwright test                # Bash
 | `guestbook.spec.ts` | 8 | 留言板结构、回复折叠分页、回复表单邮箱与表情、邮箱校验、UGC 文本渲染安全 |
 | `security.spec.ts` | 10 | XSS 载荷真实渲染不执行、JSON-LD 反逃逸（SSR 原始 HTML 无字面闭合标签 + 转义可逆）、外链 rel 与伪协议白名单、API 非法参数、点赞限流（用不存在的 id，零写库）、静态目录暴露面（含 `test.fail` 登记的已知缺陷） |
 | `mobile-responsive.spec.ts` | 8 | 移动视口与触摸、横向溢出、触摸交互（Pixel 5 六条 + iPhone 12 两条） |
-| `ticket-modal.spec.ts` | 4 | 票根虚拟滚动渲染、海报缩略图非 lazy、行间距无重叠、切换语言后内容仍完整且**不重播书册遮罩** |
+| `ticket-modal.spec.ts` | 6 | 票根虚拟滚动渲染、搜索过滤与空结果、Esc 关闭、海报缩略图非 lazy、行间距无重叠、切换语言后内容仍完整且**不重播书册遮罩** |
 | `p0-verify.spec.ts` | 1 | 3D 专辑封面使用 `_thumb` 缩略图且无破图 |
-| **`book-loader.spec.ts`** | **6** | **新增** 三语文案 / 目录与年份 / 主题首句 / 无按钮 / 淡出（最短展示 >10s）/ 窄视口单页书册 |
-| **`slow-network.spec.ts`** | **3** | **新增** 20 KB/s 首屏关键路径、水合前不被 CSS 兜底提前隐藏、head 无阻塞外部 CSS、noscript `<style>` 兜底、HTML 压缩语义（200 br 可解压 / 404 不压缩 / `q=0`） |
+| **`book-loader.spec.ts`** | **7** | **新增** 三语文案 / 目录与年份 / 主题首句 / 无按钮 / 淡出（最短展示 >10s）/ 窄视口单页书册 / 桌面目录标题放宽后完整显示 |
+| **`slow-network.spec.ts`** | **3** | **新增** 20 KB/s 首屏关键路径、水合前不被 CSS 兜底提前隐藏、head 无阻塞外部 CSS、noscript `<style>` 兜底、HTML 压缩语义（200 br 可解压 / 404 不压缩 / `q=0` / 强 ETag + If-None-Match→304 / `Cache-Control: private, no-cache`） |
 
 ## 六、测试报告
 
-- 最新报告：[`report/2026-09-14-测试报告.md`](./report/2026-09-14-测试报告.md)
-- 机器可读结果：`report/vitest.json`、`report/e2e-playwright.json`
-- HTML 报告：`report/e2e-html/`（`npx playwright show-report test/report/e2e-html`）
+- 机器可读结果：`report/e2e-playwright.json`（Playwright JSON）；单元测试以终端输出为准，当前无 `report/vitest.json`
+- 历史报告：`report/2026-09-14-测试报告.md` 已不在仓库；最近执行记录见本文件第六节
+- 交互视觉稿：`report/artist-card-click-mockup.png`
 - 失败现场：`report/e2e-artifacts/`（trace / 截图 / 视频，仅失败时保留）
 
 > 产物目录累积到数百个文件后，Playwright 启动时的清空动作可能触发 IDE 的批量删除保护；
 > 出现 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 时，先删除 `report/e2e-artifacts` 与 `report/e2e-html` 再跑。
+
+**2026-11-26 增量执行结果**：`npm test` → **31 文件 / 447 用例全通过**（团队列表字段映射 + 歌手/团队并集去重 + 弹窗场数按场次去重 + ETag/缓存 + 外链白名单回归）；生产库已执行 `team_i18n` 迁移，21 场全部填充。艺人弹窗场数重复已修复。
+
+**2026-11-26 增量执行结果（性能/安全修复）**：歌单弹窗改为按行虚拟滚动 + 150ms 搜索防抖；HTML 压缩改为按原始内容哈希缓存 + 归一化 ETag（支持 `If-None-Match` → 304，缓存键与 ETag 分离避免串用户）；歌单 / 视频外链服务端 + 客户端双重协议白名单。E2E 定向：歌单模态 1/1、HTML 压缩语义 1/1；单测 447/447。
+
+**2026-11-26 全量执行结果（注释与测试文档同步后）**：`npm test` → **31 文件 / 447 用例全通过**；`npx playwright test --reporter=line` → **10 套件 / 72 用例全通过（desktop 64 + mobile 8，0 失败，耗时 15.4m）**。`npm run build` 本轮未完成验证：首次在 Nitro 清空 `.output`（890 文件）时触发 IDE `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 守卫；改用独立输出目录重试时命令因空闲超时被取消。前次构建（2026-11-16）成功，本轮仅注释/文档变更，无生产逻辑改动。
+
+**2026-11-25 增量执行结果**：`npx playwright test test/e2e/book-loader.spec.ts --project=chromium-desktop --reporter=line` → **7/7 通过**（新增桌面目录标题宽度/不截断回归 1 例）；`npx playwright test test/e2e/ticket-modal.spec.ts --project=chromium-desktop --reporter=line` → **5/5 通过**（新增场次搜索过滤 / 空结果回归 1 例）；ESC 关闭回归 `npx playwright test test/e2e/ticket-modal.spec.ts test/e2e/ue-interaction.spec.ts --project=chromium-desktop --grep "Esc|城市弹窗"` → **3/3 通过**；票根渲染 / 搜索用例去掉硬编码 4 场，改为动态基准，`--grep "从「场次」|搜索框按艺人"` → **2/2 通过**。本轮只跑上述用例，未执行全量。
 
 **2026-11-16 全量执行结果**：`npm test` → **30 文件 / 430 用例全通过**（本轮新增歌单与留言板两个 composable 套件 25 例，覆盖懒加载/缓存/预取速热、分页首页尾页/滚动/竞态/总数）；`npx playwright test --reporter=line` → **10 套件 / 69 用例全通过（0 失败）**；`npm run build` 成功。生产服务实测：`/`、`/en` 的 `br` 响应可正常解压（约 47/49 KB），404 错误页保持明文（不压缩），`q=0` 不压缩由 e2e 压缩语义用例验证；JSON-LD 载荷以 `\u` 转义输出、SSR HTML 无字面 script 闭合标签，`JSON.parse` 仍可还原原文。书册加载页最短展示 11s（>10s）与 SPA 语言切换不重播遮罩已由单测 / E2E 固化。
 
@@ -125,11 +133,11 @@ E2E_PORT=3000 npx playwright test                # Bash
 |------|------|------|
 | 高危 H1 | `public/data/data.db` 位于静态目录可被匿名下载（含留言者邮箱 / IP / UA）；`compressPublicAssets` 还会生成 `.br/.gz` 副本 | 未修复（需决策：DB 移出 `public/` + `/data/**` 404） |
 | 高危 H2 | JSON-LD 曾直接用 `JSON.stringify` 注入 `script.innerHTML`，DB 数据里的 script 闭合标签可提前结束 ld+json 块 → SSR 存储型 XSS | **已加固**：`serializeJsonLd()` 显式把 `< > &` / U+2028 / U+2029 写成 JSON `\u` 转义（可逆、数据保真）；生产实测无字面闭合标签、JSON 可解析。原先仅靠 unhead 隐式转义，不作为安全边界 |
-| 高危 H3 | SSR HTML 压缩曾共用 ETag / 未统一 `Vary`，CDN 可能串编码 | **本轮已修复**（统一 Vary、删除 ETag/Last-Modified/Content-Length、大小写不敏感响应头） |
+| 高危 H3 | SSR HTML 压缩曾共用 ETag / 未统一 `Vary`，CDN 可能串编码 | **本轮已修复**（统一 Vary、归一化强 ETag + If-None-Match→304、重算 content-length、删除 last-modified、大小写不敏感响应头、`Cache-Control: private, no-cache`） |
 | 中危 M1 | 写接口（留言 / 回复 / 点赞）无 CSRF / Origin 校验，UGC 提交即 `is_approved=1` | 未修复 |
 | 中危 M2 | 正常页面缺少 CSP / HSTS / nosniff / X-Frame-Options 等安全响应头（生产实测仅 404 错误页带 Nitro 默认头） | 未修复 |
 | 中危 M3 | 限流为进程内 Map，多实例/冷启动可绕过；XFF 最左值可伪造 | 未修复 |
-| 中危 M6 | 压缩插件旧实现的类型契约、q 值、同步阻塞、状态码边界；404 错误页被压缩导致 `br` 流损坏 | **本轮已修复**（异步压缩、q 值协商、仅 200、跳过 `/__nuxt_error` 内部错误渲染、纯函数单测 19 例 + e2e 压缩语义回归） |
+| 中危 M6 | 压缩插件旧实现的类型契约、q 值、同步阻塞、状态码边界；404 错误页被压缩导致 `br` 流损坏 | **本轮已修复**（异步压缩、q 值协商、仅 200、跳过 `/__nuxt_error` 内部错误渲染、纯函数单测 23 例 + e2e 压缩语义回归） |
 | 低危 L3 | `noscript.innerHTML` 曾是裸 CSS 文本，未包 `<style>` 导致无 JS 兜底不生效 | **本轮已修复**（`slow-network.spec.ts` 回归） |
 | 低危 L1 | `GET /api/guestbook` 的 `page` 无上限，大 OFFSET 可致慢查询 | 未修复 |
 

@@ -17,6 +17,8 @@ export default {
   siteName: 'Layicr',
   modalTitle: '演唱会城市',
   ticketModalTitle: '演唱会足迹',
+  ticketModalSearchPlaceholder: '搜索演唱会...',
+  ticketModalEmpty: '没有匹配的演唱会',
   rolesPrefix: '→   ',
 
   roles: {
@@ -84,6 +86,13 @@ export default {
   cityList: {
     concertsPrefix: '举办演唱会：',
     concertsSuffix: '场'
+  },
+
+  artistModal: {
+    title: '艺人',
+    searchPlaceholder: '搜索艺人...',
+    empty: '没有匹配的艺人',
+    countSuffix: ' 场'
   },
 
   wishWall: {

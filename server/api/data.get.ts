@@ -32,6 +32,13 @@ import type { CityRow } from '../lib/mappers'
 import { localizeConcert, localizeCity, localizeWish, computeCityConcertCounts } from '../../app/utils'
 import type { Locale, LocalizedCity, LocalizedWish, AppData, ApiResponse } from '../../app/types'
 
+/**
+ * 进程级固定的 generatedAt · process-stable generation timestamp
+ * @description 每次请求取 new Date() 会让 SSR HTML 的 __NUXT_DATA__ 每次都变，强 ETag 永远无法命中 304；
+ *              这里在进程启动时取一次，作为构建/启动代际标识。按 IP 的 liked 状态仍单独合并，不受影响。
+ */
+const SHARED_GENERATED_AT = new Date().toISOString()
+
 const buildShared = defineEventHandler(async (event) => {
   const client = getTursoClient()
 
@@ -69,8 +76,9 @@ const buildShared = defineEventHandler(async (event) => {
 
   const stats = {
     totalConcerts: concertRows.length,
-    // 一个 artist_i18n 内可能含多个歌手，以「、」分隔，统计时拆分后去重计数
-    // A single artist_i18n may list multiple artists separated by "、"; split before counting unique
+    // artist_i18n（歌手）与 team_i18n（团队成员）都可能以「、」包含多个名字；
+    // 两者拆分、trim、去空后取并集去重计数（歌手 + 团队同口径）。
+    // Both artist_i18n and team_i18n may list multiple names separated by "、"; union + dedupe before counting.
     totalArtists: countUniqueArtists(concertRows),
     totalCities: cities.length,
     totalWishes: wishes.length
@@ -100,7 +108,7 @@ const buildShared = defineEventHandler(async (event) => {
     seo,
     friendLinks,
     locale,
-    generatedAt: new Date().toISOString()
+    generatedAt: SHARED_GENERATED_AT
   } as unknown as AppData
 
   return { data, generatedAt: data.generatedAt } as ApiResponse

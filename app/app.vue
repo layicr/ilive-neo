@@ -27,9 +27,8 @@ const siteUrl = computed(() =>
 
 /**
  * 输出 htmlAttrs.lang / hreflang / og:locale · Emit htmlAttrs.lang / hreflang / og:locale
- * @description hreflang link 使用稳定 key，与 app/pages/index.vue 中同名 key 合并去重，
- *              避免同一 hreflang 在页面中重复输出。
- *              hreflang links use stable keys merged with same-key links from index.vue to avoid duplicates.
+ * @description hreflang link 使用稳定 key，统一在本组件发射，页面级不再重复输出。
+ *              hreflang links use stable keys emitted only here, without page-level duplicates.
  */
 useHead(() => {
   const current = String(locale.value)

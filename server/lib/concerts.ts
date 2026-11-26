@@ -14,12 +14,15 @@ import type { Client } from '@libsql/client';
 import type { LocalizedText, LocalizedTags, LocalizedConcert } from '../../app/types';
 import { LOCALES } from './locales';
 import { parseI18n, parseTags, has } from './parse';
+import { sanitizeHref, sanitizeLocalizedHref } from '../../app/utils/friendLinks';
 
 /* ---------- 行类型（DB 列，宽松断言）· Row types (DB columns, loose casts) ---------- */
 
 export interface ConcertRow {
   id: number;
   artist_i18n: string;
+  /** 团队列表（多语言 JSON，成员以「、」分隔）；未迁移库可能缺列 · team members JSON (optional pre-migration) */
+  team_i18n?: string | null;
   concert_name_i18n: string;
   theme_i18n: string | null;
   country_i18n: string | null;
@@ -62,21 +65,27 @@ function joinLocation(row: ConcertRow): LocalizedText {
  *
  * @description `artist_i18n` 内可能包含多个歌手，以中文顿号「、」分隔（如「五月天、任贤齐」）。
  *              统计「艺人总数」时，需先按「、」拆分、trim、去空，再对全部场次的歌手做去重计数。
- *              `artist` 为已解析的多语言对象（由 `parseI18n` 产出）。
+ *              团队列表 `team` 同样按「、」拆分后并入集合（歌手 + 团队成员去重）。
+ *              `artist` / `team` 为已解析的多语言对象（由 `parseI18n` 产出）。
  *
- *              Count unique artists (zh-CN). A single `artist_i18n` may list several artists separated
- *              by the Chinese enumeration comma "、"; split on it (trim + drop empties) and de-duplicate
- *              across all concerts before counting. `artist` is the parsed i18n object from `parseI18n`.
+ *              Count unique artists (zh-CN): union of `artist` and `team` members, split on "、",
+ *              trimmed, de-duplicated across all concerts.
  */
-export function countUniqueArtists(concerts: { artist: { 'zh-CN'?: string } }[]): number {
+export function countUniqueArtists(concerts: {
+  artist: { 'zh-CN'?: string }
+  team?: { 'zh-CN'?: string }
+}[]): number {
   const set = new Set<string>()
-  for (const c of concerts) {
-    const raw = c.artist?.['zh-CN']
-    if (!raw) continue
+  const add = (raw: string | undefined | null) => {
+    if (!raw) return
     for (const name of String(raw).split('、')) {
       const trimmed = name.trim()
       if (trimmed) set.add(trimmed)
     }
+  }
+  for (const c of concerts) {
+    add(c.artist?.['zh-CN'])
+    add(c.team?.['zh-CN'])
   }
   return set.size
 }
@@ -109,6 +118,7 @@ export function mapConcert(
   return {
     id: row.id,
     artist: parseI18n(row.artist_i18n),
+    team: parseI18n(row.team_i18n),
     concertName: parseI18n(row.concert_name_i18n),
     theme: parseI18n(row.theme_i18n),
     location: joinLocation(row),
@@ -122,8 +132,11 @@ export function mapConcert(
     description: parseI18n(row.description_i18n),
     images: images.map((img) => ({ src: img.url, alt: parseI18n(img.alt_i18n) })),
     video: has(row.video_i18n) ? parseI18n(row.video_i18n) : null,
-    videoUrl: has(row.video_url_i18n) ? parseI18n(row.video_url_i18n) : null,
-    songlist: songlist.map((s) => ({ name: parseI18n(s.i18n), link: s.link ?? null })),
+    videoUrl: has(row.video_url_i18n) ? sanitizeLocalizedHref(parseI18n(row.video_url_i18n)) : null,
+    songlist: songlist.map((s) => ({
+      name: parseI18n(s.i18n),
+      link: sanitizeHref(s.link ?? null) || null
+    })),
     hasSonglist: songlist.length > 0,
     // 点赞总数直接取 concerts.likes 冗余列；未迁移库缺列时回退 0（由迁移脚本 calibrate，接口层 fill）
     // Like total comes from the concerts.likes denormalized column; pre-migration (missing column) falls back to 0
@@ -155,10 +168,28 @@ async function supportsLikesColumn(client: Client): Promise<boolean> {
   return likesColumnSupported
 }
 
-/** 演唱会 SELECT 列（已迁移则含 likes 冗余列）· concert SELECT columns (includes `likes` when migrated) */
+/** 探测团队列表列是否存在（兼容未迁移库）· Detect optional `team_i18n` column */
+let teamColumnProbed = false
+let teamColumnSupported = false
+async function supportsTeamColumn(client: Client): Promise<boolean> {
+  if (teamColumnProbed) return teamColumnSupported
+  try {
+    await client.execute('SELECT team_i18n FROM concerts LIMIT 1')
+    teamColumnSupported = true
+  } catch {
+    teamColumnSupported = false
+  }
+  teamColumnProbed = true
+  return teamColumnSupported
+}
+
+/** 演唱会 SELECT 列（按库迁移情况补齐可选列）· concert SELECT columns (optional columns when migrated) */
 async function concertColumns(client: Client): Promise<string> {
   const base = 'id, artist_i18n, concert_name_i18n, theme_i18n, country_i18n, province_i18n, city_i18n, venue_i18n, seat_i18n, price_i18n, date, time, poster, description_i18n, video_i18n, video_url_i18n'
-  return (await supportsLikesColumn(client)) ? `${base}, likes` : base
+  let cols = base
+  if (await supportsTeamColumn(client)) cols += ', team_i18n'
+  if (await supportsLikesColumn(client)) cols += ', likes'
+  return cols
 }
 
 /** 单场演唱会（含 tags/images/songlist）· Single concert with relations */

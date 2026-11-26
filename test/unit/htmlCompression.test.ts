@@ -1,7 +1,8 @@
 /**
  * SSR HTML 压缩纯逻辑单测 · htmlCompression helpers
- * @description 覆盖安全审查中针对 server/plugins/html-compression.ts 的实现缺陷：
- *              q 值协商、304/错误页、大小写响应头、统一 Vary、ETag/长度清理、部署开关。
+ * @description 覆盖安全审查中针对 server/plugins/html-compression.ts 的实现边界：
+ *              q 值协商、304/错误页、大小写响应头、统一 Vary、归一化强 ETag、
+ *              If-None-Match 条件请求、原始哈希缓存键与 ETag 分离、有界 LRU 缓存、部署开关。
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -13,7 +14,11 @@ import {
   mergeVary,
   headerValue,
   deleteHeader,
-  setHeader
+  setHeader,
+  computeETag,
+  computeContentKey,
+  matchETag,
+  createCompressionCache
 } from '../../server/lib/htmlCompression'
 
 describe('negotiateEncoding · Accept-Encoding 协商', () => {
@@ -153,5 +158,50 @@ describe('响应头工具 · 大小写不敏感（H3/M6 回归）', () => {
     setHeader(headers, 'content-encoding', 'br')
     expect(headerValue(headers, 'Content-Encoding')).toBe('br')
     expect(Object.keys(headers).filter((k) => k.toLowerCase() === 'content-encoding')).toHaveLength(1)
+  })
+})
+
+describe('computeETag / matchETag · 条件请求', () => {
+  it('相同 HTML 得到同一强 ETag，内容变化后 ETag 变化', () => {
+    const html = '<html>hello</html>'
+    expect(computeETag(html)).toBe(computeETag(html))
+    expect(computeETag(html)).not.toBe(computeETag('<html>world</html>'))
+    expect(computeETag(html)).toMatch(/^"[0-9a-f]{24}"$/)
+  })
+
+  it('忽略 SSR 计时字段与毫秒时间戳，但原始数据变化仍改变缓存键', () => {
+    const a = '<html>{"timeSsrStart":147},1795624665012</html>'
+    const b = '<html>{"timeSsrStart":147},1795624665102</html>'
+    expect(computeETag(a)).toBe(computeETag(b))
+    expect(computeContentKey(a)).not.toBe(computeContentKey(b))
+    expect(computeETag('<html>changed</html>')).not.toBe(computeETag(a))
+  })
+
+  it('If-None-Match 支持列表、弱比较与通配符', () => {
+    const etag = '"abc123"'
+    expect(matchETag('"abc123"', etag)).toBe(true)
+    expect(matchETag('W/"abc123", "other"', etag)).toBe(true)
+    expect(matchETag('*', etag)).toBe(true)
+    expect(matchETag('"different"', etag)).toBe(false)
+    expect(matchETag(undefined, etag)).toBe(false)
+  })
+})
+
+describe('createCompressionCache · 有界缓存', () => {
+  it('命中返回同一条目，超出上限淘汰最久未访问项', () => {
+    const cache = createCompressionCache(2)
+    const entry = (id: string) => ({
+      etag: id,
+      br: Buffer.from(`br-${id}`),
+      gzip: Buffer.from(`gz-${id}`)
+    })
+    cache.set('a', entry('a'))
+    cache.set('b', entry('b'))
+    expect(cache.get('a')?.etag).toBe('a')
+    cache.set('c', entry('c'))
+    expect(cache.size).toBe(2)
+    expect(cache.get('b')).toBeUndefined()
+    expect(cache.get('a')?.etag).toBe('a')
+    expect(cache.get('c')?.etag).toBe('c')
   })
 })

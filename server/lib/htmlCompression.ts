@@ -6,7 +6,10 @@
  *              q 值、大小写响应头、304/错误页、ETag/Vary 语义等边界，插件只负责 I/O。
  *
  *              Pure, testable helpers used by server/plugins/html-compression.ts.
+ *              另提供强 ETag（归一化计时字段后的哈希）、条件请求匹配与 LRU 压缩缓存
+ *              （缓存键用原始 HTML 哈希而非仅 locale，避免把带按 IP 点赞态的 HTML 复用到其他访客）。
  */
+import { createHash } from 'node:crypto'
 
 /** 支持的编码 · supported content encodings */
 export type HtmlEncoding = 'br' | 'gzip'
@@ -142,4 +145,75 @@ export function setHeader(
 ): void {
   deleteHeader(headers, name)
   headers[name] = value
+}
+
+/**
+ * 由原始 HTML 计算压缩缓存键（内容哈希）· compute cache key from raw HTML
+ * @description 仅用于 LRU 缓存键，避免仅按 locale 缓存把不同用户的点赞态串台；
+ *              强 ETag 由 computeETag() 对归一化后的 HTML 单独计算，两者刻意分离：
+ *              原始哈希保证缓存精确命中，归一化哈希保证 304 不被计时字段击穿。
+ */
+export function computeContentKey(raw: string): string {
+  return createHash('sha256').update(raw, 'utf8').digest('hex')
+}
+
+/** 归一化 SSR 中天然每次变化的计时字段（devtools / 性能埋点），避免 ETag 永远不命中 */
+function normalizeVolatile(raw: string): string {
+  return raw
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<ISO8601>')
+    .replace(/\b1\d{12}\b/g, '<EPOCH_MS>')
+}
+
+export function computeETag(raw: string): string {
+  const hash = createHash('sha256').update(normalizeVolatile(raw), 'utf8').digest('hex').slice(0, 24)
+  return `"${hash}"`
+}
+
+/**
+ * If-None-Match 匹配（弱比较，支持列表与 `*`）· conditional request matching
+ */
+export function matchETag(ifNoneMatch: string | undefined | null, etag: string): boolean {
+  if (!ifNoneMatch) return false
+  const normalize = (v: string) => v.trim().replace(/^W\//, '')
+  return String(ifNoneMatch)
+    .split(',')
+    .some((candidate) => {
+      const value = candidate.trim()
+      return value === '*' || normalize(value) === normalize(etag)
+    })
+}
+
+/** 压缩缓存条目 · cached compressed buffers for one HTML variant */
+export interface CompressionCacheEntry {
+  etag: string
+  br: Buffer
+  gzip: Buffer
+}
+
+/**
+ * 有界 LRU 压缩缓存 · bounded LRU cache for compressed HTML
+ * @description 上限防止按 HTML 变体（点赞态 / i18n / nonce）无限增长；淘汰最久未访问项。
+ */
+export function createCompressionCache(maxEntries = 12) {
+  const store = new Map<string, CompressionCacheEntry>()
+  return {
+    get(key: string): CompressionCacheEntry | undefined {
+      const entry = store.get(key)
+      if (!entry) return undefined
+      store.delete(key)
+      store.set(key, entry)
+      return entry
+    },
+    set(key: string, entry: CompressionCacheEntry): void {
+      store.delete(key)
+      store.set(key, entry)
+      while (store.size > maxEntries) {
+        const oldest = store.keys().next()
+        if (oldest.done) break
+        store.delete(oldest.value)
+      }
+    },
+    clear(): void { store.clear() },
+    get size(): number { return store.size }
+  }
 }

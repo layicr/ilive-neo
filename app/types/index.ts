@@ -37,7 +37,7 @@ export interface AppData {
   stats: { totalConcerts: number; totalArtists: number; totalCities: number; totalWishes: number }
   /** 站点级 SEO 设置（DB 优先，缺失回退）· site-level SEO settings */
   seo: SiteSeoSettings
-  /** 页脚友情链接（DB 优先，空则前端回退代码列表）· footer friend links */
+  /** 页脚友情链接（DB 优先，空则展示空列表、无内置回退）· footer friend links */
   friendLinks: LocalizedFriendLink[]
   /** 服务端实际本地化的语言（请求带 ?lang= 时为该语言，否则 null 表示返回多语言原始形态）· locale the server actually localized to */
   locale: Locale | null

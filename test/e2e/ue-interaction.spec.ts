@@ -151,7 +151,7 @@ test.describe('UE · 点赞交互', () => {
 })
 
 test.describe('UE · 模态与筛选交互', () => {
-  test('歌单模态：打开后列出全部曲目，关键词筛选实时反馈', async ({ page }) => {
+  test('歌单模态：虚拟行渲染，关键词筛选 150ms 防抖后反馈', async ({ page }) => {
     await gotoHome(page, '/')
 
     await page.locator('.timeline-item[data-concert-id="1"] .songlist-btn').click()
@@ -159,8 +159,12 @@ test.describe('UE · 模态与筛选交互', () => {
 
     const allItems = page.locator('#songlistModal .songlist-item')
     await expect(allItems).toHaveCount(3)
+    await expect(page.locator('#songlistModal .songlist-virtual-row')).toHaveCount(3)
+    expect(await page.locator('#songlistModal .songlist-list').getAttribute('style')).toContain('height')
 
     await page.locator('#songlistSearchInput').fill('倔强')
+    // 防抖窗口内仍保留旧结果，150ms 后才过滤（避免每次输入都重算/重排）
+    expect(await allItems.count(), '防抖窗口内不应立即过滤').toBe(3)
     await expect(allItems).toHaveCount(1)
     await expect(allItems.first()).toContainText('倔强')
     await expect(page.locator('#songlistModalSubtitle')).toContainText('1')
@@ -184,6 +188,11 @@ test.describe('UE · 模态与筛选交互', () => {
     await expect(page.locator('#cityList .city-item')).toHaveCount(4)
 
     await page.locator('#closeCityModal').click()
+    await expect(page.locator('#cityModal')).not.toHaveClass(/active/)
+
+    await page.locator('#city-card').click()
+    await expect(page.locator('#cityModal')).toHaveClass(/active/)
+    await page.keyboard.press('Escape')
     await expect(page.locator('#cityModal')).not.toHaveClass(/active/)
   })
 

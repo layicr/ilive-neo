@@ -3,11 +3,10 @@
  *
  * @module utils/seo
  * @description 纯函数与常量，供 app/app.vue（htmlAttrs.lang / hreflang / og:locale）与
- *              app/pages/index.vue（动态描述、hreflang）复用；不依赖 Nuxt 运行时，
+ *              app/pages/index.vue（动态描述）复用；不依赖 Nuxt 运行时，
  *              因此可被 vitest 直接单测（见 test/unit/i18n.test.ts）。
  *
- *              app.vue 与 index.vue 生成 hreflang link 时使用同一组去重 key，
- *              由 unhead 合并为唯一一条，避免同一 hreflang 重复输出。
+ *              hreflang 由 app.vue 统一生成并使用稳定 key，页面级不再重复输出。
  */
 
 import type { Locale } from '../types'
@@ -61,7 +60,7 @@ export function toLocaleUrl(code: string, siteUrl: string = DEFAULT_SITE_URL): s
 
 /**
  * hreflang link 的稳定去重 key · Stable dedupe key for hreflang links
- * @description app/app.vue 与 app/pages/index.vue 输出同名 key，unhead 会合并去重。
+ * @description hreflang link 使用稳定 key，统一由 app/app.vue 发射，避免与页面级同名 link 冲突。
  */
 export function hreflangKey(hreflang: string): string {
   return `i18n-hreflang-${hreflang}`

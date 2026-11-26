@@ -8,6 +8,17 @@
 
 ---
 
+## 0. Latest Changes (2026-11-26)
+
+> This summary is the current source of truth; where later chapters differ, prefer this section.
+
+- **Data model / stats**: `concerts` gained `team_i18n` (team members per locale, separated by `、` inside each JSON value); the production database has been migrated and **all 21 concert rows populated**. `totalArtists` is now the deduplicated union of `artist` and `team` (currently **38**); the artist modal counts **per concert** (no double-counting) and its title is "Artists / 藝人 / 艺人" across locales. SEO artist names also use the union.
+- **Stat cards & modals**: the Concerts / Cities / Artists cards have press + ripple feedback (color follows the card theme); city and ticket modals close on `Esc`; the ticket modal has the search box and close button on the same row with the button on the right, filtering by artist / concert name / date / venue.
+- **Songlist modal**: row-based virtualization via `@tanstack/vue-virtual`, a 150ms search debounce, and server + client protocol allow-listing (`sanitizeHref`) for songlist / video URLs (`javascript:` and similar are dropped).
+- **Book loader**: the desktop catalog title `.bk-a` changed from a fixed `128px` to a flexible `max-width: 300px`, so long titles are no longer truncated early.
+- **HTML compression**: normalized strong ETag with `If-None-Match` → 304; compressed buffers cached by the **original HTML hash** (deliberately separate from the ETag to avoid cross-user leakage); `Cache-Control: private, no-cache`; `generatedAt` is fixed at process start so hashes stay stable within one process.
+- **Tests**: 31 unit files / 447 cases and 10 E2E suites / 72 cases, all passing. See [`../test/README.md`](../test/README.md).
+
 ## 1. Project Overview
 
 "Concert Footprints" is a personal concert recording site, migrated from a purely static site (`index.html` + vanilla JS + hand-written Service Worker). This repository (`ilive_neo`) upgrades the architecture while **preserving 100% of the original visual effects**:
@@ -45,7 +56,7 @@ Key principles:
 | Styling | `public/css/main.css` (hand-written utilities; Google Fonts `@import` and the legacy spinner removed), Font Awesome 6.4.0 (CDN, loaded at `bodyClose`) |
 | First paint | Full-screen book-style loader (SSR-emitted + inlined critical CSS), Nitro `render:response` dynamic HTML brotli / gzip compression, system font-stack fallback |
 | SEO | Nuxt built-in `useSeoMeta` / `useHead` (multilingual hreflang / og:locale) + static `robots.txt` / `sitemap.xml` |
-| Testing | Vitest (unit tests, happy-dom, **30 files / 430 cases**, incl. songlist/guestbook composable suites) + Playwright (E2E, **10 suites / 69 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
+| Testing | Vitest (unit tests, happy-dom, **31 files / 447 cases**, incl. songlist/guestbook composable suites) + Playwright (E2E, **10 suites / 72 cases**, desktop / mobile projects + CDP 20 KB/s throttling + zero-download Edge mode) + `verify-seo.mjs` (SSR head validation script) |
 
 ### Core Dependencies (package.json)
 
@@ -69,8 +80,9 @@ ilive_neo/
 │   │   └── index.vue          # Homepage "composition root": SEO / JSON-LD, init orchestration, body scroll lock + <SiteLoader /> as a sibling of the content (363 lines)
 │   ├── components/            # Homepage blocks extracted from index.vue (18 components; each calls shared composables directly)
 │   │   ├── AlbumShowcase.vue      # 3D album carousel (cover thumbnails + @error fallback)
-│   │   ├── TicketModal.vue        # Ticket modal (@tanstack/vue-virtual row-based virtual scroll)
+│   │   ├── TicketModal.vue        # Ticket modal (@tanstack/vue-virtual row-based virtual scroll; search box + close button on the same row, button on the right; Esc to close)
 │   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
+│   │   │                          # CityModal: Esc to close; SonglistModal: virtual rows + 150ms search debounce + link allow-list
 │   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
 │   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue
 │   │   ├── SiteLoader.vue        # Full-screen book-style loader (SSR-emitted #loader, inlined critical CSS, 15s failsafe armed only after hydration)
@@ -80,7 +92,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR requests /api/data?lang= per current locale (pass-through when server-localized, else localizeConcert) + like override; localized derivation is written to a request-scoped shared snapshot (app:localized), computed once
 │   │   ├── useI18n.ts         # zh / en / zh-Hant switching (useState lazy initialization)
 │   │   ├── useGallery.ts      # Image gallery (lazy-cached localizedConcerts)
-│   │   ├── useSonglist.ts     # Song list modal (bodies are NOT shipped with /api/data; lazy-loaded per concert via GET /api/concerts/:id on click, cached by locale+id, prefetched on hover/focus; the first 5 are prefetched right after page load, the rest warmed up serially at 20s)
+│   │   ├── useSonglist.ts     # Song list modal (bodies are NOT shipped with /api/data; lazy-loaded per concert via GET /api/concerts/:id on click, cached by locale+id, prefetched on hover/focus; the first 5 are prefetched right after page load, the rest warmed up serially at 20s; search debounced 150ms)
 │   │   ├── useTimeline.ts     # Timeline rendering
 │   │   ├── useNavigation.ts   # Section navigation scrolling
 │   │   ├── useTicketModal.ts  # Ticket modal
@@ -144,8 +156,8 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # Recursively generates 600px thumbnails under public/concert/ (_thumb.jpg, idempotent; npm run thumbs)
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO validation scripts (run directly via node)
 ├── test/                      # Tests
-│   ├── unit/                  # Vitest unit tests (30 files / 430 cases; incl. useBookLoader / htmlCompression / useSonglist / useGuestbook)
-│   ├── e2e/                   # Playwright end-to-end tests (10 suites / 69 cases, desktop/mobile projects + fixture DB seed)
+│   ├── unit/                  # Vitest unit tests (31 files / 447 cases; incl. useBookLoader / htmlCompression / useSonglist / useGuestbook)
+│   ├── e2e/                   # Playwright end-to-end tests (10 suites / 72 cases, desktop/mobile projects + fixture DB seed)
 │   │   ├── book-loader.spec.ts   # Loader copy / catalog / theme first sentence / fade-out / narrow viewport
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s throttling, critical path, noscript & HTML compression semantics
 │   ├── ui-tests.md            # UI acceptance checklist (manual + automated; section 18 covers loader & slow network)
@@ -202,15 +214,15 @@ Key points:
 - **Two-layer caching + response cache policy**: the inner `defineCachedEventHandler` (1h SWR in production) emits only request-agnostic shared data; the outer, non-cached layer merges `liked` per IP. Two things matter:
   1. The inner layer writes the cache entry's own `cache-control` (`s-maxage=3600`) onto the very same event response, so **the outer layer must explicitly override it to `private, no-store`** — otherwise a CDN / edge / nginx would cache one visitor's per-IP `liked` state for an hour and serve it to everyone. `etag` / `last-modified` are kept so conditional requests still work.
   2. On a conditional request (`If-None-Match` / `If-Modified-Since`), Nitro writes 304 itself, ends the response and returns **`undefined`** to the caller, so the outer layer must null-check before dereferencing (otherwise it throws a `TypeError` in production; dev uses the uncached branch and never reproduces it).
-- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist: { zh, en, 'zh-Hant' }`, `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`); with `includeSonglist: false` it skips songlist bodies and fills `hasSonglist` from a DISTINCT query; `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
+- `server/lib/mappers.ts`: `fetchAllConcerts` maps normalized DB rows (`*_i18n` JSON columns) into **multilingual structures** (`artist` / `team` / `location` / `tags` / `songlist` are isomorphic, parsed by `parseI18n` / `joinLocation`; `team` holds team members separated by `、`). Songlist / video URLs are protocol-allow-listed here. With `includeSonglist: false` it skips songlist bodies and fills `hasSonglist` from a DISTINCT query; `computeCityConcertCounts` calculates concert counts per city. `mapConcert` is `export`ed for unit testing.
 - Frontend `useData.ts`'s `pickLocale` / `localizeConcert` **selects single-language fields** from multilingual structures based on `currentLanguage` (e.g., `artist: "Mayday"`); when the target language is missing it falls back via `requested language → zh → en` (`app/utils/index.ts`, pure functions, directly unit-testable).
 
 ```
 useAsyncData('app-data') → GET /api/data
-  ├─ concerts[]   (multilingual: artist.{zh,en,zh-Hant}, location isomorphic, ...)
+  ├─ concerts[]   (multilingual: artist.{zh,en,zh-Hant}, team.{zh,en,zh-Hant} team members, location isomorphic, ...)
   ├─ cities[]     (name multilingual + icon + concerts count)
   ├─ wishes[]     (content multilingual + likes + liked)
-  └─ stats        { totalConcerts, totalArtists, totalCities }
+  └─ stats        { totalConcerts, totalArtists (singers ∪ teams, deduped), totalCities }
         ↓
 localizedConcerts (computed, selects single language by currentLanguage)
 ```
@@ -227,7 +239,7 @@ localizedConcerts (computed, selects single language by currentLanguage)
 In `app/pages/index.vue`:
 
 - `useSeoMeta` dynamically outputs title/description/og/twitter following `currentLanguage`.
-- **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts deduplicated `artist`, auto-updates as concerts are added or removed.
+- **keywords/description are dynamically generated from database artists**: `localizedConcerts` extracts the deduplicated union of `artist` and `team` (singers + team members), auto-updates as concerts are added or removed.
 - `useHead` (only `import.meta.server`) injects **JSON-LD structured data** (WebSite + Person + ItemList + MusicEvent). Note: hreflang / canonical / `og:locale` are emitted by `app/app.vue` and are **not repeated here** (the old implementation deduped two identical sources by key — pure redundancy).
 - JSON-LD uses `JSON.parse(JSON.stringify(toRaw(...)))` to strip Vue reactive Proxy, and uses `computed` to ensure the complete concert list is output after data is ready.
 - **XSS-safe JSON-LD serialization**: `innerHTML` always goes through `serializeJsonLd()` (`app/utils/seo.ts`), which writes `< > &` and U+2028 / U+2029 as JSON `\u` escapes — never a bare `JSON.stringify`. Concert names come from the DB; a script-closing tag in the data would terminate the ld+json block early and allow stored XSS in SSR output. unhead's current implicit escaping is **not** treated as a security boundary. Regressions: `test/unit/seo-utils.test.ts` and `test/e2e/security.spec.ts` (section 14.4).
@@ -251,7 +263,7 @@ The bottom-right floating area of the homepage has two round buttons, both rende
 
 | Table | Description |
 |----|------|
-| `concerts` | Concert main table (translatable fields are `*_i18n` JSON columns; also holds the denormalized `likes` count) |
+| `concerts` | Concert main table (translatable fields are `*_i18n` JSON columns, including `team_i18n`; production has all 21 rows populated) |
 | `concert_tags` | Concert tags (`concert_id` FK, `tag_i18n`) |
 | `concert_images` | Concert images (`src` + `alt_i18n`) |
 | `concert_songlist` | Concert song list (`seq` ordering + `name_i18n` + `link`) |
@@ -264,7 +276,7 @@ The bottom-right floating area of the homepage has two round buttons, both rende
 | `guestbook` | Guestbook messages (`nickname` + `email` + `content` + server-collected `browser`/`os`/`user_agent`/`ip` + `is_approved`) |
 | `guestbook_reply` | Guestbook replies (`guestbook_id` FK cascade delete + `nickname` + optional `email` + `content` + server-collected fields + `is_approved`) |
 
-All translatable fields are unified as **`*_i18n` JSON columns**, shaped like `{"zh-CN":"…","en":"…","zh-Hant":"…"}` (parsed by `parseI18n`; `zh-CN` is the base language, missing languages fall back at the UI layer; legacy `ja`/`ko` keys from old databases are not shown). `location` is split into four segments `country/province/city/venue` and reassembled per language as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation` / `mapLocationDetail`, empty segments auto-omitted, no cross-language fallback).
+All translatable fields are unified as **`*_i18n` JSON columns**, shaped like `{"zh-CN":"…","en":"…","zh-Hant":"…"}` (parsed by `parseI18n`; `zh-CN` is the base language, missing languages fall back at the UI layer; legacy `ja`/`ko` keys from old databases are not shown). `team_i18n` uses the same shape, but each locale value is a member list separated by `、`; a solo artist's value is the artist itself. `location` is split into four segments `country/province/city/venue` and reassembled per language as **`Country · Province · City · Venue`** during mapping (`mappers.ts`'s `joinLocation` / `mapLocationDetail`, empty segments auto-omitted, no cross-language fallback).
 
 ### 5.2 Initialization
 
@@ -349,9 +361,9 @@ npm run preview    # Preview production build
 node .output/server/index.mjs  # Start the production build directly (use PORT, e.g. $env:PORT='3100')
 npm run generate   # Generate static site (SSG)
 npm run db:seed    # Initialize local empty database (DROP + CREATE, ⚠️ destructive)
-npm run test       # Run unit tests (vitest run, 30 files / 430 cases)
+npm run test       # Run unit tests (vitest run, 31 files / 447 cases)
 npm run test:watch # Run tests in watch mode
-npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 69 cases; seeds the fixture DB and boots an isolated dev server)
+npm run test:e2e   # Run end-to-end tests (Playwright, 10 suites / 72 cases; seeds the fixture DB and boots an isolated dev server)
 npx playwright test --list     # List cases only, to verify suite / case counts
 npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.jpg, idempotent; run after adding images)
 ```
@@ -414,7 +426,7 @@ npm run thumbs     # Generate missing thumbnails under public/concert/ (_thumb.j
 
 ### 9.3 Dynamic Meta Information (`app/pages/index.vue`)
 
-- `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from database artists (3-language description templates in `app/utils/seo.ts`).
+- `useSeoMeta`: Outputs title/description/og/twitter following language; keywords/description dynamically generated from the deduplicated union of database singers and team members (3-language description templates in `app/utils/seo.ts`).
 - JSON-LD: WebSite + Person + ItemList + MusicEvent (per concert).
 - hreflang / canonical: `zh-CN` / `en` / `zh-Hant` + `x-default` (default language `zh` href is `https://ilive.lyc.la/`, no `/zh` prefix) — emitted by `app/app.vue` only; pages do not repeat it.
 - `<html lang>` and `og:locale` / `og:locale:alternate`: emitted uniformly by `app/app.vue` (`app/utils/seo.ts`'s `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` / `toLocaleUrl` pure functions).
@@ -463,7 +475,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 
 ### 11.1 Book loader (SiteLoader)
 
-- `app/components/SiteLoader.vue`: the legacy spinner became a full-screen book (cover / left catalog / right concert details / bottom progress bar), two-page desktop layout and a single-page narrow-viewport layout; no buttons or skip hints, `aria-busy="true"`, and `:data-finish` reporting `ready | timeout | error`.
+- `app/components/SiteLoader.vue`: the legacy spinner became a full-screen book (cover / left catalog / right concert details / bottom progress bar), two-page desktop layout (the catalog title `.bk-a` uses a flexible `max-width: 300px`, so long labels are no longer truncated early) and a single-page narrow-viewport layout; no buttons or skip hints, `aria-busy="true"`, and `:data-finish` reporting `ready | timeout | error`.
 - `#loader` is SSR-emitted with **inlined critical CSS** (no hydration, no external CDN); `<SiteLoader />` sits alongside the homepage content so no ancestor stacking context can break `position: fixed`.
 - **Played once per document**: `bookLoaderSession` (a module-level flag in `useBookLoader.ts`) prevents the overlay from re-appearing when SPA locale switches rebuild the page component. Top-level `<script setup>` variables belong to a component instance and reset on rebuild, so the flag must live at module scope. It is written only in client `onMounted`, so SSR still emits the overlay on every full page load with no cross-request state. `test/e2e/ticket-modal.spec.ts` asserts `#loader` count is 0 after a locale switch.
 - All data comes from `/api/data`: catalog rows / years and right-page concert details; the quote is the **first sentence** of the current-locale `theme` (`firstSentence()` in `app/utils/index.ts` — take the first paragraph, then split on CJK / English sentence punctuation); posters use `_thumb.jpg` via `thumbSrc()`. Three-language copy lives in `loadingBook` inside `i18n/locales/*.ts` (`tocFoot` and the static `quotes` were removed).
@@ -492,15 +504,15 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 ### 11.3 SSR HTML compression (`server/plugins/html-compression.ts`)
 
 - `nitro.compressPublicAssets` only covers `public/**`; dynamic SSR HTML was still plain text. The plugin negotiates `Accept-Encoding` in `render:response` and compresses with brotli (preferred, quality 5) / gzip (level 6) **asynchronously**; measured homepage: ~248 KB → **47 KB (br) / 63 KB (gzip)**.
-- Pure logic lives in `server/lib/htmlCompression.ts` (`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / case-insensitive header helpers), covered by 19 cases in `test/unit/htmlCompression.test.ts`.
-- Cache / negotiation semantics: every HTML response declares `Vary: Accept-Encoding`; q-values, `q=0` and `*` are parsed, br wins; only `200 + text/html + string body + ≥ 1 KB + not already encoded`; compressed responses drop `ETag` / `Last-Modified` / `Content-Length` so a CDN cannot reuse a br representation for gzip-only clients. `NUXT_DISABLE_HTML_COMPRESSION=1` turns it off.
+- Pure logic lives in `server/lib/htmlCompression.ts` (`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / `computeETag` / `matchETag` / `computeContentKey` / bounded LRU cache / case-insensitive header helpers), covered by 23 cases in `test/unit/htmlCompression.test.ts`.
+- Cache / negotiation semantics: every HTML response declares `Vary: Accept-Encoding`; q-values, `q=0` and `*` are parsed, br wins; only `200 + text/html + string body + ≥ 1 KB + not already encoded`. A **strong ETag** is computed from HTML with volatile timing fields normalized; `If-None-Match` hits return **304**. Compressed buffers are cached by the **original HTML hash**, deliberately separate from the ETag so one visitor's per-IP likes cannot leak to another; `content-length` is recomputed and `last-modified` removed. Responses declare `Cache-Control: private, no-cache`; `generatedAt` is fixed at process start so hashes stay stable within a process. `NUXT_DISABLE_HTML_COMPRESSION=1` turns it off.
 - ⚠️ **404 / 500 error pages must never be compressed**: Nuxt renders them through the internal `/__nuxt_error?...&statusCode=404` route, where both `response.statusCode` and `event.node.res.statusCode` are **still 200** at `render:response`; the error render path additionally re-encodes the compressed `Buffer` as a UTF-8 string (invalid bytes become U+FFFD), producing `failed to decompress 'br' encoding` on the client. `isNuxtErrorRender()` skips these pages, leaving them uncompressed.
 
 ### 11.4 20 KB/s regressions & test isolation
 
-- `test/e2e/slow-network.spec.ts`: CDP `Network.emulateNetworkConditions` simulates **20 KB/s down / 500 ms RTT** and asserts the overlay is immediately fixed / full-screen, is not hidden by the 15s failsafe before hydration, and fades normally after bandwidth is restored; it also checks that `<head>` has no blocking external CSS, `noscript` contains `<style>`, and compression semantics (200 br decodable / 404 plain / `q=0` uncompressed).
+- `test/e2e/slow-network.spec.ts`: CDP `Network.emulateNetworkConditions` simulates **20 KB/s down / 500 ms RTT** and asserts the overlay is immediately fixed / full-screen, is not hidden by the 15s failsafe before hydration, and fades normally after bandwidth is restored; it also checks that `<head>` has no blocking external CSS, `noscript` contains `<style>`, and compression semantics (200 br decodable / 404 plain / `q=0` uncompressed / strong ETag + `If-None-Match` → 304 / `Cache-Control: private, no-cache`).
 - The dev server splits Vue dependencies into many module requests; full-time throttling cannot hydrate within the 120 s case timeout → **only the first-paint phase is throttled (~8 s)**, then bandwidth is restored for the hydration / fade-out checks.
-- `test/e2e/book-loader.spec.ts` (6 cases) covers three-language copy, catalog rows / years, theme first sentence, no buttons, progress bar, fade-out and the narrow-viewport single-page layout.
+- `test/e2e/book-loader.spec.ts` (7 cases) covers three-language copy, catalog rows / years, theme first sentence, no buttons, progress bar, fade-out, narrow-viewport single-page layout and the desktop catalog title width assertion.
 - Write isolation: E2E specs share a fixture DB serially. The like rate-limit case now uses a **nonexistent concert id** (the limiter runs before existence validation, so 429 still triggers with zero DB writes), and `ui-structure.spec.ts` reads the current like count from `/api/data` as a dynamic baseline — no order-dependent false failures.
 
 ---
@@ -530,7 +542,7 @@ The ticket modal originally rendered all cards at once in a multi-column Grid, s
 - **Songlist bodies are lazy-loaded**: the list endpoint only carries the `hasSonglist` flag; `useSonglist`'s cache is keyed by "locale + id" (a locale switch refetches), failures are not cached and a later click can retry; the first 5 are prefetched right after page load and the rest warmed up serially at 20s (once per locale per session, re-scheduled per locale after a switch). To mark a new concert as having a songlist you only write `concert_songlist` rows — no frontend change needed, the DISTINCT-based flag follows automatically.
 - **Guestbook double-submit guard**: the publish / reply buttons in `GuestbookSection` are disabled while in-flight (a double click cannot post duplicates); paging keeps the old list (the full-wall loading shows only on the first, empty load) and disables page buttons, scrolling back to the section top on success.
 - After modifying `public/css/*` or `app/pages/index.vue`, no manual cache manifest maintenance is needed (Workbox runtime caching); PWA's `autoUpdate` handles updates automatically.
-- **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/components/StatsCards.vue` (extracted from `index.vue`); the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0). The three `useCountUp` calls must **stay in place** in that component (they own SSR pass-through and timer lifecycle).
+- **Statistic count-up animation**: `STAT_COUNTUP_DURATION` (5s) and `STAT_COUNTUP_REPEAT` (120s) live in `app/components/StatsCards.vue` (extracted from `index.vue`); the displayed value is derived lazily by `useCountUp`, so the **real number** is visible on first SSR paint and in no-JS scenarios (never 0). The three `useCountUp` calls must **stay in place** in that component (they own SSR pass-through and timer lifecycle). The Concerts / Cities / Artists cards also have press + ripple feedback, with the ripple color following each card's theme.
 - **`handleError` is safe from watch / event callbacks** (the error-copy resolver is registered during setup), but never call `useAppI18n()` / `useI18n()` directly inside a callback — it throws without a component instance.
 - **`useTimeline`'s observer must be released explicitly**: a locale switch rebuilds the page component, and `onScopeDispose` takes care of `disconnect` on unmount. Add new observe logic through `initTimelineReveal()`; do not create another `IntersectionObserver`.
 - **Known trade-off**: like counts in `/api/data` are still subject to the inner 1-hour shared cache and are not actively invalidated on write, so other visitors see the update only after the cache/SWR refresh (the current visitor's `liked` flag is unaffected — it is merged per request in the outer layer).
@@ -574,4 +586,4 @@ Likes are deduplicated per IP (`UNIQUE(concert_id, ip)`) — one vote per user �
 
 ### 14.4 Read-only security review (2026-11-07) · Security review
 
-**Fixed / hardened in this round**: H2 (JSON-LD now uses `serializeJsonLd()` — explicit `\u` escapes for `< > &` and U+2028 / U+2029 instead of relying on unhead's implicit escaping; see 4.3), H3 (shared ETag / missing uniform `Vary` in SSR compression → cross-encoding CDN cache poisoning), M6 (compression type contract, q-values, synchronous blocking, status-code boundaries and corrupted br on 404), L3 (bare CSS in `noscript` not wrapped in `<style>`). Implementation & regressions: 11.3, `test/unit/htmlCompression.test.ts`, `test/unit/seo-utils.test.ts`, `test/e2e/slow-network.spec.ts`, `test/e2e/security.spec.ts`.
+**Fixed / hardened in this round**: H2 (JSON-LD now uses `serializeJsonLd()` — explicit `\u` escapes for `< > &` and U+2028 / U+2029 instead of relying on unhead's implicit escaping; see 4.3), H3 (shared ETag / missing uniform `Vary` in SSR compression → fixed with normalized strong ETag + `If-None-Match` → 304 + `Cache-Control: private, no-cache` + original-hash cache key), M6 (compression type contract, q-values, synchronous blocking, status-code boundaries and corrupted br on 404), L3 (bare CSS in `noscript` not wrapped in `<style>`). Implementation & regressions: 11.3, `test/unit/htmlCompression.test.ts`, `test/unit/seo-utils.test.ts`, `test/e2e/slow-network.spec.ts`, `test/e2e/security.spec.ts`.

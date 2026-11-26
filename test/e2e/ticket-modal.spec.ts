@@ -4,6 +4,8 @@
  * 覆盖点
  *  - 从页头统计区「场次」卡片（`.stat-card.total`）打开票根模态框（`.ticket-modal.active`）
  *  - 虚拟滚动渲染：`.ticket-card` 正常渲染且内容非空（防止 `count` 误传函数导致 RangeError、列表空白的回归）
+ *  - 搜索框：按艺人 / 演唱会名 / 日期 / 地点过滤，空结果显示提示，清空后恢复全部票根；关闭按钮位于搜索框右侧
+ *  - 按 Esc 关闭票根弹窗
  *  - 海报缩略图：`<img class="ticket-poster">` 真实加载（`naturalWidth>0`）且使用 `_thumb.jpg`、未用 `loading="lazy"`
  *    （`.ticket-modal` 默认 `display:none` → 打开切换下，lazy 可能不触发加载）
  *  - 行间距：相邻 `.ticket-virtual-row` 之间为正的上下间距、无重叠（防止固定 `estimateSize` 行重叠的回归）
@@ -24,15 +26,55 @@ test.describe('票根模态框 · 虚拟滚动', () => {
     await expect(modal).toHaveClass(/active/)
     await expect(modal).toBeVisible()
 
-    // fixture 共 4 场，全部以票根卡片呈现（虚拟滚动渲染视口附近行，首屏即覆盖全部）
+    // 虚拟滚动只渲染视口附近行，不硬编码总数；只要票根有内容即视为渲染成功
     const cards = page.locator('.ticket-card')
-    await expect(cards).toHaveCount(4)
+    await expect.poll(() => cards.count()).toBeGreaterThan(0)
 
     // 内容非空：首张票根含艺人文字（列表空白回归会在这一行暴露）
     await expect(cards.first().locator('.ticket-artist')).toHaveText(/\S+/)
 
     // 未捕获异常（RangeError / not a function 等回归会作为 pageerror 抛出）
     expect(siteErrors(pageErrors)).toEqual([])
+  })
+
+  test('搜索框按艺人过滤，空结果有提示且清空后恢复', async ({ page }) => {
+    await gotoHome(page, '/')
+    await page.locator('.stat-card.total').click()
+    await expect(page.locator('#ticketModal')).toHaveClass(/active/)
+
+    const search = page.locator('#ticketSearchInput')
+    await expect(search).toBeVisible()
+    await expect(search).toHaveAttribute('placeholder', '搜索演唱会...')
+
+    const searchBox = await search.boundingBox()
+    const closeBox = await page.locator('#closeTicketModal').boundingBox()
+    expect(searchBox).toBeTruthy()
+    expect(closeBox).toBeTruthy()
+    expect(closeBox!.x, '关闭按钮应在搜索框右侧').toBeGreaterThanOrEqual(searchBox!.x + searchBox!.width - 2)
+
+    await expect.poll(() => page.locator('.ticket-card').count()).toBeGreaterThan(0)
+    const initialCount = await page.locator('.ticket-card').count()
+
+    await search.fill('五月天')
+    await expect.poll(() => page.locator('.ticket-card').count()).toBeGreaterThan(0)
+    const artists = await page.locator('.ticket-card .ticket-artist').allInnerTexts()
+    expect(artists.every((name) => name.includes('五月天')), '过滤结果应只包含匹配艺人').toBe(true)
+
+    await search.fill('不存在的演唱会')
+    await expect(page.locator('.ticket-empty')).toBeVisible()
+    await expect(page.locator('.ticket-card')).toHaveCount(0)
+
+    await search.fill('')
+    await expect.poll(() => page.locator('.ticket-card').count()).toBe(initialCount)
+  })
+
+  test('按 Esc 关闭票根弹窗', async ({ page }) => {
+    await gotoHome(page, '/')
+    await page.locator('.stat-card.total').click()
+    await expect(page.locator('#ticketModal')).toHaveClass(/active/)
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#ticketModal')).not.toHaveClass(/active/)
   })
 
   test('海报缩略图真实加载且使用 _thumb.jpg（不使用 lazy）', async ({ page }) => {

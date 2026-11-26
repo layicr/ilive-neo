@@ -3,7 +3,7 @@
  * 首页 · Home page
  * @description 迁移自原 index.html <body> 的完整 DOM 骨架，视觉与交互 100% 保持一致。
  *              已彻底 Vue 化：所有动态内容由模板声明式渲染（v-for/插值），
- *              交互逻辑由 composables 提供，数据一次拉取双语后按语言本地化显示。
+ *              交互逻辑由 composables 提供；按当前语言请求 /api/data?lang=... 单语言数据，SSR 直出对应文案。
  *
  *              Mirrored from the original index.html <body> to keep visuals identical.
  */
@@ -17,6 +17,7 @@ import { useNavigation } from '~/composables/useNavigation'
 import { useTimeline } from '~/composables/useTimeline'
 import { useAlbumShowcase } from '~/composables/useAlbumShowcase'
 import { useTicketModal } from '~/composables/useTicketModal'
+import { useArtistModal } from '~/composables/useArtistModal'
 import { useAppError } from '~/composables/useAppError'
 import { pickLocale } from '~/utils'
 import { ARTIST_DELIMITER, buildSiteDescription, resolveSiteUrl, serializeJsonLd, toAbsoluteImageUrl } from '~/utils/seo'
@@ -33,6 +34,7 @@ const { cityModalOpen, videoModalOpen } = useNavigation()
 const { sortedConcerts, initTimelineReveal } = useTimeline()
 const { selectedAlbumIndex, applyCarouselLayout } = useAlbumShowcase()
 const { ticketModalOpen } = useTicketModal()
+const { artistModalOpen } = useArtistModal()
 const { handleError } = useAppError()
 
 // ==================== SEO 元信息（动态，随语言切换）· Dynamic SEO meta ====================
@@ -42,12 +44,21 @@ const { handleError } = useAppError()
 // siteUrl / hreflang / description builders all live in ~/utils/seo (pure functions, unit-testable).
 /**
  * 去重艺人列表（来自数据库已预取的演唱会数据）· Unique artists from DB concerts
- * @description 从 localizedConcerts 提取 `artist` 并去重；随语言切换自动取当前语言艺人名。
- *              Array of unique artist names in the current language.
+ * @description 从 localizedConcerts 提取 `artist` + `team` 并去重；随语言切换自动取当前语言艺人名。
+ *              Array of unique artist names (performers + team members) in the current language.
  */
-const artistNames = computed(() =>
-  [...new Set(localizedConcerts.value.map(c => c.artist).filter(Boolean))]
-)
+const artistNames = computed(() => {
+  const names = new Set<string>()
+  for (const c of localizedConcerts.value) {
+    for (const field of [c.artist, c.team]) {
+      for (const name of (field ?? '').split('、')) {
+        const trimmed = name.trim()
+        if (trimmed) names.add(trimmed)
+      }
+    }
+  }
+  return [...names]
+})
 /** 当前语言下的艺人串（分隔符来自 ~/utils/seo）· artist list joined by locale-specific delimiter */
 const artistListText = computed(() =>
   artistNames.value.join(ARTIST_DELIMITER[currentLanguage.value] ?? ', ')
@@ -127,7 +138,7 @@ useSeoMeta({
   author: currentAuthor
 })
 
-// ==================== JSON-LD 结构化数据 + hreflang（仅 SSR 输出）· JSON-LD + hreflang (SSR only) ====================
+// ==================== JSON-LD 结构化数据（仅 SSR 输出）· JSON-LD (SSR only) ====================
 // 说明：在 SSR 阶段构建纯 JSON 对象后一次性序列化，避免将 Vue 响应式 Proxy 对象
 //      交给 JSON.stringify / unhead（会触发 Proxy 陷阱导致序列化异常）。
 // Build a plain JSON object during SSR and serialize once, avoiding handing Vue reactive Proxies to
@@ -303,7 +314,7 @@ watch(sortedConcerts, () => {
 })
 
 // 模态框打开时锁定 body 滚动 · lock body scroll when any modal open
-watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen], (vals) => {
+watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen, artistModalOpen], (vals) => {
   const anyOpen = vals.some(v => v)
   if (typeof document !== 'undefined') {
     document.body.style.overflow = anyOpen ? 'hidden' : ''
@@ -338,6 +349,9 @@ watch([cityModalOpen, videoModalOpen, galleryOpen, songlistOpen, ticketModalOpen
 
     <!-- 城市列表模态（已拆分为 CityModal） · City modal -->
     <CityModal />
+
+    <!-- 艺人列表模态（已拆分为 ArtistModal，含搜索） · Artist modal -->
+    <ArtistModal />
 
     <!-- 图片查看器模态（已拆分为 GalleryModal） · Image viewer modal -->
     <GalleryModal />

@@ -7,6 +7,17 @@
 
 ---
 
+## 0. 最近更新（2026-11-26）
+
+> 以下为最新实现口径；正文各章节中若与此摘要有差异，以本节为准。
+
+- **数据模型 / 统计口径**：`concerts` 新增 `team_i18n`（团队列表，同一 JSON 内各语言以「、」分隔成员）；生产库已执行迁移，**21 条 concert 记录全部填充**。`totalArtists` 现为 `artist + team` 拆分后并集去重（当前 **38**）；艺人弹窗按**场次**去重计数，标题三语为「艺人 / 藝人 / Artists」。SEO 艺人名同样取自歌手与团队并集。
+- **统计卡与弹窗交互**：场次 / 城市 / 艺人三张统计卡增加按压 + 涟漪反馈（颜色随卡片主题）；城市弹窗与票根弹窗支持 `Esc` 关闭；票根弹窗搜索框与关闭按钮同行、按钮在右，搜索按艺人 / 演唱会名 / 日期 / 地点过滤。
+- **歌单弹窗**：列表改为 `@tanstack/vue-virtual` 按行虚拟滚动；搜索 150ms 防抖；歌单 / 视频外链经服务端 + 客户端双重协议白名单（`sanitizeHref`）清洗，`javascript:` 等伪协议会被丢弃。
+- **书册加载页**：PC 目录标题 `.bk-a` 由固定 `128px` 放宽为弹性 `max-width: 300px`，长标题不再过早截断。
+- **HTML 压缩**：按归一化内容生成强 ETag，`If-None-Match` 命中返回 304；压缩 Buffer 以原始 HTML 哈希为缓存键（与 ETag 分离，避免串用户）；响应声明 `Cache-Control: private, no-cache`，`generatedAt` 固定为进程级以保证同一进程内哈希稳定。
+- **测试**：单测 31 文件 / 447 用例、E2E 10 套件 / 72 用例，全量通过。详见 [`../test/README.md`](../test/README.md)。
+
 ## 1. 项目简介
 
 「演唱会足迹」是一个个人演唱会记录站点，从原纯静态站点（`index.html` + 原生 JS + 手写 Service Worker）迁移而来。本仓库（`ilive_neo`）在**保留原视觉效果 100% 一致**的前提下，将架构升级为：
@@ -43,7 +54,7 @@
 | 样式 | `public/css/main.css`（手写工具类，已移除 Google Fonts `@import` 与旧 spinner）、Font Awesome 6.4.0（CDN，`bodyClose` 加载） |
 | 首屏 | 全屏书册加载页（SSR 直出 + 内联关键 CSS）、Nitro `render:response` 动态 HTML brotli / gzip 压缩、系统字体栈兜底 |
 | SEO | Nuxt 内置 `useSeoMeta` / `useHead`（多语言 hreflang / og:locale）+ 静态 `robots.txt` / `sitemap.xml` |
-| 测试 | Vitest（单元测试，happy-dom，**30 文件 / 430 用例**，含歌单/留言板 composable 套件）+ Playwright（E2E，**10 套件 / 69 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
+| 测试 | Vitest（单元测试，happy-dom，**31 文件 / 447 用例**，含歌单/留言板 composable 套件）+ Playwright（E2E，**10 套件 / 72 用例**，桌面 / 移动双 project + CDP 20 KB/s 限速 + 零下载 Edge 模式）+ `verify-seo.mjs`（SSR head 校验脚本）|
 
 ### 核心依赖（package.json）
 
@@ -67,8 +78,9 @@ ilive_neo/
 │   │   └── index.vue          # 首页「组合根」：SEO / JSON-LD、初始化编排、body 滚动锁 + 与内容区同级的 <SiteLoader />（363 行）
 │   ├── components/            # 首页拆分出的展示组件（18 个，自 index.vue 抽出，各自直连共享 composable）
 │   │   ├── AlbumShowcase.vue      # 3D 专辑轮播（含封面缩略图 + @error 回退）
-│   │   ├── TicketModal.vue        # 票根模态（@tanstack/vue-virtual 按行虚拟滚动）
+│   │   ├── TicketModal.vue        # 票根模态（@tanstack/vue-virtual 按行虚拟滚动；搜索框+关闭按钮同行居右；Esc 关闭）
 │   │   ├── CityModal.vue / GalleryModal.vue / VideoModal.vue / SonglistModal.vue
+│   │   │                          # CityModal 支持 Esc 关闭；SonglistModal 按行虚拟滚动 + 150ms 搜索防抖 + 外链白名单
 │   │   ├── HeroSection.vue / StoriesSection.vue / StatsCards.vue / TimelineSection.vue
 │   │   ├── GuestbookSection.vue / WishWall.vue / SiteFooter.vue
 │   │   ├── SiteLoader.vue        # 全屏书册加载页（SSR 直出 #loader、内联关键 CSS、15s 兜底需水合武装）
@@ -78,7 +90,7 @@ ilive_neo/
 │   │   ├── useData.ts         # SSR 按当前语言请求 /api/data?lang= 单语言本地化（服务端已本地化则透传，否则前端 localizeConcert）+ 点赞覆盖；本地化派生写入请求级共享快照（app:localized，只计算一次）
 │   │   ├── useI18n.ts         # 多语言切换（zh / en / zh-Hant，useState 懒初始化）
 │   │   ├── useGallery.ts      # 图片画廊（懒初始化缓存 localizedConcerts）
-│   │   ├── useSonglist.ts     # 歌单弹层（正文不随 /api/data 下发；点击时按单场 GET /api/concerts/:id 懒加载，按语言+id 缓存，hover/focus 预取；页面加载后立即预取前 5 场，20s 后串行速热其余）
+│   │   ├── useSonglist.ts     # 歌单弹层（正文不随 /api/data 下发；点击时按单场 GET /api/concerts/:id 懒加载，按语言+id 缓存，hover/focus 预取；页面加载后立即预取前 5 场，20s 后串行速热其余；搜索 150ms 防抖）
 │   │   ├── useTimeline.ts     # 时间线渲染
 │   │   ├── useNavigation.ts   # 角色导航滚动
 │   │   ├── useTicketModal.ts  # 票务模态框
@@ -142,8 +154,8 @@ ilive_neo/
 │   └── gen-thumbs.mjs         # 递归遍历 public/concert/ 生成 600px 缩略图（_thumb.jpg，幂等；npm run thumbs）
 ├── verify-seo.mjs · dump-head.mjs · html-head.mjs   # SSR head / SEO 校验脚本（node 直接运行）
 ├── test/                      # 测试
-│   ├── unit/                  # Vitest 单元测试（30 文件 / 430 用例；含 useBookLoader / htmlCompression / useSonglist / useGuestbook）
-│   ├── e2e/                   # Playwright 端到端测试（10 套件 / 69 用例，桌面/移动双 project + fixture 库种子）
+│   ├── unit/                  # Vitest 单元测试（31 文件 / 447 用例；含 useBookLoader / htmlCompression / useSonglist / useGuestbook）
+│   ├── e2e/                   # Playwright 端到端测试（10 套件 / 72 用例，桌面/移动双 project + fixture 库种子）
 │   │   ├── book-loader.spec.ts   # 书册加载页三语文案 / 目录 / 主题首句 / 淡出 / 窄视口
 │   │   └── slow-network.spec.ts  # CDP 20 KB/s 限速、首屏关键路径、noscript 与 HTML 压缩语义
 │   ├── ui-tests.md            # UI 验收清单（手动 + 自动化，第 18 节为加载页与慢网）
@@ -202,15 +214,15 @@ app/app.vue (setup)
 - **两层缓存 + 响应缓存策略**：内层 `defineCachedEventHandler`（生产 1h SWR）只产出与请求者无关的共享数据；外层非缓存，按当前 IP 合并 `liked` 后返回。两点必须注意：
   1. 内层会把缓存条目自带的 `cache-control`（`s-maxage=3600`）写到同一个 event 的响应上，**外层必须显式覆盖为 `private, no-store`**，否则 CDN / 边缘 / nginx 会把「某个 IP 的点赞态」缓存 1 小时并发给其他人；`etag` / `last-modified` 保留以维持条件请求。
   2. 命中条件请求（`If-None-Match` / `If-Modified-Since`）时，Nitro 会自行写入 304 并结束响应、向调用方返回 **`undefined`**，外层须先判空再解引用（否则生产环境抛 `TypeError`；dev 走未缓存分支不会复现）。
-- `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist: { zh, en, 'zh-Hant' }`、`location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析）；`includeSonglist: false` 时不查歌单正文、只以 DISTINCT 查询填充 `hasSonglist`；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
+- `server/lib/mappers.ts`：`fetchAllConcerts` 把归一化 DB 行（`*_i18n` JSON 列）映射为**多语言结构**（`artist` / `team` / `location` / `tags` / `songlist` 等同构，由 `parseI18n` / `joinLocation` 解析；`team` 为团队列表，成员以「、」分隔）；歌单 / 视频外链在此经协议白名单清洗。`includeSonglist: false` 时不查歌单正文、只以 DISTINCT 查询填充 `hasSonglist`；`computeCityConcertCounts` 计算每城市场次数。`mapConcert` 已 `export` 供单测使用。
 - 前端 `useData.ts` 的 `pickLocale` / `localizeConcert` 根据 `currentLanguage` 把多语言结构**选为单语言字段**（如 `artist: "五月天"`）；目标语言缺失时按 `请求语言 → zh → en` 回退链兜底（`app/utils/index.ts`，纯函数可直接单测）。
 
 ```
 useAsyncData('app-data') → GET /api/data
-  ├─ concerts[]   (多语言: artist.{zh,en,zh-Hant}, location 等同构)
+  ├─ concerts[]   (多语言: artist.{zh,en,zh-Hant}, team.{zh,en,zh-Hant} 团队列表, location 等同构)
   ├─ cities[]     (name 多语言 + icon + concerts 场次数)
   ├─ wishes[]     (content 多语言 + likes + liked)
-  └─ stats        { totalConcerts, totalArtists, totalCities }
+  └─ stats        { totalConcerts, totalArtists (歌手+团队并集去重), totalCities }
         ↓
 localizedConcerts (computed, 按 currentLanguage 选单语言)
 ```
@@ -227,7 +239,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 `app/pages/index.vue` 中：
 
 - `useSeoMeta` 随 `currentLanguage` 动态输出 title/description/og/twitter。
-- **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist`，随演唱会增减自动更新。
+- **keywords/description 从数据库艺人动态生成**：`localizedConcerts` 提取去重 `artist + team`（歌手与团队成员并集），随演唱会增减自动更新。
 - `useHead`（仅 `import.meta.server`）注入 **JSON-LD 结构化数据**（WebSite + Person + ItemList + MusicEvent）。注意：hreflang / canonical / `og:locale` 已由 `app/app.vue` 统一发射，**此处不再重复**（旧实现两侧同 key 去重，实为冗余）。
 - JSON-LD 用 `JSON.parse(JSON.stringify(toRaw(...)))` 剥离 Vue 响应式 Proxy，用 `computed` 保证在数据就绪后输出完整演唱会列表。
 - **JSON-LD 安全序列化**：`innerHTML` 一律经 `app/utils/seo.ts` 的 `serializeJsonLd()`（把 `< > &` 与 U+2028 / U+2029 写成 JSON `\u` 转义），不再直接用 `JSON.stringify`：演唱会名来自 DB，含 script 闭合标签时会提前结束 ld+json 块，造成 SSR 存储型 XSS。unhead 当前的隐式转义不作为安全边界；回归见 `test/unit/seo-utils.test.ts` 与 `test/e2e/security.spec.ts`（详见 14.4）。
@@ -251,7 +263,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 
 | 表 | 说明 |
 |----|------|
-| `concerts` | 演唱会主表（可翻译字段为 `*_i18n` JSON 列） |
+| `concerts` | 演唱会主表（可翻译字段为 `*_i18n` JSON 列，含 `team_i18n` 团队列表；生产库 21 条记录已填充） |
 | `concert_tags` | 演唱会标签（`concert_id` 外键，`tag_i18n`） |
 | `concert_images` | 演唱会图片（`src` + `alt_i18n`） |
 | `concert_songlist` | 演唱会歌单（`seq` 排序 + `name_i18n` + `link`） |
@@ -264,7 +276,7 @@ localizedConcerts (computed, 按 currentLanguage 选单语言)
 | `guestbook` | 留言板主留言（`nickname` + `email` + `content` + 服务端采集 `browser`/`os`/`user_agent`/`ip` + `is_approved`） |
 | `guestbook_reply` | 留言回复（`guestbook_id` 外键级联删除 + `nickname` + 可选 `email` + `content` + 服务端采集字段 + `is_approved`） |
 
-所有可翻译字段统一为 **`*_i18n` JSON 列**，形如 `{"zh-CN":"…","en":"…","zh-Hant":"…"}`（由 `parseI18n` 解析，`zh-CN` 为基语言，缺失语言在 UI 层回退；历史库若残留 `ja`/`ko` 键不参与展示）。`location` 由 `country/province/city/venue` 四段拆分存储，映射时按 **`国家 · 省 · 市 · 场馆`** 逐语言重组（`mappers.ts` 的 `joinLocation` / `mapLocationDetail`，空段自动省略，不跨语言回退）。
+所有可翻译字段统一为 **`*_i18n` JSON 列**，形如 `{"zh-CN":"…","en":"…","zh-Hant":"…"}`（由 `parseI18n` 解析，`zh-CN` 为基语言，缺失语言在 UI 层回退；历史库若残留 `ja`/`ko` 键不参与展示）。`team_i18n` 同为该结构，但每个语言值内部是团队成员名单，成员之间用「、」分隔；单人歌手时值为其本人。`location` 由 `country/province/city/venue` 四段拆分存储，映射时按 **`国家 · 省 · 市 · 场馆`** 逐语言重组（`mappers.ts` 的 `joinLocation` / `mapLocationDetail`，空段自动省略，不跨语言回退）。
 
 ### 5.2 初始化
 
@@ -349,9 +361,9 @@ npm run preview    # 预览生产构建
 node .output/server/index.mjs  # 直接启动生产构建（用 PORT 指定端口，如 $env:PORT='3100'）
 npm run generate   # 生成静态站点（SSG）
 npm run db:seed    # 初始化本地空库（DROP + CREATE，⚠️ 破坏性）
-npm run test       # 运行单元测试（vitest run，30 文件 / 430 用例）
+npm run test       # 运行单元测试（vitest run，31 文件 / 447 用例）
 npm run test:watch # 监听模式运行测试
-npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 69 用例；自动 seed fixture 库并启动隔离 dev server）
+npm run test:e2e   # 运行端到端测试（Playwright，10 套件 / 72 用例；自动 seed fixture 库并启动隔离 dev server）
 npx playwright test --list     # 仅列出用例，核对套件 / 用例数
 npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb.jpg，幂等；新增图片后一键补齐）
 ```
@@ -404,7 +416,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 ### 9.3 动态元信息（`app/pages/index.vue`）
 
-- `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库艺人动态生成（3 种语言的描述模板见 `app/utils/seo.ts`）。
+- `useSeoMeta`：随语言输出 title/description/og/twitter，keywords/description 从数据库歌手 + 团队并集去重后动态生成（3 种语言的描述模板见 `app/utils/seo.ts`）。
 - JSON-LD：WebSite + Person + ItemList + MusicEvent（每场演唱会）。
 - hreflang / canonical：`zh-CN` / `en` / `zh-Hant` + `x-default`（默认语言 `zh` 的 href 为 `https://ilive.lyc.la/`，无 `/zh` 前缀）—— 由 `app/app.vue` 统一发射，页面不再重复。
 - `<html lang>` 与 `og:locale` / `og:locale:alternate`：由 `app/app.vue` 统一输出（`app/utils/seo.ts` 的 `LOCALE_LANG` / `toOgLocale` / `buildHreflangLinks` / `toLocaleUrl` 纯函数）。
@@ -453,7 +465,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 ### 11.1 书册加载页（SiteLoader）
 
-- `app/components/SiteLoader.vue`：旧 spinner 重写为全屏书册（封面 / 左页目录 / 右页演出详情 / 底部进度条），桌面双页、窄视口单页迷你目录；无按钮、无跳过提示，`aria-busy="true"`，`:data-finish` 输出 `ready | timeout | error` 便于排查。
+- `app/components/SiteLoader.vue`：旧 spinner 重写为全屏书册（封面 / 左页目录 / 右页演出详情 / 底部进度条），桌面双页（PC 目录标题 `.bk-a` 弹性 `max-width: 300px`，长标题不再过早截断）、窄视口单页迷你目录；无按钮、无跳过提示，`aria-busy="true"`，`:data-finish` 输出 `ready | timeout | error` 便于排查。
 - SSR 直出 `#loader` 并**内联关键 CSS**（不等 JS 水合、不等外部 CDN）；`<SiteLoader />` 与首页内容区同级，避免祖先层叠上下文影响 `position: fixed`。
 - **整页会话只播放一次**：`bookLoaderSession`（`useBookLoader.ts` 的模块级标记）保证 SPA 语言切换重建页面组件时不再渲染遮罩；`<script setup>` 顶层变量属于组件实例、会被重建重置，故标记必须放模块作用域。该标记只在客户端 `onMounted` 写入，SSR 每次仍直出遮罩且无跨请求污染；`test/e2e/ticket-modal.spec.ts` 断言语言切换后 `#loader` 数量为 0。
 - 数据全部来自 `/api/data`：目录行数 / 年份、右页演出信息；引文为当前语言 `theme` 的**第一句话**（`app/utils/index.ts` 的 `firstSentence()`：先按换行取首段，再按中英文句末标点切分，英文句点需后接空格 / 大写 / 中文才切）；海报走 `thumbSrc()` 的 `_thumb.jpg`。三语文案在 `i18n/locales/*.ts` 的 `loadingBook`（已移除 `tocFoot` 与静态 `quotes`）。
@@ -482,15 +494,15 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 ### 11.3 SSR HTML 压缩（`server/plugins/html-compression.ts`）
 
 - `nitro.compressPublicAssets` 只压 `public/**` 静态资源，动态 SSR HTML 仍是明文。插件在 `render:response` 按 `Accept-Encoding` 做 brotli（优先，quality 5）/ gzip（level 6），**异步**压缩；实测首页约 248 KB → **47 KB (br) / 63 KB (gzip)**。
-- 纯逻辑在 `server/lib/htmlCompression.ts`（`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / 大小写不敏感响应头工具），由 `test/unit/htmlCompression.test.ts` 覆盖 19 例。
-- 缓存 / 协商语义：所有 HTML 统一声明 `Vary: Accept-Encoding`；解析 q 值与 `q=0`、`*` 通配，br 优先；仅压 `200 + text/html + 字符串 body + ≥ 1 KB + 未编码`；压缩后删除 `ETag` / `Last-Modified` / `Content-Length`，避免 CDN 把 br 版本复用给仅支持 gzip 的客户端。`NUXT_DISABLE_HTML_COMPRESSION=1` 可关闭。
+- 纯逻辑在 `server/lib/htmlCompression.ts`（`negotiateEncoding` / `shouldCompress` / `mergeVary` / `resolveStatusCode` / `isNuxtErrorRender` / `computeETag` / `matchETag` / `computeContentKey` / 有界 LRU 缓存 / 大小写不敏感响应头工具），由 `test/unit/htmlCompression.test.ts` 覆盖 23 例。
+- 缓存 / 协商语义：所有 HTML 统一声明 `Vary: Accept-Encoding`；解析 q 值与 `q=0`、`*` 通配，br 优先；仅压 `200 + text/html + 字符串 body + ≥ 1 KB + 未编码`。按**归一化计时字段后的 HTML**生成强 `ETag`，命中 `If-None-Match` 直接返回 **304**；压缩 Buffer 以**原始 HTML 哈希**为缓存键（与 ETag 刻意分离，避免不同用户点赞态串台），压缩后重算 `content-length`、删除 `last-modified`。响应声明 `Cache-Control: private, no-cache`；`generatedAt` 固定为进程级以保证同一进程内哈希稳定。`NUXT_DISABLE_HTML_COMPRESSION=1` 可关闭。
 - ⚠️ **404 / 500 错误页必须跳过压缩**：Nuxt 把错误页交给内部 `/__nuxt_error?...&statusCode=404` 路由渲染，`render:response` 触发时 `response.statusCode` 与 `event.node.res.statusCode` **都还是 200**，真实状态只在该内部路径上；且错误渲染路径会把压缩后的 `Buffer` 当作字符串按 UTF-8 重新编码（非法字节替换为 U+FFFD），客户端报 `failed to decompress 'br' encoding`。现由 `isNuxtErrorRender()` 显式识别并跳过，错误页保持明文。
 
 ### 11.4 20 KB/s 慢网回归与测试隔离
 
-- `test/e2e/slow-network.spec.ts`：CDP `Network.emulateNetworkConditions` 模拟 **20 KB/s 下行 / 500 ms RTT**，断言遮罩立即成为 fixed 全屏、水合前不被 15s 兜底提前隐藏、恢复带宽后正常淡出；另断言 head 无阻塞外部 CSS、`noscript` 含 `<style>`，以及压缩语义（200 页 br 可解压 / 404 明文 / `q=0` 不压缩）。
+- `test/e2e/slow-network.spec.ts`：CDP `Network.emulateNetworkConditions` 模拟 **20 KB/s 下行 / 500 ms RTT**，断言遮罩立即成为 fixed 全屏、水合前不被 15s 兜底提前隐藏、恢复带宽后正常淡出；另断言 head 无阻塞外部 CSS、`noscript` 含 `<style>`，以及压缩语义（200 页 br 可解压 / 404 明文 / `q=0` 不压缩 / 强 ETag 命中 `If-None-Match` 返回 304 / `Cache-Control: private, no-cache`）。
 - dev server 会把 Vue 依赖拆成大量模块请求，全程限速时水合无法在 120 s 用例超时内完成 → **仅首屏关键路径阶段限速约 8 s**，随后恢复带宽继续验证水合与淡出。
-- `test/e2e/book-loader.spec.ts`（6 例）覆盖三语文案、目录数量 / 年份、主题首句、无按钮、进度条、淡出与窄视口单页书册。
+- `test/e2e/book-loader.spec.ts`（7 例）覆盖三语文案、目录数量 / 年份、主题首句、无按钮、进度条、淡出、窄视口单页书册与桌面目录标题完整显示。
 - 写状态隔离：E2E 串行共享 fixture 库，点赞限流用例改用**不存在的演唱会 id**（限流判定早于存在性校验，仍触发 429 但零写库），`ui-structure.spec.ts` 的点赞数以 `/api/data` 当前值为动态基准，避免前序用例改动造成假失败。
 
 ---
@@ -520,7 +532,7 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 - **歌单正文按需加载**：列表接口只带 `hasSonglist` 标记；`useSonglist` 的缓存按「语言 + id」区分（语言切换后重新拉取），失败不写缓存、下次点击可重试；页面加载后立即串行预取前 5 场，20s 后全量速热其余（每语言每会话一次，语言切换按新语言再调度）。给列表新增「有歌单」的场只需写 `concert_songlist`，无需改前端——按钮显隐由 DISTINCT 统计自动跟随。
 - **留言板前端防重复提交**：`GuestbookSection` 的发布/回复按钮带 in-flight 禁用（双击不会产生重复留言）；分页翻页时保留旧列表（仅首屏无内容才显示整墙 loading）并禁用翻页按钮，成功后 `scrollIntoView` 回留言区顶部。
 - 修改 `public/css/*` 或 `app/pages/index.vue` 后，无需手动维护缓存清单（Workbox 运行时缓存）；PWA 的 `autoUpdate` 会自动处理更新。
-- **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/components/StatsCards.vue`（自 `index.vue` 抽出）；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。三次 `useCountUp` 调用须**原地保留**在该组件内（自带 SSR 透传与定时器生命周期）。
+- **统计卡片计数动画**：`STAT_COUNTUP_DURATION`（5s）与 `STAT_COUNTUP_REPEAT`（120s）定义在 `app/components/StatsCards.vue`（自 `index.vue` 抽出）；展示值由 `useCountUp` 惰性派生，SSR 首屏与无 JS 场景可见**真实数值**（不是 0）。三次 `useCountUp` 调用须**原地保留**在该组件内（自带 SSR 透传与定时器生命周期）。场次 / 城市 / 艺人三张统计卡还带按压 + 涟漪反馈（涟漪颜色跟随各自主题色）。
 - **`handleError` 可在 watch / 事件回调中安全调用**（错误文案解析器已在 setup 阶段注册）；但切勿在回调里直接调用 `useAppI18n()` / `useI18n()` —— 无组件实例时会抛错。
 - **`useTimeline` 的 observer 必须显式释放**：语言切换会重建页面组件，卸载时由 `onScopeDispose` 接管 `disconnect`；新增观察逻辑请走 `initTimelineReveal()`，不要另建 `IntersectionObserver`。
 - **已知取舍**：`/api/data` 的点赞数受内层 1 小时共享缓存影响，写入后不会主动失效，他人看到的计数需等缓存/SWR 刷新才更新（不影响当前用户的 `liked` 判定，该值由外层实时合并）。
@@ -564,6 +576,6 @@ npm run thumbs     # 递归生成 public/concert/ 下缺失的缩略图（_thumb
 
 ### 14.4 只读安全审查结论（2026-11-07）· Security review
 
-**本轮已修复 / 加固**：H2（JSON-LD 改用 `serializeJsonLd()` 显式转义 `< > &` 与 U+2028/U+2029，不再依赖 unhead 的隐式转义；见 4.3）、H3（SSR 压缩共用 ETag / 未统一 `Vary`，CDN 串编码）、M6（压缩类型契约、q 值、同步阻塞、状态码边界与 404 br 损坏）、L3（`noscript` 裸 CSS 未包 `<style>`）。实现与回归见 11.3、`test/unit/htmlCompression.test.ts`、`test/unit/seo-utils.test.ts`、`test/e2e/slow-network.spec.ts` 与 `test/e2e/security.spec.ts`。
+**本轮已修复 / 加固**：H2（JSON-LD 改用 `serializeJsonLd()` 显式转义 `< > &` 与 U+2028/U+2029，不再依赖 unhead 的隐式转义；见 4.3）、H3（SSR 压缩共用 ETag / 未统一 `Vary` → 已改为归一化强 ETag + `If-None-Match`→304 + `Cache-Control: private, no-cache` + 原始哈希缓存键）、M6（压缩类型契约、q 值、同步阻塞、状态码边界与 404 br 损坏）、L3（`noscript` 裸 CSS 未包 `<style>`）。实现与回归见 11.3、`test/unit/htmlCompression.test.ts`、`test/unit/seo-utils.test.ts`、`test/e2e/slow-network.spec.ts` 与 `test/e2e/security.spec.ts`。
 
 

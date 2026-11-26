@@ -3,11 +3,12 @@
  *
  * @description 从 songlist.js 迁移而来，并升级为按需加载：
  *              共享状态（打开态 / 当前歌单 / 搜索词）+ 点击时单场懒加载 + hover 预取。
- *              模态的 body 滚动锁定由 index.vue 统一 watch 处理；搜索为即时 computed 过滤（无防抖）。
+ *              模态的 body 滚动锁定由 index.vue 统一 watch 处理；搜索为 150ms 防抖过滤。
  *
  *              歌单正文不随 /api/data 下发，改为点击时按单场 GET /api/concerts/:id 懒加载；
  *              按「语言 + 演唱会 id」缓存，hover 预取复用同一份缓存与在途 Promise。
  */
+import { computed, ref, watch } from 'vue'
 import type { Concert, SongItem } from '~/types'
 import { useSharedState } from './useSharedState'
 import { useAppI18n } from './useI18n'
@@ -39,6 +40,11 @@ const warmedLanguages = new Set<string>()
 function cacheKey(id: number, lang: string): string {
   return `${lang}:${id}`
 }
+
+/** 搜索防抖值（客户端只注册一次 watcher，避免多个调用方产生多个定时器）· debounced search */
+const debouncedSonglistSearch = ref('')
+let songlistSearchWatcherRegistered = false
+let songlistSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 过滤歌单 · Filter songlist by keyword */
 function filterSonglist(list: SongItem[], keyword: string): SongItem[] {
@@ -90,8 +96,16 @@ export function useSonglist() {
   const activeConcert = getActiveConcert()
   const songlistSearch = getSonglistSearch()
 
-  /** 过滤后的歌单 · Filtered songlist */
-  const filteredSonglist = computed(() => filterSonglist(activeSonglist.value, songlistSearch.value))
+  if (!songlistSearchWatcherRegistered && typeof window !== 'undefined') {
+    songlistSearchWatcherRegistered = true
+    watch(songlistSearch, (value) => {
+      if (songlistSearchTimer) clearTimeout(songlistSearchTimer)
+      songlistSearchTimer = setTimeout(() => { debouncedSonglistSearch.value = value }, 150)
+    })
+  }
+
+  /** 过滤后的歌单（使用防抖后的关键词）· Filtered songlist with debounced keyword */
+  const filteredSonglist = computed(() => filterSonglist(activeSonglist.value, debouncedSonglistSearch.value))
 
   /**
    * 打开歌单模态框（按需加载）· Open songlist modal (lazy-loaded)
@@ -103,6 +117,8 @@ export function useSonglist() {
 
     activeConcert.value = { artist: concert.artist, concertName: concert.concertName }
     songlistSearch.value = ''
+    if (songlistSearchTimer) clearTimeout(songlistSearchTimer)
+    debouncedSonglistSearch.value = ''
     songlistOpen.value = true
 
     const cached = songlistCache.get(cacheKey(concert.id, lang))
@@ -154,7 +170,7 @@ export function useSonglist() {
   /**
    * 串行预取未缓存的歌单（静默，失败跳过）· Serially warm up uncached songlists (silent)
    * @description 空闲期后台把全部歌单填入缓存：逐个串行请求避免一次性并发打满；
-   *              语言逐条动态读取（30s 等待期间用户切换语言也能落到正确 key）；失败不写缓存。
+   *              语言逐条动态读取（20s 等待期间用户切换语言也能落到正确 key）；失败不写缓存。
    */
   async function warmupSonglistCache(concerts: Concert[]): Promise<void> {
     for (const c of concerts) {

@@ -11,7 +11,7 @@
  *                · title 缺失 → 回退 href 本身，保证名称永不为空；
  *                · description 缺失 → null。
  */
-import type { Locale, LocalizedFriendLink, FriendLink } from '../types'
+import type { Locale, LocalizedFriendLink, FriendLink, LocalizedText } from '../types'
 import { pickLocale } from './index'
 
 /** 图标缺失时的兜底类名 · Fallback Font Awesome class */
@@ -41,6 +41,19 @@ export function sanitizeHref(raw: string | null | undefined): string {
  * @description icon 缺失 → 通用图标；title 缺失 → href 本身；description 缺失 → null；
  *              href 走协议白名单，非法协议置空后由 resolveFriendLinks 过滤。
  */
+/**
+ * 多语言链接清洗（服务端出口使用）· Sanitize every locale value of a localized href
+ * @description 防止 DB 中 songlist / video_url 等字段被写成 `javascript:` 等脚本伪协议。
+ */
+export function sanitizeLocalizedHref(text: LocalizedText | null | undefined): LocalizedText | null {
+  if (!text) return null
+  return {
+    'zh-CN': sanitizeHref(text['zh-CN']),
+    ...(text.en !== undefined ? { en: sanitizeHref(text.en) } : {}),
+    ...(text['zh-Hant'] !== undefined ? { 'zh-Hant': sanitizeHref(text['zh-Hant']) } : {})
+  }
+}
+
 export function localizeFriendLink(link: LocalizedFriendLink, locale: Locale): FriendLink {
   const href = sanitizeHref(link.href)
   return {

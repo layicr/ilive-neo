@@ -7,12 +7,15 @@
  *              · `resolveFriendLinks` 空数组 / null / undefined → 返回空数组（不回退内置列表）；
  *              · 单条字段级兜底（无内置数据）：icon 缺失 → 通用图标；
  *                title 缺失 → 回退 href；description 缺失 → null；
- *              · 三语言取值（zh-CN / en / zh-Hant）各自独立。
+ *              · 三语言取值（zh-CN / en / zh-Hant）各自独立；
+ *              · href 协议白名单：服务端 `mapFriendLink` 与前端 `resolveFriendLinks` 双层清洗，禁止
+ *                `javascript:` / `data:` / `vbscript:` / `file:` 与协议相对 `//host`，剥离控制字符防绕过
+ *                （同一 `sanitizeHref` 也用于歌单 / 视频外链）。
  *
  *              Covers the friend_links data chain: fetchFriendLinks DB-first (enabled=1, non-empty href,
  *              ordered by seq); missing/DB-unavailable → empty array without throwing; resolveFriendLinks
- *              returns [] for empty/null/undefined (no built-in fallback); per-field fallbacks (missing
- *              icon → generic icon, missing title → href, missing description → null); three locales independent.
+ *              returns [] for empty/null/undefined (no built-in fallback); per-field fallbacks; three locales
+ *              independent; href protocol allow-list enforced both server- and client-side.
  */
 import { describe, it, expect } from 'vitest'
 import { fetchFriendLinks, mapFriendLink, FRIEND_LINK_ICON_FALLBACK } from '../../server/lib/mappers'

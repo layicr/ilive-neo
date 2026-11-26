@@ -6,6 +6,7 @@
 
 | 🔢 # | 🎉 Artist | 🎤 Concert | 🌍 Country | 📍 Province | 🏙️ City | 📌 Venue | 📅 Year | 📅 Month | 📅 Day | 🎬 Video |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 21 | Angela Zhang、Ado、Michael Wong、Jeff Chang | Super Music Heroes LIVE | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 11 | 22 | [Watch](https://space.bilibili.com/29825132/lists/9634758) |
 | 20 | Fish Leong | Best, If I Don't Sing Love Songs | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 11 | 14 | [Watch](https://space.bilibili.com/29825132/lists/9575176) |
 | 19 | 5566 | Never Ending | China | Guangdong | Guangzhou | Guangzhou Tianhe Sports Center Gymnasium | 2026 | 10 | 31 | [Watch](https://space.bilibili.com/29825132/lists/9472395) |
 | 18 | Vae | Anbo Conjecture | China | Guangxi | Nanning | Guangxi Sports Center Stadium | 2026 | 10 | 30 | - |

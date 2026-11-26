@@ -154,6 +154,7 @@ export function localizeConcert(c: LocalizedConcert, locale: Locale): Concert {
   return {
     id: c.id,
     artist: pickLocale(c.artist, locale),
+    team: pickLocale(c.team, locale),
     concertName: pickLocale(c.concertName, locale),
     theme: pickLocale(c.theme, locale),
     location: pickLocale(c.location, locale),
@@ -213,6 +214,39 @@ export function localizeWish(w: LocalizedWish, locale: Locale): Wish {
     likes: w.likes,
     liked: w.liked
   };
+}
+
+/**
+ * 拆分拼盘艺人名 · Split a multi-artist string
+ * @description 单场 `artist` 可能并列多个歌手（顿号「、」分隔，en 值同样保留顿号）；
+ *              与服务端 `countUniqueArtists` 同口径：拆分 → trim → 去空。纯函数，可单测。
+ */
+export function splitArtistNames(raw: string | null | undefined): string[] {
+  return String(raw ?? '')
+    .split('、')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+/**
+ * 聚合艺人出场次数（歌手 + 团队，按场次去重）· aggregate artist show counts
+ * @description 同一场内 `artist` 与 `team` 可能指向同一人（单人歌手团队值等于歌手），
+ *              必须先在场内去重再累加，否则场数翻倍。与服务端 totalArtists 口径一致。
+ */
+export function aggregateArtistShows(
+  concerts: { artist?: string | null; team?: string | null }[]
+): { name: string; count: number }[] {
+  const map = new Map<string, number>()
+  for (const c of concerts) {
+    const names = new Set<string>()
+    for (const field of [c.artist, c.team]) {
+      for (const name of splitArtistNames(field ?? '')) names.add(name)
+    }
+    for (const name of names) map.set(name, (map.get(name) ?? 0) + 1)
+  }
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }
 
 /**

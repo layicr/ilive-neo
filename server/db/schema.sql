@@ -8,6 +8,7 @@
 CREATE TABLE IF NOT EXISTS concerts (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   artist_i18n       TEXT NOT NULL,                 -- 歌手（多语言 JSON）· artist (multi-locale JSON)
+  team_i18n         TEXT,                          -- 团队列表（多语言 JSON，成员以「、」分隔）· team members (multi-locale JSON)
   concert_name_i18n TEXT NOT NULL,                 -- 演唱会名称（多语言 JSON）· concert name (multi-locale JSON)
   theme_i18n        TEXT,                          -- 主题（多语言 JSON）· theme (multi-locale JSON)
   country_i18n      TEXT,                          -- 国家（多语言 JSON）· country (multi-locale JSON)

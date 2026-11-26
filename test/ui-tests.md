@@ -1,13 +1,13 @@
 # UI 测试用例（浏览器手动回归）
 
-> 覆盖首页全部功能模块。前置条件：`npm run dev` 已启动，数据库已就绪（统计卡片显示 14 / 12 / 9）。
+> 覆盖首页全部功能模块。前置条件：`npm run dev` 已启动，数据库已就绪（统计卡片显示真实值，以 `/api/data` 的 `stats` 为准）。
 
 ## 1. 首屏与数据加载
 
 | 用例 | 步骤 | 预期结果 |
 |------|------|----------|
 | UI-001 首屏无闪屏 | 刷新首页，观察统计卡片区 | SSR 预取生效，统计卡片直接显示真实数字，不出现「Loading...」停留 |
-| UI-002 统计卡片数值 | 查看页头统计区 | 与 `/api/data` 的 `stats` 一致：演唱会 14 / 歌手 12 / 城市 9 |
+| UI-002 统计卡片数值 | 查看页头统计区 | 与 `/api/data` 的 `stats` 一致：`totalConcerts` / `totalArtists`（歌手 + 团队成员并集去重）/ `totalCities`；数值以当前库为准，不硬编码 |
 | UI-003 页面标题 | 查看浏览器标签页 | 标题与描述随语言显示对应文案（zh / en / zh-Hant 三套；zh 默认） |
 
 ## 2. 时间轴
@@ -27,7 +27,7 @@
 
 | 用例 | 步骤 | 预期结果 |
 |------|------|----------|
-| UI-007 打开城市模态框 | 点击「城市」入口 | 模态框弹出（`.show`），标题随语言更新，列出 9 座城市及各自场次数 |
+| UI-007 打开城市模态框 | 点击「城市」入口，再按 `Esc` | 模态框弹出（`.city-modal.active`），标题随语言更新，列出城市及各自场次数；按 `Esc` 后关闭 |
 | UI-008 城市多语言 | 切换语言后重开模态框 | 城市名与标题文案跟随语言切换 |
 | UI-009 关闭模态框 | 点击关闭/遮罩/按 Esc | 模态框关闭，body 滚动恢复 |
 
@@ -43,19 +43,21 @@
 
 | 用例 | 步骤 | 预期结果 |
 |------|------|----------|
-| UI-013 打开票根 | 点击页头统计区的「场次」卡片（`.stat-card.total`） | 模态框出现 `.ticket-modal.active`；标题为「演唱会票根展示」；以多列网格（**虚拟滚动**）展示全部演唱会的票根卡片（海报缩略图 + 艺人 / 场次名 / 日期 / 场馆 / 座位票价），内容为真实数据 |
+| UI-013 打开票根 | 点击页头统计区的「场次」卡片（`.stat-card.total`），再按 `Esc` | 模态框出现 `.ticket-modal.active`；标题为「演唱会票根展示」；以多列网格（**虚拟滚动**）展示全部演唱会的票根卡片（海报缩略图 + 艺人 / 场次名 / 日期 / 场馆 / 座位票价），内容为真实数据；按 `Esc` 后关闭 |
 | UI-014 票根标题 | 切换语言后重新打开 | 票根标题随语言更新 |
 | UI-057 票根虚拟滚动渲染 | 打开票根模态框 | `.ticket-card` 正常渲染且内容非空（艺人文字不为空）；防止 `count` 误传函数导致 `RangeError`、列表空白的回归（已由 e2e `ticket-modal.spec.ts` 守护） |
 | UI-058 海报缩略图加载 | 打开票根模态框 | 卡片海报 `<img>` 真实加载（`naturalWidth>0`，非破图），URL 使用 `_thumb.jpg` 缩略图、缺失时回退原图；**不使用** `loading="lazy"`（避免 `.ticket-modal` 默认 `display:none` → 打开切换下不触发加载） |
 | UI-059 行间距无重叠 | 打开票根模态框 | 相邻 `.ticket-virtual-row` 之间为正的上下间距（无重叠）；防止固定 `estimateSize` 行重叠的回归；间距由虚拟器 `gap` 选项（`ROW_GAP`）统一控制 |
+| UI-070 票根搜索 | 打开票根模态框，在搜索框输入艺人 / 演唱会名 / 日期 / 地点关键词 | 票根卡片按关键词实时过滤；无匹配时显示空结果提示；清空关键词后恢复全部票根 |
 
 ## 7. 歌单模态框
 
 | 用例 | 步骤 | 预期结果 |
 |------|------|----------|
-| UI-015 打开歌单 | 点击某场演唱会「歌单」入口 | 模态框含标题、副标题与歌单列表（与原版一致） |
-| UI-016 搜索过滤 | 在搜索框输入关键词 | 歌单按关键词实时过滤 |
-| UI-017 歌单链接 | 点击歌单项链接 | 链接在新窗口打开有效页面 |
+| UI-015 打开歌单 | 点击某场演唱会「歌单」入口 | 模态框含标题、副标题与按行虚拟滚动的歌单列表（`.songlist-virtual-row`） |
+| UI-016 搜索过滤 | 在搜索框输入关键词 | 输入后 150ms 防抖再过滤，窗口内保留旧结果；空结果有提示、清空后恢复 |
+| UI-017 歌单链接 | 点击歌单项链接 | 链接在新窗口打开有效页面；`javascript:` 等伪协议被白名单过滤，不渲染播放按钮 |
+| UI-071 歌单虚拟滚动 | 打开曲目较多的歌单并滚动 | DOM 中只保留视口附近 `.songlist-virtual-row`，滚动时行内容随虚拟窗口更新 |
 
 ## 8. 3D 专辑轮播
 
@@ -157,7 +159,7 @@
 
 ## 18. 书册加载页与慢网首屏（2026-11-07 新增）
 
-> 可自动化：`test/e2e/book-loader.spec.ts`（6 例）、`test/e2e/slow-network.spec.ts`（3 例），均由 `chromium-desktop` 执行。
+> 可自动化：`test/e2e/book-loader.spec.ts`（7 例）、`test/e2e/slow-network.spec.ts`（3 例），均由 `chromium-desktop` 执行。
 > 生产库 19 场；E2E fixture 库为 4 场，目录行数按 `/api/data` 实际数量断言，不硬编码 19。
 
 | 用例 | 步骤 | 预期结果 |
@@ -170,7 +172,8 @@
 | UI-065 移动端书册 | 393×851 视口打开 | 左页目录隐藏、迷你目录显示，书册为单页，进度条与封面正常 |
 | UI-066 20 KB/s 慢网 | CDP 限速 20 KB/s / 500ms 后刷新 | 遮罩随 SSR 内联关键 CSS 立即成为 fixed 全屏；水合成功前不被 15s CSS 兜底提前隐藏；恢复带宽后正常淡出，无站点自身未捕获异常 |
 | UI-067 首屏关键路径 | 查看 SSR HTML head | 字体与图标 CSS 不在 `<head>` 的渲染阻塞样式表中；`noscript` 兜底规则用 `<style>` 包裹 |
-| UI-068 HTML 压缩语义 | 带 `Accept-Encoding: br` 请求首页与不存在的路径 | 首页 200 且 `content-encoding: br`、正文可解压、`Vary` 含 `Accept-Encoding`；404 错误页保持明文（不压缩、可正常读取）；`br;q=0` 时首页不压缩 |
+| UI-068 HTML 压缩语义 | 带 `Accept-Encoding: br` 请求首页与不存在的路径；再用响应 ETag 带 `If-None-Match` 重请求 | 首页 200 且 `content-encoding: br`、正文可解压、`Vary` 含 `Accept-Encoding`、带强 `ETag` 且 `Cache-Control` 含 `private`；`If-None-Match` 命中返回 304、body 为空、无 `content-encoding`；404 错误页保持明文；`br;q=0` 时首页不压缩 |
+| UI-069 桌面目录标题宽度 | 1440×900 打开首页，观察加载页左页目录中较长的演唱会名称 | `.bk-a` 的 `max-width` 为 300px；较长标题完整显示（`scrollWidth <= clientWidth`），不再被省略号截断 |
 
 ## 最近回归记录
 
@@ -231,3 +234,13 @@
   - [x] H2 加固：JSON-LD 改用 `serializeJsonLd()` 显式转义（生产实测无字面 script 闭合标签、JSON 可解析、数据保真）；`seo-utils.test.ts` 5 例 + `security.spec.ts` SSR 反逃逸断言
   - [x] 书册加载页最短展示 2.4s → **11s（>10s）**：`useBookLoader.test.ts` 新增「10s 时不得淡出」回归；数据就绪时约 11.9s 完成淡出，仍早于 15s CSS 兜底；13.5s 硬上限不变
   - [x] 整页会话只播放一次：模块级 `bookLoaderSession` 避免 SPA 语言切换重建组件时重播遮罩；`ticket-modal.spec.ts` 断言切换后 `#loader` 数量为 0（否则 11s 遮罩会挡住点击触发 actionTimeout）
+- 2026-11-25：PC 目录标题放宽后的增量回归 ——
+  - [x] UI-069：`SiteLoader.vue` 的 `.bk-a` 从固定 `128px` 改为弹性 `max-width: 300px`；`book-loader.spec.ts` 新增桌面断言（`max-width` 300px 且标题 `scrollWidth <= clientWidth`），`npx playwright test test/e2e/book-loader.spec.ts --project=chromium-desktop` 7/7 通过
+  - [x] UI-070：票根模态框头部新增搜索框，按艺人 / 演唱会名 / 日期 / 地点实时过滤虚拟列表，空结果有提示、清空后恢复；`ticket-modal.spec.ts` 新增回归，`npx playwright test test/e2e/ticket-modal.spec.ts --project=chromium-desktop` 5/5 通过
+  - [x] UI-007 / UI-013：城市与票根弹窗新增 `Esc` 关闭（仅在打开时消费按键）；`ticket-modal.spec.ts` 与 `ue-interaction.spec.ts` 定向回归 3/3 通过
+- 2026-11-26：统计口径与性能/安全增量回归 ——
+  - [x] UI-002：`concerts.team_i18n` 已填充 21 条记录；`totalArtists` 改为歌手 + 团队成员并集去重（现为 38），艺人弹窗按场次去重不再翻倍；单测覆盖
+  - [x] UI-015 / UI-016 / UI-071：歌单弹窗改为按行虚拟滚动 + 150ms 搜索防抖；`ue-interaction.spec.ts` 定向回归通过
+  - [x] UI-068：HTML 压缩改为归一化强 ETag + `If-None-Match` → 304 + 原始哈希缓存键；`slow-network.spec.ts` 定向回归通过
+  - [x] UI-017：歌单 / 视频外链服务端 + 客户端双重协议白名单，`javascript:` 等伪协议被丢弃；单测覆盖
+  - [x] 注释与测试文档同步后的全量回归：`npm test` 31 文件 / 447 用例全通过；`npx playwright test --reporter=line` 10 套件 / 72 用例全通过（desktop 64 + mobile 8）
